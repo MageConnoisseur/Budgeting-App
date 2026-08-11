@@ -1,6 +1,11 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ApiError } from '../api/client'
 import * as dashboardApi from '../api/dashboard'
+import {
+  GroupedBarChart,
+  HorizontalBarChart,
+  LineTrendChart,
+} from '../components/charts/TrendCharts'
 import { PeriodNavigator } from '../components/PeriodNavigator'
 import { SoftWarning } from '../components/SoftWarning'
 import { ViewModeToggle } from '../components/ViewModeToggle'
@@ -17,6 +22,15 @@ import type {
   MonthlyDashboard,
   ViewMode,
 } from '../types/api'
+
+const COLOR = {
+  income: '#1f5c4a',
+  expense: '#7a3b2e',
+  savings: '#2f5f7a',
+  planned: '#8aa396',
+  actual: '#1f4b3a',
+  balance: '#3d7a5f',
+}
 
 function KindCard({
   title,
@@ -62,6 +76,119 @@ function KindCard({
   )
 }
 
+function MonthTrendsWidget({
+  annual,
+  title,
+}: {
+  annual: AnnualDashboard
+  title?: string | null
+}) {
+  const labels = annual.months.map((m) => MONTH_SHORT[m.month - 1])
+  const cashflow = annual.months.map(
+    (m) =>
+      Number(m.income_actual) -
+      Number(m.expense_actual) -
+      Number(m.savings_actual),
+  )
+
+  return (
+    <div className="widget">
+      <h3>{title || 'Month-to-month trends'}</h3>
+      <p className="muted compact">
+        Actual income, expenses, and savings across the year.
+      </p>
+      <LineTrendChart
+        labels={labels}
+        series={[
+          {
+            key: 'income',
+            label: 'Income',
+            color: COLOR.income,
+            values: annual.months.map((m) => Number(m.income_actual)),
+          },
+          {
+            key: 'expense',
+            label: 'Expenses',
+            color: COLOR.expense,
+            values: annual.months.map((m) => Number(m.expense_actual)),
+          },
+          {
+            key: 'savings',
+            label: 'Savings',
+            color: COLOR.savings,
+            values: annual.months.map((m) => Number(m.savings_actual)),
+          },
+        ]}
+      />
+
+      <h4 className="chart-subtitle">Plan vs actual expenses</h4>
+      <GroupedBarChart
+        labels={labels}
+        series={[
+          {
+            key: 'planned',
+            label: 'Planned',
+            color: COLOR.planned,
+            values: annual.months.map((m) => Number(m.expense_planned)),
+          },
+          {
+            key: 'actual',
+            label: 'Actual',
+            color: COLOR.expense,
+            values: annual.months.map((m) => Number(m.expense_actual)),
+          },
+        ]}
+      />
+
+      <h4 className="chart-subtitle">Monthly remainder (income − expenses − savings)</h4>
+      <LineTrendChart
+        labels={labels}
+        series={[
+          {
+            key: 'balance',
+            label: 'Remainder',
+            color: COLOR.balance,
+            values: cashflow,
+          },
+        ]}
+        height={180}
+      />
+
+      <div className="table-wrap chart-table">
+        <table className="data-table compact">
+          <thead>
+            <tr>
+              <th>Month</th>
+              <th>Income</th>
+              <th>Expense</th>
+              <th>Savings</th>
+            </tr>
+          </thead>
+          <tbody>
+            {annual.months.map((m) => (
+              <tr key={`${m.year}-${m.month}`}>
+                <td>{MONTH_SHORT[m.month - 1]}</td>
+                <td className="num">
+                  {formatUsd(m.income_actual)}
+                  <span className="muted"> / {formatUsd(m.income_planned)}</span>
+                </td>
+                <td className="num">
+                  {formatUsd(m.expense_actual)}
+                  <span className="muted"> / {formatUsd(m.expense_planned)}</span>
+                </td>
+                <td className="num">
+                  {formatUsd(m.savings_actual)}
+                  <span className="muted"> / {formatUsd(m.savings_planned)}</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 export function DashboardPage() {
   const { user, setPreferredView } = useAuth()
   const initial = currentYearMonth()
@@ -72,6 +199,7 @@ export function DashboardPage() {
   const [month, setMonth] = useState(initial.month)
   const [monthly, setMonthly] = useState<MonthlyDashboard | null>(null)
   const [annual, setAnnual] = useState<AnnualDashboard | null>(null)
+  const [trendYear, setTrendYear] = useState<AnnualDashboard | null>(null)
   const [widgets, setWidgets] = useState<DashboardWidget[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -91,11 +219,17 @@ export function DashboardPage() {
       setWidgets([...layout.widgets].sort((a, b) => a.order - b.order))
 
       if (view === 'monthly') {
-        setMonthly(await dashboardApi.getMonthlyDashboard(year, month))
+        const [md, yd] = await Promise.all([
+          dashboardApi.getMonthlyDashboard(year, month),
+          dashboardApi.getAnnualDashboard(year),
+        ])
+        setMonthly(md)
+        setTrendYear(yd)
         setAnnual(null)
       } else {
         setAnnual(await dashboardApi.getAnnualDashboard(year))
         setMonthly(null)
+        setTrendYear(null)
       }
     } catch (e) {
       setError(e instanceof ApiError ? e.detail : 'Failed to load dashboard')
@@ -134,6 +268,33 @@ export function DashboardPage() {
       await load()
     }
   }
+
+  const monthlyExpenseBars = useMemo(() => {
+    if (!monthly) return []
+    return monthly.categories
+      .filter((c) => c.kind === 'expense')
+      .map((c) => ({
+        label: c.category_name,
+        value: Number(c.actual),
+        color: c.over_budget ? '#9a4b1f' : COLOR.expense,
+      }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 8)
+  }, [monthly])
+
+  const monthlyPlanVsActual = useMemo(() => {
+    if (!monthly) return null
+    const cats = monthly.categories.filter((c) => c.kind === 'expense').slice(0, 8)
+    return {
+      labels: cats.map((c) =>
+        c.category_name.length > 10
+          ? `${c.category_name.slice(0, 9)}…`
+          : c.category_name,
+      ),
+      planned: cats.map((c) => Number(c.planned)),
+      actual: cats.map((c) => Number(c.actual)),
+    }
+  }, [monthly])
 
   function renderWidget(w: DashboardWidget) {
     if (view === 'monthly' && monthly) {
@@ -178,7 +339,30 @@ export function DashboardPage() {
         return (
           <div className="widget">
             <h3>{w.title || 'Categories'}</h3>
-            <div className="table-wrap">
+            {monthlyPlanVsActual && monthlyPlanVsActual.labels.length > 0 && (
+              <>
+                <p className="muted compact">Expense plan vs actual this month</p>
+                <GroupedBarChart
+                  labels={monthlyPlanVsActual.labels}
+                  series={[
+                    {
+                      key: 'planned',
+                      label: 'Planned',
+                      color: COLOR.planned,
+                      values: monthlyPlanVsActual.planned,
+                    },
+                    {
+                      key: 'actual',
+                      label: 'Actual',
+                      color: COLOR.expense,
+                      values: monthlyPlanVsActual.actual,
+                    },
+                  ]}
+                  height={200}
+                />
+              </>
+            )}
+            <div className="table-wrap chart-table">
               <table className="data-table compact">
                 <thead>
                   <tr>
@@ -211,6 +395,46 @@ export function DashboardPage() {
           </div>
         )
       }
+      if (w.type === 'cashflow_trend' && trendYear) {
+        const labels = trendYear.months.map((m) => MONTH_SHORT[m.month - 1])
+        return (
+          <div className="widget">
+            <h3>{w.title || 'Year cash-flow trend'}</h3>
+            <p className="muted compact">
+              How this year’s actuals are moving month to month.
+            </p>
+            <LineTrendChart
+              labels={labels}
+              series={[
+                {
+                  key: 'income',
+                  label: 'Income',
+                  color: COLOR.income,
+                  values: trendYear.months.map((m) => Number(m.income_actual)),
+                },
+                {
+                  key: 'expense',
+                  label: 'Expenses',
+                  color: COLOR.expense,
+                  values: trendYear.months.map((m) => Number(m.expense_actual)),
+                },
+                {
+                  key: 'savings',
+                  label: 'Savings',
+                  color: COLOR.savings,
+                  values: trendYear.months.map((m) => Number(m.savings_actual)),
+                },
+              ]}
+            />
+            {monthlyExpenseBars.length > 0 && (
+              <>
+                <h4 className="chart-subtitle">Top expenses this month</h4>
+                <HorizontalBarChart items={monthlyExpenseBars} />
+              </>
+            )}
+          </div>
+        )
+      }
     }
 
     if (view === 'annual' && annual) {
@@ -224,71 +448,50 @@ export function DashboardPage() {
         )
       }
       if (w.type === 'month_trends') {
-        return (
-          <div className="widget">
-            <h3>{w.title || 'Month-to-month trends'}</h3>
-            <div className="table-wrap">
-              <table className="data-table compact">
-                <thead>
-                  <tr>
-                    <th>Month</th>
-                    <th>Income</th>
-                    <th>Expense</th>
-                    <th>Savings</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {annual.months.map((m) => (
-                    <tr key={`${m.year}-${m.month}`}>
-                      <td>{MONTH_SHORT[m.month - 1]}</td>
-                      <td className="num">
-                        {formatUsd(m.income_actual)}
-                        <span className="muted"> / {formatUsd(m.income_planned)}</span>
-                      </td>
-                      <td className="num">
-                        {formatUsd(m.expense_actual)}
-                        <span className="muted"> / {formatUsd(m.expense_planned)}</span>
-                      </td>
-                      <td className="num">
-                        {formatUsd(m.savings_actual)}
-                        <span className="muted"> / {formatUsd(m.savings_planned)}</span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )
+        return <MonthTrendsWidget annual={annual} title={w.title} />
       }
       if (w.type === 'category_trends') {
         const overruns = annual.category_trends.filter(
           (c) => c.months_over_budget > 0,
         )
+        const overrunBars = overruns.slice(0, 10).map((c) => ({
+          label: c.category_name,
+          value: c.months_over_budget,
+          color: '#9a4b1f',
+        }))
         return (
           <div className="widget">
             <h3>{w.title || 'Repeated overruns'}</h3>
             {overruns.length === 0 ? (
               <p className="muted">No repeated over-budget patterns this year.</p>
             ) : (
-              <ul className="bucket-list">
-                {overruns.map((c) => (
-                  <li key={c.category_id}>
-                    <div className="bucket-row">
-                      <span>
-                        {c.category_name}{' '}
-                        <SoftWarning
-                          message={`${c.months_over_budget} months over`}
-                        />
-                      </span>
-                      <span className="muted">
-                        {formatUsd(c.total_actual)} vs{' '}
-                        {formatUsd(c.total_planned)}
-                      </span>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+              <>
+                <p className="muted compact">
+                  Months over budget by category — soft warning patterns only.
+                </p>
+                <HorizontalBarChart
+                  items={overrunBars}
+                  formatValue={(n) => `${n} mo`}
+                />
+                <ul className="bucket-list">
+                  {overruns.map((c) => (
+                    <li key={c.category_id}>
+                      <div className="bucket-row">
+                        <span>
+                          {c.category_name}{' '}
+                          <SoftWarning
+                            message={`${c.months_over_budget} months over`}
+                          />
+                        </span>
+                        <span className="muted">
+                          {formatUsd(c.total_actual)} vs{' '}
+                          {formatUsd(c.total_planned)}
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </>
             )}
           </div>
         )
@@ -300,16 +503,25 @@ export function DashboardPage() {
             {annual.savings_buckets.length === 0 ? (
               <p className="muted">No savings buckets yet.</p>
             ) : (
-              <ul className="bucket-list">
-                {annual.savings_buckets.map((b) => (
-                  <li key={b.category_id}>
-                    <div className="bucket-row">
-                      <span>{b.category_name}</span>
-                      <strong>{formatUsd(b.balance)}</strong>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+              <>
+                <HorizontalBarChart
+                  items={annual.savings_buckets.map((b) => ({
+                    label: b.category_name,
+                    value: Number(b.balance),
+                    color: COLOR.savings,
+                  }))}
+                />
+                <ul className="bucket-list">
+                  {annual.savings_buckets.map((b) => (
+                    <li key={b.category_id}>
+                      <div className="bucket-row">
+                        <span>{b.category_name}</span>
+                        <strong>{formatUsd(b.balance)}</strong>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </>
             )}
           </div>
         )

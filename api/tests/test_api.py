@@ -292,7 +292,12 @@ def test_transactions_search_sort_filter_and_dashboard(
     )
     assert layout.status_code == 200
     got = client.get("/api/dashboard/layout/monthly", headers=h)
-    assert len(got.json()["widgets"]) == 1
+    widgets = got.json()["widgets"]
+    ids = {w["id"] for w in widgets}
+    assert "expense-progress" in ids
+    # New default widgets (e.g. cashflow-trend) are appended for existing layouts.
+    assert "cashflow-trend" in ids
+    assert len(widgets) >= 1
 
 
 def test_preferences(auth_headers: dict[str, str]) -> None:
