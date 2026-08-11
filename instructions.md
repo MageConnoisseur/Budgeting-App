@@ -8,9 +8,9 @@ Pass this file to new coding agents so they share the same product, architecture
 
 A full-stack **personal budgeting app** with:
 
-1. **Budget planner** — plan income, expenses, and savings by calendar month
-2. **Expense / transaction tracker** — log real money movement against those plan categories
-3. **Dashboard** — analyze plan vs actual, spot trends, and refine future budgets
+1. **Budget planner** — plan income, expenses, and savings by calendar month, with **monthly and annual** editing views
+2. **Expense / transaction tracker** — log real money movement against those plan categories, with strong **search/sort**
+3. **Dashboard** — analyze plan vs actual (monthly or annual), spot trends, and refine future budgets
 
 **Clients:** Web app (primary for planning and analysis) and later a phone app (primary for on-the-go logging). Both use the **same API and database** so one user account stays in sync across devices.
 
@@ -329,6 +329,7 @@ All user-owned rows must be scoped by authenticated user.
 
 - Final product / brand name
 - Exact dashboard widget set and persistence of layouts
+- Whether Monthly/Annual view preference is stored per-user on the server or locally in the browser (either is fine for MVP; document the choice)
 - Password hashing / session strategy details (JWT vs cookies, etc.) — choose a secure FastAPI-common approach and document it in the API README when implemented
 - Whether monorepo tooling (pnpm/npm workspaces, uv, etc.) is introduced at first scaffold
 
