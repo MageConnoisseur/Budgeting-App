@@ -30,6 +30,42 @@ def test_health() -> None:
     assert r.json()["status"] == "ok"
 
 
+def test_health_ready_ok() -> None:
+    r = client.get("/health/ready")
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "ok"
+
+
+def test_users_schema_compatible_rejects_legacy_bigint() -> None:
+    from sqlalchemy import create_engine, text
+
+    from app.config import get_settings
+    from app.migrate import drop_app_schema, users_schema_compatible
+
+    engine = create_engine(get_settings().sqlalchemy_database_url)
+    drop_app_schema(engine)
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE users (
+                  id BIGSERIAL PRIMARY KEY,
+                  username TEXT NOT NULL UNIQUE,
+                  password_hash TEXT NOT NULL,
+                  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+                """
+            )
+        )
+    assert users_schema_compatible(engine) is False
+    # Restore proper schema for later tests in this process.
+    from app.migrate import main as migrate_main
+
+    assert migrate_main() == 0
+    assert users_schema_compatible(engine) is True
+
+
 def test_cors_allows_vercel_preview_origin() -> None:
     origin = "https://budgeting-app-ondeckporjects.vercel.app"
     preflight = client.options(
