@@ -26,6 +26,8 @@ A full-stack **personal budgeting app** with:
 - **Going over budget is allowed.** Soft visual warnings only — never block logging. Trends should make overspending obvious over time.
 - **Savings are buckets with balances**, not just another expense line.
 - **Web is robust and desktop-friendly**; mobile (phase 2) optimizes for fast transaction entry.
+- **Monthly and annual views are first-class** on Budget and Dashboard — users can switch preference easily and edit in either mode.
+- **Tracker must be easy to search and sort** so users can confirm whether something was already logged.
 - **Start simple, design for growth** (better auth, CSV import, multi-currency, shared households later).
 
 ---
@@ -44,11 +46,29 @@ Three category kinds:
 
 Categories are user-defined. They persist across months; **monthly planned amounts** are per month.
 
-### 3.2 Monthly budget plan
+### 3.2 Budget plan (monthly + annual views)
 
-- Periods are **calendar months** for v1 (custom date ranges later).
+- Storage periods are **calendar months** for v1 (custom date ranges later).
 - For each month + category: a **planned amount**.
 - Currency for v1: **USD only** (multi-currency later).
+
+#### View modes (required)
+
+Budget (and Dashboard — see §3.5) must support **both**:
+
+| View | Purpose |
+|------|---------|
+| **Monthly** | Focus on one month; edit that month’s planned amounts |
+| **Annual** | See a full year (all 12 months × categories); edit cells in place and scan the year at once |
+
+Requirements:
+
+- Easy, persistent **toggle** (or equivalent control) to swap Monthly ↔ Annual without losing place.
+- Remember the user’s last preferred view when practical (local or account preference).
+- **Annual view is editable**, not read-only summary — changing a month/category cell updates that month’s planned amount.
+- Annual layout should stay usable on desktop (grid/table of categories × months is the expected pattern).
+- Underlying data stays **per-month budget lines**; annual view is a projection/editing surface over those months.
+- Creating/editing cells in annual view for months that do not yet exist should create/seed those months using copy-forward rules where appropriate.
 
 #### Copy-forward (required behavior)
 
@@ -83,16 +103,38 @@ Users log transactions manually:
 
 Transactions must reference an existing budget category (of the selected kind).
 
+#### Search, sort, and find (required)
+
+The tracker is also a **lookup tool** — users need to quickly check whether they already logged something.
+
+MVP must include:
+
+- **Search** across note text, category name, amount, and date (as appropriate)
+- **Sorting** by date, amount, category, and kind (asc/desc)
+- **Filters** at minimum: date range, kind (income / expense / savings), and category
+- Clear empty states when nothing matches; easy reset of search/filters
+- Performance-minded list UX as history grows (pagination or virtualized list is fine)
+
 **CSV / bank import:** later. When designed, account for **duplicate detection** (manual entry then CSV of the same transactions). Do not implement import in MVP.
 
 ### 3.5 Dashboard (high priority, customizable)
 
 Goal: help users **learn and adjust** spending and plans over time — not only “this month’s remaining dollars.”
 
+#### View modes (required)
+
+Same preference model as Budget:
+
+- **Monthly view** — deep dive on the selected month (progress vs plan, remaining, over/under)
+- **Annual view** — year-level insight across all months (totals, trends, which categories overrun repeatedly)
+- Easy swap between Monthly ↔ Annual; remember preference when practical
+
+Widgets should respect the active view (month-scoped vs year-scoped), not only duplicate the same chart with a different label.
+
 v1 direction:
 
 - **Customizable widgets / layout** the user can rearrange (primary ask)
-- Progress vs plan for income, expenses, and savings (this month)
+- Progress vs plan for income, expenses, and savings
 - **Month-to-month trends** (especially categories that are consistently over or under)
 - Category drill-downs and filters as the widget set grows
 
@@ -169,9 +211,12 @@ Must include:
 - [ ] Username + password auth
 - [ ] Category CRUD (income / expense / savings)
 - [ ] Monthly budget plans with planned amounts
+- [ ] Budget **Monthly ↔ Annual** view toggle (annual grid editable)
 - [ ] Copy-forward auto-seed + copy/template actions
 - [ ] Manual transaction tracker with cascaded dropdowns
+- [ ] Tracker **search, sort, and filters** for finding past entries
 - [ ] Dashboard with customizable insight widgets (start useful, extend over time)
+- [ ] Dashboard **Monthly ↔ Annual** view toggle
 - [ ] Soft over-budget indicators + month-to-month trend views
 
 Out of scope for Phase 1:
@@ -205,9 +250,10 @@ Out of scope for Phase 1:
 
 ### Web
 
-- Intuitive, robust **desktop** budgeting: clear month navigation, fast editing of planned amounts, obvious copy/template controls.
-- Tracker: cascaded kind → category dropdowns; date + amount entry should be quick.
-- Dashboard: prioritize clarity and customization over a fixed one-size layout.
+- Intuitive, robust **desktop** budgeting: clear month/year navigation, fast editing of planned amounts, obvious copy/template controls, and a prominent **Monthly / Annual** switch.
+- Annual budget view: editable category × month grid suitable for scanning and bulk mental planning.
+- Tracker: cascaded kind → category dropdowns; date + amount entry should be quick; **search/sort/filter** should make “did I already log X?” easy.
+- Dashboard: prioritize clarity and customization; support the same **Monthly / Annual** preference as Budget.
 
 ### Mobile (when built)
 
@@ -245,13 +291,15 @@ All user-owned rows must be scoped by authenticated user.
 2. **Prefer Phase 1 scope.** Do not implement Phase 2/3 features unless the task explicitly asks.
 3. **Keep one API contract** for all clients; avoid embedding business logic only in the web app.
 4. **Preserve copy-forward semantics** when touching budget months.
-5. **Savings = buckets with balances**; do not flatten them into normal expenses without discussion.
-6. **Over-budget = soft warning**, never a hard block.
-7. **USD-only** until multi-currency is explicitly requested — still keep amounts as proper decimal/money types, not floats.
-8. **No secrets in git.** Use env vars for Neon, Render, and Vercel config.
-9. **Migrate the database** deliberately; include migrations with schema changes.
-10. **Ask before large product pivots** (e.g. switching to YNAB-style rollover, dropping FastAPI, or adding bank sync).
-11. When uncertain, choose the option that keeps **web planning strong**, **logging simple**, and **dashboard insightful**.
+5. **Budget and Dashboard must support Monthly and Annual views** with easy switching; annual budget view remains editable.
+6. **Tracker must support solid search, sort, and filter** so users can find past entries.
+7. **Savings = buckets with balances**; do not flatten them into normal expenses without discussion.
+8. **Over-budget = soft warning**, never a hard block.
+9. **USD-only** until multi-currency is explicitly requested — still keep amounts as proper decimal/money types, not floats.
+10. **No secrets in git.** Use env vars for Neon, Render, and Vercel config.
+11. **Migrate the database** deliberately; include migrations with schema changes.
+12. **Ask before large product pivots** (e.g. switching to YNAB-style rollover, dropping FastAPI, or adding bank sync).
+13. When uncertain, choose the option that keeps **web planning strong**, **logging simple**, and **dashboard insightful**.
 
 ---
 
@@ -265,6 +313,8 @@ All user-owned rows must be scoped by authenticated user.
 | Tracker | Manual transactions first; CSV later with dedup concerns |
 | Over budget | Soft warnings; emphasize multi-month trends |
 | Dashboard | Robust, customizable widgets; insight for future adjustments |
+| Budget / Dashboard views | Monthly and Annual modes; easy swap; annual budget editing allowed |
+| Tracker findability | Search, sort, and filters required in MVP |
 | Auth now | Username + password |
 | Auth later | More robust system |
 | Users | Individual accounts; households later |
