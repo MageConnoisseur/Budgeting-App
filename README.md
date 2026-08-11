@@ -10,9 +10,11 @@ Full-stack budgeting app (web + future mobile) for monthly income, expenses, and
 /
   instructions.md
   api/          # FastAPI → Render (Phase 1)
-  apps/web/     # React (Vite) → Vercel
-  apps/mobile/  # Expo → phase 2
+  web/          # React (Vite) → Vercel
+  mobile/       # Expo → phase 2 (later)
 ```
+
+Top-level `web/` (sibling of `api/`) so Vercel’s Root Directory dropdown can select it — nested `apps/web` is often omitted from that picker.
 
 ## API
 
@@ -20,4 +22,4 @@ See [`api/README.md`](./api/README.md) for setup, auth (JWT), amount conventions
 
 ## Web
 
-See [`apps/web/README.md`](./apps/web/README.md). Locally: run the API on `:8000`, then `cd apps/web && npm install && npm run dev`.
+See [`web/README.md`](./web/README.md). Locally: run the API on `:8000`, then `cd web && npm install && npm run dev`. On Vercel, set **Root Directory** to `web`.

@@ -183,14 +183,13 @@ Prefer a monorepo once code exists, for example:
 ```text
 /
   instructions.md          # this file
-  apps/
-    web/                   # React (Vite) → Vercel
-    mobile/                # Expo → phase 2
   api/                     # FastAPI → Render
+  web/                     # React (Vite) → Vercel (top-level so hosts can pick Root Directory)
+  mobile/                  # Expo → phase 2
   packages/                # optional shared types/utils later
 ```
 
-Agents may adjust names, but keep **api / web / mobile** separation clear.
+Agents may adjust names, but keep **api / web / mobile** separation clear. Prefer top-level `web/` over nested `apps/web` so Vercel’s Root Directory dropdown lists it next to `api/`.
 
 ### 5.4 API expectations
 
