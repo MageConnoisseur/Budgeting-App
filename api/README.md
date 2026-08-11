@@ -93,4 +93,5 @@ pytest -q
 - Start command: `python -m app.migrate && python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT`
 - Set `DATABASE_URL`, `SECRET_KEY`, and `CORS_ORIGINS` (your Vercel URL) in the Render dashboard
 - Prefer `python -m uvicorn` so Render’s PATH always finds the package
-- `python -m app.migrate` upgrades Alembic, or stamps `head` if tables already exist without a version row
+- `python -m app.migrate` upgrades Alembic, stamps compatible existing schemas, or **rebuilds** if it detects the legacy `database/tables.sql` schema (BIGSERIAL ids) that breaks registration
+- Check `GET /health/ready` — should return `{"status":"ok"}`. `schema_mismatch` means migrate did not repair yet.
