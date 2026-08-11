@@ -89,7 +89,8 @@ pytest -q
 ## Render deploy notes
 
 - Root directory: `api`
-- Start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-- Build command: `pip install -r requirements.txt && alembic upgrade head`
+- Build command: `pip install -r requirements.txt`
+- Start command: `python -m app.migrate && python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT`
 - Set `DATABASE_URL`, `SECRET_KEY`, and `CORS_ORIGINS` (your Vercel URL) in the Render dashboard
-"""
+- Prefer `python -m uvicorn` so Render’s PATH always finds the package
+- `python -m app.migrate` upgrades Alembic, or stamps `head` if tables already exist without a version row
