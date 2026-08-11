@@ -5,7 +5,7 @@ Vite + React SPA for the Phase 1 budgeting MVP. Talks to the FastAPI backend via
 ## Setup
 
 ```bash
-cd apps/web
+cd web
 cp .env.example .env   # set VITE_API_URL to your API (default http://localhost:8000)
 npm install
 npm run dev
@@ -29,8 +29,10 @@ Dev server: http://localhost:5173
 
 ## Deploy (Vercel)
 
-- Root directory: `apps/web`
+- Root directory: `web` (sibling of `api/` — pick this in the Root Directory dropdown)
+- Framework: Vite
 - Build: `npm run build`
 - Output: `dist`
+- Install: `npm install`
 - Set `VITE_API_URL` to the Render API URL
 - Ensure Render `CORS_ORIGINS` includes the Vercel domain
