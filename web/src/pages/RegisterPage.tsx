@@ -21,7 +21,13 @@ export function RegisterPage() {
       await register(username.trim(), password)
       navigate('/')
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail : 'Registration failed')
+      setError(
+        err instanceof ApiError
+          ? err.detail
+          : err instanceof Error
+            ? err.message
+            : 'Registration failed',
+      )
     } finally {
       setSubmitting(false)
     }

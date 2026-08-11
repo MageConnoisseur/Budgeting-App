@@ -34,5 +34,6 @@ Dev server: http://localhost:5173
 - Build: `npm run build`
 - Output: `dist`
 - Install: `npm install`
-- Set `VITE_API_URL` to the Render API URL
-- Ensure Render `CORS_ORIGINS` includes the Vercel domain
+- Set `VITE_API_URL` to the Render API **origin** (e.g. `https://your-service.onrender.com`) — no trailing slash, no `/api`. Vite inlines this at build time; redeploy after changing it.
+- Builds on Vercel fail if `VITE_API_URL` is missing (avoids shipping a localhost API URL).
+- Render allows `*.vercel.app` by default; add any custom domain to `CORS_ORIGINS`.

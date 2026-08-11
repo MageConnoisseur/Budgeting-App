@@ -30,6 +30,29 @@ def test_health() -> None:
     assert r.json()["status"] == "ok"
 
 
+def test_cors_allows_vercel_preview_origin() -> None:
+    origin = "https://budgeting-app-ondeckporjects.vercel.app"
+    preflight = client.options(
+        "/api/auth/register",
+        headers={
+            "Origin": origin,
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+    assert preflight.status_code == 200
+    assert preflight.headers.get("access-control-allow-origin") == origin
+
+    username = f"cors_{uuid.uuid4().hex[:8]}"
+    register = client.post(
+        "/api/auth/register",
+        headers={"Origin": origin},
+        json={"username": username, "password": "password123"},
+    )
+    assert register.status_code == 201, register.text
+    assert register.headers.get("access-control-allow-origin") == origin
+
+
 def test_register_login_and_me(auth_headers: dict[str, str]) -> None:
     r = client.get("/api/auth/me", headers=auth_headers)
     assert r.status_code == 200

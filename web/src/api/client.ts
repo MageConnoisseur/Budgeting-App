@@ -52,10 +52,19 @@ export async function apiFetch<T>(
   const token = getToken()
   if (token) headers.set('Authorization', `Bearer ${token}`)
 
-  const res = await fetch(`${apiBaseUrl()}/api${path}`, {
-    ...options,
-    headers,
-  })
+  const url = `${apiBaseUrl()}/api${path}`
+  let res: Response
+  try {
+    res = await fetch(url, {
+      ...options,
+      headers,
+    })
+  } catch {
+    throw new ApiError(
+      0,
+      `Cannot reach API at ${apiBaseUrl()}. Check VITE_API_URL and that the API is running (CORS must allow this site).`,
+    )
+  }
 
   if (res.status === 204) return undefined as T
 

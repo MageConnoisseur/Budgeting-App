@@ -21,6 +21,9 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
+    # Always allow Vercel preview/production hosts so registration from
+    # *.vercel.app works even if CORS_ORIGINS was left at localhost defaults.
+    allow_origin_regex=r"https://[\w.-]+\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
