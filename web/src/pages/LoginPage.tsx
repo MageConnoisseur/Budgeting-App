@@ -21,7 +21,13 @@ export function LoginPage() {
       await login(username.trim(), password)
       navigate('/')
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail : 'Sign in failed')
+      setError(
+        err instanceof ApiError
+          ? err.detail
+          : err instanceof Error
+            ? err.message
+            : 'Sign in failed',
+      )
     } finally {
       setSubmitting(false)
     }

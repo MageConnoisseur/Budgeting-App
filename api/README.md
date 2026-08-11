@@ -56,7 +56,7 @@ OpenAPI docs: http://localhost:8000/docs
 |----------|----------|-------------|
 | `DATABASE_URL` | yes | Neon Postgres connection string |
 | `SECRET_KEY` | yes (prod) | JWT signing secret |
-| `CORS_ORIGINS` | no | Comma-separated allowed origins (default local Vite) |
+| `CORS_ORIGINS` | no | Comma-separated allowed origins (default local Vite). `*.vercel.app` is also allowed automatically. |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | no | JWT lifetime (default 10080) |
 
 ## Main routes
