@@ -2,6 +2,10 @@ import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react
 import * as budgetsApi from '../api/budgets'
 import * as categoriesApi from '../api/categories'
 import { ApiError } from '../api/client'
+import {
+  BudgetBalancePanel,
+  sumByKind,
+} from '../components/BudgetBalance'
 import { PeriodNavigator } from '../components/PeriodNavigator'
 import { ViewModeToggle } from '../components/ViewModeToggle'
 import { useAuth } from '../context/AuthContext'
@@ -108,6 +112,39 @@ export function BudgetPage() {
     for (const c of categories) map[c.kind].push(c)
     return map
   }, [categories])
+
+  /** Live monthly plan balance from draft inputs (updates as you type). */
+  const monthlyBalance = useMemo(
+    () =>
+      sumByKind(categories, (id) => {
+        const raw = amounts[id]
+        if (raw === undefined || raw === '') return 0
+        const n = Number(raw.replace(/[^0-9.-]/g, ''))
+        return Number.isNaN(n) ? 0 : n
+      }),
+    [categories, amounts],
+  )
+
+  /** Annual: year totals + per-month remainder for balanced-budget scanning. */
+  const annualBalance = useMemo(() => {
+    const yearTotals = sumByKind(categories, (id) => {
+      let total = 0
+      for (const bm of annualMonths) {
+        const line = bm.lines.find((l) => l.category_id === id)
+        if (line) total += Number(line.planned_amount)
+      }
+      return total
+    })
+    const byMonth = Array.from({ length: 12 }, (_, i) => {
+      const m = i + 1
+      const bm = annualMonths.find((x) => x.month === m)
+      return sumByKind(categories, (id) => {
+        const line = bm?.lines.find((l) => l.category_id === id)
+        return line ? Number(line.planned_amount) : 0
+      })
+    })
+    return { yearTotals, byMonth }
+  }, [categories, annualMonths])
 
   async function saveMonthly(e: FormEvent) {
     e.preventDefault()
@@ -256,6 +293,12 @@ export function BudgetPage() {
         </p>
       ) : view === 'monthly' ? (
         <>
+          <BudgetBalancePanel
+            totals={monthlyBalance}
+            title="Month plan balance"
+            subtitle="Updates as you edit — income − expenses − savings"
+          />
+
           <form className="panel stack" onSubmit={saveMonthly}>
             {KIND_ORDER.map((kind) =>
               grouped[kind].length === 0 ? null : (
@@ -290,13 +333,7 @@ export function BudgetPage() {
               </button>
               {budget && (
                 <span className="muted">
-                  Totals update on save ·{' '}
-                  {budget.lines.reduce(
-                    (s, l) => s + Number(l.planned_amount),
-                    0,
-                  ) >= 0
-                    ? `${budget.lines.length} lines`
-                    : null}
+                  Balance updates live · {budget.lines.length} lines
                 </span>
               )}
             </div>
@@ -378,54 +415,84 @@ export function BudgetPage() {
           </div>
         </>
       ) : (
-        <div className="table-wrap annual-wrap">
-          <table className="data-table annual-grid">
-            <thead>
-              <tr>
-                <th>Category</th>
-                {MONTH_SHORT.map((m) => (
-                  <th key={m}>{m}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {KIND_ORDER.map((kind) =>
-                grouped[kind].map((c, idx) => (
-                  <tr key={c.id}>
-                    <td>
-                      {idx === 0 && (
-                        <span className="kind-inline">
-                          {kind.charAt(0).toUpperCase() + kind.slice(1)} ·{' '}
-                        </span>
-                      )}
-                      {c.name}
-                    </td>
-                    {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-                      <td key={m}>
-                        <input
-                          className="cell-input"
-                          inputMode="decimal"
-                          defaultValue={annualAmount(c.id, m)}
-                          key={`${c.id}-${m}-${annualAmount(c.id, m)}`}
-                          onBlur={(e) =>
-                            void onAnnualCellBlur(c.id, m, e.target.value)
-                          }
-                          placeholder="—"
-                          aria-label={`${c.name} ${MONTH_SHORT[m - 1]}`}
-                        />
+        <>
+          <BudgetBalancePanel
+            totals={annualBalance.yearTotals}
+            title="Year plan balance"
+            subtitle="Sum of all planned months — income − expenses − savings"
+          />
+
+          <div className="panel month-balance-strip">
+            <h3 className="section-title">Monthly remainder</h3>
+            <p className="muted compact">
+              Each month’s planned income − expenses − savings after cell edits.
+            </p>
+            <div className="month-balance-grid">
+              {annualBalance.byMonth.map((t, i) => {
+                const tone =
+                  Math.abs(t.balance) < 0.005
+                    ? 'balanced'
+                    : t.balance > 0
+                      ? 'surplus'
+                      : 'deficit'
+                return (
+                  <div key={MONTH_SHORT[i]} className={`month-balance-cell tone-${tone}`}>
+                    <span>{MONTH_SHORT[i]}</span>
+                    <strong>{formatUsd(t.balance)}</strong>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          <div className="table-wrap annual-wrap">
+            <table className="data-table annual-grid">
+              <thead>
+                <tr>
+                  <th>Category</th>
+                  {MONTH_SHORT.map((m) => (
+                    <th key={m}>{m}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {KIND_ORDER.map((kind) =>
+                  grouped[kind].map((c, idx) => (
+                    <tr key={c.id}>
+                      <td>
+                        {idx === 0 && (
+                          <span className="kind-inline">
+                            {kind.charAt(0).toUpperCase() + kind.slice(1)} ·{' '}
+                          </span>
+                        )}
+                        {c.name}
                       </td>
-                    ))}
-                  </tr>
-                )),
-              )}
-            </tbody>
-          </table>
-          <p className="muted compact">
-            Edit any cell to update that month’s plan. Empty months seed from
-            prior plans when needed. Example:{' '}
-            {formatUsd(annualAmount(categories[0]?.id ?? '', 1) || '0')}
-          </p>
-        </div>
+                      {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                        <td key={m}>
+                          <input
+                            className="cell-input"
+                            inputMode="decimal"
+                            defaultValue={annualAmount(c.id, m)}
+                            key={`${c.id}-${m}-${annualAmount(c.id, m)}`}
+                            onBlur={(e) =>
+                              void onAnnualCellBlur(c.id, m, e.target.value)
+                            }
+                            placeholder="—"
+                            aria-label={`${c.name} ${MONTH_SHORT[m - 1]}`}
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                  )),
+                )}
+              </tbody>
+            </table>
+            <p className="muted compact">
+              Edit any cell to update that month’s plan. Empty months seed from
+              prior plans when needed.
+            </p>
+          </div>
+        </>
       )}
     </div>
   )

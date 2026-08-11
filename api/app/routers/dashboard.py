@@ -26,8 +26,9 @@ DEFAULT_MONTHLY_WIDGETS = [
     DashboardWidget(id="income-progress", type="kind_progress", title="Income", order=0, config={"kind": "income"}),
     DashboardWidget(id="expense-progress", type="kind_progress", title="Expenses", order=1, config={"kind": "expense"}),
     DashboardWidget(id="savings-progress", type="kind_progress", title="Savings", order=2, config={"kind": "savings"}),
-    DashboardWidget(id="savings-buckets", type="savings_buckets", title="Savings buckets", order=3, config={}),
-    DashboardWidget(id="category-breakdown", type="category_breakdown", title="Categories", order=4, config={}),
+    DashboardWidget(id="cashflow-trend", type="cashflow_trend", title="Year cash-flow trend", order=3, config={}),
+    DashboardWidget(id="savings-buckets", type="savings_buckets", title="Savings buckets", order=4, config={}),
+    DashboardWidget(id="category-breakdown", type="category_breakdown", title="Categories", order=5, config={}),
 ]
 
 DEFAULT_ANNUAL_WIDGETS = [
@@ -93,12 +94,31 @@ def savings_balances(
     ]
 
 
+def _merge_default_widgets(
+    saved: list[DashboardWidget], defaults: list[DashboardWidget]
+) -> list[DashboardWidget]:
+    """Keep saved order/config; append any new default widgets the user lacks."""
+    have = {w.id for w in saved}
+    merged = list(saved)
+    next_order = max((w.order for w in saved), default=-1) + 1
+    for w in defaults:
+        if w.id not in have:
+            merged.append(w.model_copy(update={"order": next_order}))
+            next_order += 1
+    return merged
+
+
 @router.get("/layout/{view_mode}", response_model=DashboardLayoutOut)
 def get_layout(
     view_mode: ViewMode,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> DashboardLayoutOut:
+    defaults = (
+        DEFAULT_MONTHLY_WIDGETS
+        if view_mode == ViewMode.monthly
+        else DEFAULT_ANNUAL_WIDGETS
+    )
     row = db.scalar(
         select(DashboardLayout).where(
             DashboardLayout.user_id == user.id,
@@ -106,14 +126,12 @@ def get_layout(
         )
     )
     if row is None:
-        widgets = (
-            DEFAULT_MONTHLY_WIDGETS
-            if view_mode == ViewMode.monthly
-            else DEFAULT_ANNUAL_WIDGETS
-        )
-        return DashboardLayoutOut(view_mode=view_mode, widgets=widgets)
+        return DashboardLayoutOut(view_mode=view_mode, widgets=defaults)
     widgets = [DashboardWidget.model_validate(w) for w in json.loads(row.layout_json)]
-    return DashboardLayoutOut(view_mode=view_mode, widgets=widgets)
+    return DashboardLayoutOut(
+        view_mode=view_mode,
+        widgets=_merge_default_widgets(widgets, defaults),
+    )
 
 
 @router.put("/layout/{view_mode}", response_model=DashboardLayoutOut)

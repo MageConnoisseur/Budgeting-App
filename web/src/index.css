@@ -677,6 +677,257 @@ button:focus-visible {
   font-weight: 600;
 }
 
+/* —— Budget plan balance —— */
+.budget-balance {
+  margin-bottom: 1rem;
+  animation: fade-up 0.35s ease both;
+}
+
+.budget-balance-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.75rem 1.25rem;
+  align-items: flex-start;
+  margin-bottom: 0.85rem;
+}
+
+.balance-result {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.15rem;
+}
+
+.balance-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.balance-value {
+  font-size: 1.55rem;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--display);
+  letter-spacing: -0.02em;
+}
+
+.tone-balanced .balance-value,
+.eq-term.result.tone-balanced strong {
+  color: var(--pine);
+}
+
+.tone-surplus .balance-value,
+.eq-term.result.tone-surplus strong {
+  color: var(--savings);
+}
+
+.tone-deficit .balance-value,
+.eq-term.result.tone-deficit strong,
+.month-balance-cell.tone-deficit strong {
+  color: var(--warn);
+}
+
+.budget-balance.tone-balanced {
+  border-color: rgba(61, 122, 95, 0.45);
+  background:
+    linear-gradient(135deg, rgba(61, 122, 95, 0.08), transparent 55%),
+    var(--panel-solid);
+}
+
+.budget-balance.tone-surplus {
+  border-color: rgba(47, 95, 122, 0.4);
+  background:
+    linear-gradient(135deg, rgba(47, 95, 122, 0.08), transparent 55%),
+    var(--panel-solid);
+}
+
+.budget-balance.tone-deficit {
+  border-color: rgba(154, 75, 31, 0.4);
+  background:
+    linear-gradient(135deg, rgba(154, 75, 31, 0.08), transparent 55%),
+    var(--panel-solid);
+}
+
+.balance-equation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0.45rem 0.55rem;
+}
+
+.eq-term {
+  flex: 1 1 6.5rem;
+  min-width: 5.5rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.65);
+  border: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.eq-term span {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.eq-term strong {
+  font-variant-numeric: tabular-nums;
+  font-size: 1.05rem;
+}
+
+.eq-term.income strong {
+  color: var(--income);
+}
+
+.eq-term.expense strong {
+  color: var(--expense);
+}
+
+.eq-term.savings strong {
+  color: var(--savings);
+}
+
+.eq-op {
+  align-self: center;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--muted);
+  padding: 0 0.1rem;
+}
+
+.balance-hint {
+  margin: 0.85rem 0 0;
+  color: var(--ink-soft);
+  font-size: 0.92rem;
+}
+
+.month-balance-strip {
+  margin-bottom: 1rem;
+}
+
+.month-balance-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin-top: 0.65rem;
+}
+
+.month-balance-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.5rem 0.55rem;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.55);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.month-balance-cell strong {
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.month-balance-cell.tone-balanced {
+  border-color: rgba(61, 122, 95, 0.35);
+}
+
+.month-balance-cell.tone-surplus strong {
+  color: var(--savings);
+}
+
+/* —— Charts —— */
+.chart-block {
+  margin: 0.35rem 0 0.85rem;
+}
+
+.trend-chart {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.chart-grid {
+  stroke: var(--line);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+}
+
+.chart-axis {
+  fill: var(--muted);
+  font-size: 11px;
+  font-family: var(--font);
+}
+
+.chart-line {
+  animation: draw-line 0.7s ease both;
+}
+
+.chart-bar {
+  transition: opacity 0.2s ease;
+}
+
+.chart-bar:hover {
+  opacity: 0.85;
+}
+
+.chart-legend {
+  list-style: none;
+  margin: 0.35rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.1rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.chart-legend .swatch {
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 3px;
+  margin-right: 0.35rem;
+  vertical-align: -0.05rem;
+}
+
+.chart-subtitle {
+  font-family: var(--display);
+  font-size: 0.98rem;
+  font-weight: 560;
+  margin: 1rem 0 0.35rem;
+}
+
+.chart-table {
+  margin-top: 0.75rem;
+}
+
+.muted.compact {
+  margin: 0 0 0.5rem;
+  font-size: 0.88rem;
+}
+
+@keyframes draw-line {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 @keyframes rise {
   from {
     opacity: 0;
@@ -716,5 +967,17 @@ button:focus-visible {
 
   .inline-form:not(.wrap) {
     flex-wrap: wrap;
+  }
+
+  .month-balance-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .balance-result {
+    align-items: flex-start;
+  }
+
+  .eq-op {
+    display: none;
   }
 }
