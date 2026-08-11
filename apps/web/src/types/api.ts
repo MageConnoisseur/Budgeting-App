@@ -1,0 +1,164 @@
+/** Types matching the FastAPI schemas (Phase 1). */
+
+export type CategoryKind = 'income' | 'expense' | 'savings'
+export type ViewMode = 'monthly' | 'annual'
+
+export interface TokenResponse {
+  access_token: string
+  token_type: string
+}
+
+export interface User {
+  id: string
+  username: string
+  preferred_budget_view: ViewMode
+  preferred_dashboard_view: ViewMode
+  created_at: string
+}
+
+export interface Category {
+  id: string
+  kind: CategoryKind
+  name: string
+  archived: boolean
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+export interface BudgetLine {
+  id: string
+  category_id: string
+  planned_amount: string
+  category?: Category | null
+}
+
+export interface BudgetMonth {
+  id: string
+  year: number
+  month: number
+  lines: BudgetLine[]
+  seeded_from?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface AnnualBudget {
+  year: number
+  months: BudgetMonth[]
+}
+
+export interface BudgetTemplateLine {
+  id: string
+  category_id: string
+  planned_amount: string
+}
+
+export interface BudgetTemplate {
+  id: string
+  name: string
+  lines: BudgetTemplateLine[]
+  created_at: string
+  updated_at: string
+}
+
+export interface Transaction {
+  id: string
+  category_id: string
+  amount: string
+  date: string
+  note: string | null
+  created_at: string
+  updated_at: string
+  category?: Category | null
+}
+
+export interface TransactionList {
+  items: Transaction[]
+  total: number
+  limit: number
+  offset: number
+}
+
+export interface KindTotals {
+  planned: string
+  actual: string
+  remaining: string
+  over_budget: boolean
+}
+
+export interface CategoryProgress {
+  category_id: string
+  category_name: string
+  kind: CategoryKind
+  planned: string
+  actual: string
+  remaining: string
+  over_budget: boolean
+}
+
+export interface SavingsBucket {
+  category_id: string
+  category_name: string
+  balance: string
+  planned_this_period: string
+  actual_this_period: string
+  over_budget: boolean
+}
+
+export interface MonthlyDashboard {
+  year: number
+  month: number
+  income: KindTotals
+  expense: KindTotals
+  savings: KindTotals
+  categories: CategoryProgress[]
+  savings_buckets: SavingsBucket[]
+}
+
+export interface MonthlyTrendPoint {
+  year: number
+  month: number
+  income_planned: string
+  income_actual: string
+  expense_planned: string
+  expense_actual: string
+  savings_planned: string
+  savings_actual: string
+}
+
+export interface CategoryTrend {
+  category_id: string
+  category_name: string
+  kind: CategoryKind
+  months_over_budget: number
+  months_under_budget: number
+  total_planned: string
+  total_actual: string
+}
+
+export interface AnnualDashboard {
+  year: number
+  months: MonthlyTrendPoint[]
+  category_trends: CategoryTrend[]
+  income: KindTotals
+  expense: KindTotals
+  savings: KindTotals
+  savings_buckets: SavingsBucket[]
+}
+
+export interface DashboardWidget {
+  id: string
+  type: string
+  title?: string | null
+  config: Record<string, unknown>
+  order: number
+}
+
+export interface DashboardLayout {
+  view_mode: ViewMode
+  widgets: DashboardWidget[]
+}
+
+export type TransactionSortBy = 'date' | 'amount' | 'category' | 'kind' | 'created_at'
+export type SortDir = 'asc' | 'desc'
