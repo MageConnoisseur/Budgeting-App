@@ -14,6 +14,9 @@ export function CategoriesPage() {
   const [kind, setKind] = useState<CategoryKind>('expense')
   const [showArchived, setShowArchived] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editName, setEditName] = useState('')
+  const [renaming, setRenaming] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -49,9 +52,43 @@ export function CategoriesPage() {
     }
   }
 
+  function startRename(c: Category) {
+    setEditingId(c.id)
+    setEditName(c.name)
+    setError(null)
+  }
+
+  function cancelRename() {
+    setEditingId(null)
+    setEditName('')
+  }
+
+  async function onRename(e: FormEvent) {
+    e.preventDefault()
+    if (!editingId) return
+    const trimmed = editName.trim()
+    if (!trimmed) {
+      setError('Name is required')
+      return
+    }
+    setRenaming(true)
+    setError(null)
+    try {
+      await categoriesApi.updateCategory(editingId, { name: trimmed })
+      setEditingId(null)
+      setEditName('')
+      await load()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : 'Could not rename')
+    } finally {
+      setRenaming(false)
+    }
+  }
+
   async function onArchive(id: string) {
     try {
       await categoriesApi.archiveCategory(id)
+      if (editingId === id) cancelRename()
       await load()
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : 'Could not archive')
@@ -141,10 +178,40 @@ export function CategoriesPage() {
                   <td>
                     <KindBadge kind={c.kind} />
                   </td>
-                  <td>{c.name}</td>
+                  <td>
+                    {editingId === c.id ? (
+                      <form className="inline-edit" onSubmit={onRename}>
+                        <input
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          required
+                          maxLength={128}
+                          aria-label="Category name"
+                          autoFocus
+                        />
+                        <button
+                          className="btn tiny primary"
+                          type="submit"
+                          disabled={renaming}
+                        >
+                          Save
+                        </button>
+                        <button
+                          className="btn tiny ghost"
+                          type="button"
+                          onClick={cancelRename}
+                          disabled={renaming}
+                        >
+                          Cancel
+                        </button>
+                      </form>
+                    ) : (
+                      c.name
+                    )}
+                  </td>
                   <td>{c.archived ? 'Archived' : 'Active'}</td>
                   <td className="actions">
-                    {c.archived ? (
+                    {editingId === c.id ? null : c.archived ? (
                       <button
                         type="button"
                         className="btn ghost"
@@ -153,13 +220,22 @@ export function CategoriesPage() {
                         Restore
                       </button>
                     ) : (
-                      <button
-                        type="button"
-                        className="btn ghost"
-                        onClick={() => void onArchive(c.id)}
-                      >
-                        Archive
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          className="btn ghost"
+                          onClick={() => startRename(c)}
+                        >
+                          Rename
+                        </button>
+                        <button
+                          type="button"
+                          className="btn ghost"
+                          onClick={() => void onArchive(c.id)}
+                        >
+                          Archive
+                        </button>
+                      </>
                     )}
                   </td>
                 </tr>

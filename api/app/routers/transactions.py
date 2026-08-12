@@ -129,22 +129,23 @@ def update_transaction(
     if tx is None:
         raise HTTPException(status_code=404, detail="Transaction not found")
 
-    category_id = body.category_id or tx.category_id
+    updates = body.model_dump(exclude_unset=True)
+    category_id = updates.get("category_id", tx.category_id)
     cat = db.scalar(
         select(Category).where(Category.id == category_id, Category.user_id == user.id)
     )
     if cat is None:
         raise HTTPException(status_code=404, detail="Category not found")
 
-    amount = body.amount if body.amount is not None else tx.amount
+    amount = updates.get("amount", tx.amount)
     _validate_amount_for_kind(cat.kind, amount)
 
     tx.category_id = category_id
     tx.amount = amount
-    if body.date is not None:
-        tx.date = body.date
-    if body.note is not None:
-        tx.note = body.note
+    if "date" in updates:
+        tx.date = updates["date"]
+    if "note" in updates:
+        tx.note = updates["note"]
     db.add(tx)
     db.commit()
     return db.scalar(
