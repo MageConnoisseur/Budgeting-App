@@ -684,6 +684,49 @@ button:focus-visible {
   position: relative;
 }
 
+/* Keep discretionary cash visible while scrolling the dashboard. */
+.widget-shell-sticky {
+  position: sticky;
+  top: 0.65rem;
+  z-index: 3;
+}
+
+.widget.true-leftover.tone-surplus {
+  border-color: rgba(47, 95, 122, 0.35);
+  background:
+    linear-gradient(135deg, rgba(47, 95, 122, 0.07), transparent 55%),
+    var(--panel-solid);
+}
+
+.widget.true-leftover.tone-deficit {
+  border-color: rgba(154, 75, 31, 0.35);
+  background:
+    linear-gradient(135deg, rgba(154, 75, 31, 0.07), transparent 55%),
+    var(--panel-solid);
+}
+
+.widget.true-leftover.tone-balanced {
+  border-color: rgba(61, 122, 95, 0.4);
+  background:
+    linear-gradient(135deg, rgba(61, 122, 95, 0.07), transparent 55%),
+    var(--panel-solid);
+}
+
+.true-leftover-hero {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 0.35rem 0 1rem;
+}
+
+.true-leftover .balance-equation {
+  margin-bottom: 0.65rem;
+}
+
+.true-leftover .balance-hint {
+  margin: 0;
+}
+
 .widget-controls {
   position: absolute;
   top: 0.65rem;
@@ -1510,6 +1553,10 @@ button:focus-visible {
   }
 
   .pace-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .true-leftover-hero {
     grid-template-columns: 1fr;
   }
 

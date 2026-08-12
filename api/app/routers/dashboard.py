@@ -31,6 +31,10 @@ DEFAULT_MONTHLY_WIDGETS = [
     DashboardWidget(id="savings-buckets", type="savings_buckets", title="Savings buckets", order=5, config={}),
     DashboardWidget(id="category-breakdown", type="category_breakdown", title="Categories", order=6, config={}),
 ]
+# Separate append keeps parallel agents from conflicting on the shared list literal.
+DEFAULT_MONTHLY_WIDGETS.append(
+    DashboardWidget(id="true-leftover", type="true_leftover", title="True leftover", order=0, config={}),
+)
 
 DEFAULT_ANNUAL_WIDGETS = [
     DashboardWidget(id="spending-pace-year", type="spending_pace", title="Spending pace", order=0, config={}),
@@ -41,6 +45,9 @@ DEFAULT_ANNUAL_WIDGETS = [
     # Appended (not inserted mid-list) to reduce merge conflicts with parallel dashboard work.
     DashboardWidget(id="category-health", type="category_health", title="Category health", order=5, config={}),
 ]
+DEFAULT_ANNUAL_WIDGETS.append(
+    DashboardWidget(id="true-leftover-year", type="true_leftover", title="True leftover", order=0, config={}),
+)
 
 
 @router.get("/monthly/{year}/{month}", response_model=MonthlyDashboardOut)
