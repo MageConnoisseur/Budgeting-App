@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { ApiError } from '../api/client'
 import * as dashboardApi from '../api/dashboard'
 import {
@@ -7,6 +7,7 @@ import {
   LineTrendChart,
 } from '../components/charts/TrendCharts'
 import { PeriodNavigator } from '../components/PeriodNavigator'
+import { KindBadge } from '../components/KindBadge'
 import { SoftWarning } from '../components/SoftWarning'
 import { SavingsBucketsGuide } from '../components/SavingsBucketsGuide'
 import { ViewModeToggle } from '../components/ViewModeToggle'
@@ -18,12 +19,35 @@ import {
 } from '../lib/format'
 import type {
   AnnualDashboard,
+  CategoryKind,
+  CategoryProgress,
   DashboardWidget,
   KindTotals,
   MonthlyDashboard,
   SpendingPace,
   ViewMode,
 } from '../types/api'
+
+const KIND_ORDER: CategoryKind[] = ['income', 'expense', 'savings']
+const KIND_SECTION_LABEL: Record<CategoryKind, string> = {
+  income: 'Income',
+  expense: 'Expenses',
+  savings: 'Savings',
+}
+
+/** Actual exceeds planned — soft visual cue only (never blocks logging). */
+function exceedsPlan(c: CategoryProgress): boolean {
+  const planned = Number(c.planned)
+  const actual = Number(c.actual)
+  return actual > planned && (planned > 0 || actual > 0)
+}
+
+function groupCategoriesByKind(categories: CategoryProgress[]) {
+  return KIND_ORDER.map((kind) => ({
+    kind,
+    rows: categories.filter((c) => c.kind === kind),
+  })).filter((g) => g.rows.length > 0)
+}
 
 const COLOR = {
   income: '#1f5c4a',
@@ -478,6 +502,7 @@ export function DashboardPage() {
         )
       }
       if (w.type === 'category_breakdown') {
+        const grouped = groupCategoriesByKind(monthly.categories)
         return (
           <div className="widget">
             <h3>{w.title || 'Categories'}</h3>
@@ -504,32 +529,74 @@ export function DashboardPage() {
                 />
               </>
             )}
-            <div className="table-wrap chart-table">
-              <table className="data-table compact">
+            <p className="muted compact plan-table-legend">
+              Planned vs actual by category. Over plan:{' '}
+              <span className="plan-legend plan-legend-expense">expense</span>,{' '}
+              <span className="plan-legend plan-legend-income">income</span>,{' '}
+              <span className="plan-legend plan-legend-savings">savings</span>.
+            </p>
+            <div className="table-wrap chart-table plan-vs-actual-wrap">
+              <table className="data-table compact plan-vs-actual-table">
                 <thead>
                   <tr>
                     <th>Category</th>
-                    <th>Planned</th>
-                    <th>Actual</th>
-                    <th>Left</th>
+                    <th className="num">Planned</th>
+                    <th className="num">Actual</th>
+                    <th className="num">Left</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {monthly.categories.map((c) => (
-                    <tr key={c.category_id}>
-                      <td>
-                        {c.category_name}
-                        {c.over_budget && (
-                          <>
-                            {' '}
-                            <SoftWarning />
-                          </>
-                        )}
-                      </td>
-                      <td className="num">{formatUsd(c.planned)}</td>
-                      <td className="num">{formatUsd(c.actual)}</td>
-                      <td className="num">{formatUsd(c.remaining)}</td>
-                    </tr>
+                  {grouped.map(({ kind, rows }) => (
+                    <Fragment key={kind}>
+                      <tr className="plan-section-row">
+                        <td colSpan={4}>
+                          <span className={`plan-section-label kind-${kind}`}>
+                            {KIND_SECTION_LABEL[kind]}
+                          </span>
+                        </td>
+                      </tr>
+                      {rows.map((c) => {
+                        const over = exceedsPlan(c)
+                        return (
+                          <tr
+                            key={c.category_id}
+                            className={
+                              over ? `plan-row-over plan-row-over-${kind}` : undefined
+                            }
+                          >
+                            <td className="plan-cat-cell">
+                              <span className="plan-cat-name">{c.category_name}</span>
+                              <KindBadge kind={c.kind} />
+                              {over && (
+                                <SoftWarning
+                                  className={`soft-warning-${kind}`}
+                                  message={
+                                    kind === 'income'
+                                      ? 'Over income plan'
+                                      : kind === 'savings'
+                                        ? 'Over savings plan'
+                                        : 'Over expense plan'
+                                  }
+                                />
+                              )}
+                            </td>
+                            <td className="num plan-num-planned">
+                              {formatUsd(c.planned)}
+                            </td>
+                            <td
+                              className={`num plan-num-actual${over ? ` plan-over-${kind}` : ''}`}
+                            >
+                              {formatUsd(c.actual)}
+                            </td>
+                            <td
+                              className={`num plan-num-left${over ? ` plan-over-${kind}` : ''}`}
+                            >
+                              {formatUsd(c.remaining)}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
