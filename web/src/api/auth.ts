@@ -1,10 +1,10 @@
-import { apiFetch } from './client'
-import type { TokenResponse, User, ViewMode } from '../types/api'
+import { apiBaseUrl, apiFetch, getToken } from './client'
+import type { OAuthProviderInfo, TokenResponse, User, ViewMode } from '../types/api'
 
-export function register(username: string, password: string) {
+export function register(username: string, email: string, password: string) {
   return apiFetch<TokenResponse>('/auth/register', {
     method: 'POST',
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ username, email, password }),
   })
 }
 
@@ -27,4 +27,31 @@ export function updatePreferences(prefs: {
     method: 'PATCH',
     body: JSON.stringify(prefs),
   })
+}
+
+export function updateProfile(email: string) {
+  return apiFetch<User>('/auth/me/profile', {
+    method: 'PATCH',
+    body: JSON.stringify({ email }),
+  })
+}
+
+export function listOAuthProviders() {
+  return apiFetch<OAuthProviderInfo[]>('/auth/oauth/providers')
+}
+
+export function unlinkOAuthProvider(provider: string) {
+  return apiFetch<User>(`/auth/oauth/${provider}`, { method: 'DELETE' })
+}
+
+/** Full-page navigation into the API OAuth start endpoint. */
+export function startOAuth(provider: string, intent: 'login' | 'link' = 'login') {
+  const url = new URL(`${apiBaseUrl()}/api/auth/oauth/${provider}/start`)
+  url.searchParams.set('intent', intent)
+  if (intent === 'link') {
+    const token = getToken()
+    if (!token) throw new Error('Sign in before linking a social account')
+    url.searchParams.set('access_token', token)
+  }
+  window.location.assign(url.toString())
 }

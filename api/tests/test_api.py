@@ -18,7 +18,11 @@ client = TestClient(app)
 def auth_headers() -> dict[str, str]:
     username = f"user_{uuid.uuid4().hex[:10]}"
     password = "testpass123"
-    r = client.post("/api/auth/register", json={"username": username, "password": password})
+    email = f"{username}@example.com"
+    r = client.post(
+        "/api/auth/register",
+        json={"username": username, "email": email, "password": password},
+    )
     assert r.status_code == 201, r.text
     token = r.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
@@ -83,7 +87,11 @@ def test_cors_allows_vercel_preview_origin() -> None:
     register = client.post(
         "/api/auth/register",
         headers={"Origin": origin},
-        json={"username": username, "password": "password123"},
+        json={
+            "username": username,
+            "email": f"{username}@example.com",
+            "password": "password123",
+        },
     )
     assert register.status_code == 201, register.text
     assert register.headers.get("access-control-allow-origin") == origin
@@ -95,6 +103,35 @@ def test_register_login_and_me(auth_headers: dict[str, str]) -> None:
     body = r.json()
     assert body["preferred_budget_view"] == "monthly"
     assert "username" in body
+    assert body["email"]
+    assert body["has_password"] is True
+    assert body["oauth_providers"] == []
+
+
+def test_register_requires_email() -> None:
+    username = f"noemail_{uuid.uuid4().hex[:8]}"
+    r = client.post(
+        "/api/auth/register",
+        json={"username": username, "password": "password123"},
+    )
+    assert r.status_code == 422
+
+
+def test_login_with_email() -> None:
+    username = f"emaillogin_{uuid.uuid4().hex[:8]}"
+    email = f"{username}@example.com"
+    password = "password123"
+    reg = client.post(
+        "/api/auth/register",
+        json={"username": username, "email": email, "password": password},
+    )
+    assert reg.status_code == 201, reg.text
+    login = client.post(
+        "/api/auth/login",
+        json={"username": email, "password": password},
+    )
+    assert login.status_code == 200, login.text
+    assert login.json()["access_token"]
 
 
 def test_category_crud_and_budget_copy_forward(auth_headers: dict[str, str]) -> None:
@@ -310,3 +347,122 @@ def test_preferences(auth_headers: dict[str, str]) -> None:
     assert r.status_code == 200
     assert r.json()["preferred_budget_view"] == "annual"
     assert r.json()["preferred_dashboard_view"] == "annual"
+
+
+def _dev_oauth_callback(email: str, subject: str, *, intent: str = "login", token: str | None = None):
+    """Drive the local dev OAuth provider through start → simulate → callback."""
+    from urllib.parse import parse_qs, urlparse
+
+    start_params: dict[str, str] = {"intent": intent}
+    if intent == "link":
+        assert token
+        start_params["access_token"] = token
+    start = client.get(
+        f"/api/auth/oauth/dev/start",
+        params=start_params,
+        follow_redirects=False,
+    )
+    assert start.status_code in (302, 307), start.text
+    sim_url = start.headers["location"]
+    assert "/oauth/dev/simulate" in sim_url
+    state = parse_qs(urlparse(sim_url).query)["state"][0]
+
+    from app.services.oauth import ProviderProfile, encode_dev_code
+
+    code = encode_dev_code(
+        ProviderProfile(
+            provider="dev",
+            subject=subject,
+            email=email,
+            display_name="Dev User",
+        )
+    )
+    callback = client.get(
+        "/api/auth/oauth/dev/callback",
+        params={"code": code, "state": state},
+        follow_redirects=False,
+    )
+    assert callback.status_code in (302, 307), callback.text
+    return callback.headers["location"]
+
+
+def test_oauth_dev_login_creates_account_without_password() -> None:
+    from urllib.parse import parse_qs, urlparse
+
+    email = f"oauth_{uuid.uuid4().hex[:10]}@example.com"
+    subject = f"subj_{uuid.uuid4().hex[:8]}"
+    location = _dev_oauth_callback(email, subject)
+    assert "/auth/callback" in location
+    token = parse_qs(urlparse(location).query)["token"][0]
+    me = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert me.status_code == 200, me.text
+    body = me.json()
+    assert body["email"] == email
+    assert body["has_password"] is False
+    assert "dev" in body["oauth_providers"]
+
+
+def test_oauth_does_not_auto_merge_existing_email(auth_headers: dict[str, str]) -> None:
+    from urllib.parse import parse_qs, urlparse
+
+    me = client.get("/api/auth/me", headers=auth_headers)
+    email = me.json()["email"]
+    location = _dev_oauth_callback(email, f"other_{uuid.uuid4().hex[:8]}")
+    assert "/login" in location
+    qs = parse_qs(urlparse(location).query)
+    assert qs["oauth_error"][0] == "account_exists"
+
+
+def test_oauth_link_preserves_existing_user(auth_headers: dict[str, str]) -> None:
+    from urllib.parse import parse_qs, urlparse
+
+    token = auth_headers["Authorization"].split(" ", 1)[1]
+    before = client.get("/api/auth/me", headers=auth_headers).json()
+    subject = f"link_{uuid.uuid4().hex[:8]}"
+    location = _dev_oauth_callback(
+        f"linked_{uuid.uuid4().hex[:8]}@example.com",
+        subject,
+        intent="link",
+        token=token,
+    )
+    assert "/auth/callback" in location
+    qs = parse_qs(urlparse(location).query)
+    assert qs.get("linked", [None])[0] == "dev"
+    new_token = qs["token"][0]
+    after = client.get(
+        "/api/auth/me", headers={"Authorization": f"Bearer {new_token}"}
+    ).json()
+    assert after["id"] == before["id"]
+    assert after["username"] == before["username"]
+    assert "dev" in after["oauth_providers"]
+    # Original email is kept when the account already had one.
+    assert after["email"] == before["email"]
+
+
+def test_profile_email_update_and_unlink(auth_headers: dict[str, str]) -> None:
+    from urllib.parse import parse_qs, urlparse
+
+    token = auth_headers["Authorization"].split(" ", 1)[1]
+    # Link provider first
+    location = _dev_oauth_callback(
+        f"extra_{uuid.uuid4().hex[:8]}@example.com",
+        f"unlink_{uuid.uuid4().hex[:8]}",
+        intent="link",
+        token=token,
+    )
+    token = parse_qs(urlparse(location).query)["token"][0]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    new_email = f"updated_{uuid.uuid4().hex[:8]}@example.com"
+    upd = client.patch(
+        "/api/auth/me/profile",
+        headers=headers,
+        json={"email": new_email},
+    )
+    assert upd.status_code == 200, upd.text
+    assert upd.json()["email"] == new_email
+
+    unlink = client.delete("/api/auth/oauth/dev", headers=headers)
+    assert unlink.status_code == 200, unlink.text
+    assert "dev" not in unlink.json()["oauth_providers"]
+    assert unlink.json()["has_password"] is True

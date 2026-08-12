@@ -1,15 +1,26 @@
-import { type FormEvent, useState } from 'react'
+import { type FormEvent, useEffect, useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
+import { listOAuthProviders, startOAuth } from '../api/auth'
 import { ApiError } from '../api/client'
+import { OAuthButtons } from '../components/OAuthButtons'
 import { useAuth } from '../context/AuthContext'
+import type { OAuthProviderInfo } from '../types/api'
 
 export function RegisterPage() {
   const { user, loading, register } = useAuth()
   const navigate = useNavigate()
   const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [providers, setProviders] = useState<OAuthProviderInfo[]>([])
+
+  useEffect(() => {
+    void listOAuthProviders()
+      .then((list) => setProviders(list.filter((p) => p.configured)))
+      .catch(() => setProviders([]))
+  }, [])
 
   if (!loading && user) return <Navigate to="/" replace />
 
@@ -18,7 +29,7 @@ export function RegisterPage() {
     setSubmitting(true)
     setError(null)
     try {
-      await register(username.trim(), password)
+      await register(username.trim(), email.trim(), password)
       navigate('/')
     } catch (err) {
       setError(
@@ -39,8 +50,15 @@ export function RegisterPage() {
         <p className="brand-name auth-brand">Budget Desk</p>
         <h1>Create account</h1>
         <p className="muted">
-          Username and password for Phase 1. Letters, numbers, ., -, _ only.
+          Use Google or Facebook, or sign up with a username, email, and
+          password. Email is required for password accounts so you can recover
+          access later.
         </p>
+        <OAuthButtons
+          providers={providers}
+          intent="login"
+          onStart={(id) => startOAuth(id, 'login')}
+        />
         <form className="stack" onSubmit={onSubmit}>
           <label>
             Username
@@ -52,6 +70,16 @@ export function RegisterPage() {
               minLength={3}
               maxLength={64}
               pattern="^[a-zA-Z0-9_\-\.]+$"
+            />
+          </label>
+          <label>
+            Email
+            <input
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
             />
           </label>
           <label>

@@ -570,6 +570,93 @@ button:focus-visible {
   font-size: 1.35rem;
 }
 
+.oauth-block {
+  margin: 1rem 0 0.25rem;
+}
+
+.oauth-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.btn.oauth {
+  width: 100%;
+  justify-content: center;
+  background: #fff;
+}
+
+.btn.oauth-google {
+  border-color: #c6cdd8;
+}
+
+.btn.oauth-facebook {
+  border-color: #8aa0c4;
+}
+
+.btn.oauth-dev {
+  border-style: dashed;
+}
+
+.oauth-divider {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 0.65rem;
+  margin: 1rem 0 0.35rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.oauth-divider::before,
+.oauth-divider::after {
+  content: '';
+  height: 1px;
+  background: var(--line);
+}
+
+.form-success {
+  margin: 0.75rem 0 0;
+  color: var(--pine);
+  font-weight: 600;
+}
+
+.link-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.link-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.tiny {
+  font-size: 0.85rem;
+}
+
+.panel {
+  background: var(--panel-solid);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem 1.15rem;
+  box-shadow: var(--shadow);
+}
+
+.panel + .panel {
+  margin-top: 1rem;
+}
+
 .dashboard-layout {
   display: flex;
   flex-direction: column;

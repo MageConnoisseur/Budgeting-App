@@ -16,13 +16,16 @@ interface AuthState {
   loading: boolean
   error: string | null
   login: (username: string, password: string) => Promise<void>
-  register: (username: string, password: string) => Promise<void>
+  register: (username: string, email: string, password: string) => Promise<void>
+  completeOAuthLogin: (accessToken: string) => Promise<void>
   logout: () => void
   refreshUser: () => Promise<void>
   setPreferredView: (
     which: 'budget' | 'dashboard',
     mode: ViewMode,
   ) => Promise<void>
+  updateEmail: (email: string) => Promise<void>
+  unlinkProvider: (provider: string) => Promise<void>
 }
 
 const AuthContext = createContext<AuthState | null>(null)
@@ -65,10 +68,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(me)
   }, [])
 
-  const register = useCallback(async (username: string, password: string) => {
+  const register = useCallback(
+    async (username: string, email: string, password: string) => {
+      setError(null)
+      const tok = await authApi.register(username, email, password)
+      setToken(tok.access_token)
+      const me = await authApi.getMe()
+      setUser(me)
+    },
+    [],
+  )
+
+  const completeOAuthLogin = useCallback(async (accessToken: string) => {
     setError(null)
-    const tok = await authApi.register(username, password)
-    setToken(tok.access_token)
+    setToken(accessToken)
     const me = await authApi.getMe()
     setUser(me)
   }, [])
@@ -90,6 +103,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   )
 
+  const updateEmail = useCallback(async (email: string) => {
+    const updated = await authApi.updateProfile(email)
+    setUser(updated)
+  }, [])
+
+  const unlinkProvider = useCallback(async (provider: string) => {
+    const updated = await authApi.unlinkOAuthProvider(provider)
+    setUser(updated)
+  }, [])
+
   const value = useMemo(
     () => ({
       user,
@@ -97,9 +120,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       error,
       login,
       register,
+      completeOAuthLogin,
       logout,
       refreshUser,
       setPreferredView,
+      updateEmail,
+      unlinkProvider,
     }),
     [
       user,
@@ -107,9 +133,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       error,
       login,
       register,
+      completeOAuthLogin,
       logout,
       refreshUser,
       setPreferredView,
+      updateEmail,
+      unlinkProvider,
     ],
   )
 

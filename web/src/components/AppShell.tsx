@@ -6,6 +6,7 @@ const links = [
   { to: '/budget', label: 'Budget' },
   { to: '/tracker', label: 'Tracker' },
   { to: '/categories', label: 'Categories' },
+  { to: '/account', label: 'Account', end: true },
 ]
 
 export function AppShell() {

@@ -7,7 +7,7 @@ from decimal import Decimal
 from typing import Any, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.enums import CategoryKind, ViewMode
 
@@ -21,10 +21,13 @@ class ORMModel(BaseModel):
 
 class RegisterRequest(BaseModel):
     username: str = Field(min_length=3, max_length=64, pattern=r"^[a-zA-Z0-9_\-\.]+$")
+    email: EmailStr
     password: str = Field(min_length=8, max_length=128)
 
 
 class LoginRequest(BaseModel):
+    """`username` may be the account username or email address."""
+
     username: str
     password: str
 
@@ -39,9 +42,24 @@ class UserPreferencesUpdate(BaseModel):
     preferred_dashboard_view: Optional[ViewMode] = None
 
 
+class UserProfileUpdate(BaseModel):
+    """Attach or change the recovery email on an existing account."""
+
+    email: EmailStr
+
+
+class OAuthProviderInfo(BaseModel):
+    id: str
+    name: str
+    configured: bool
+
+
 class UserOut(ORMModel):
     id: UUID
     username: str
+    email: Optional[str] = None
+    has_password: bool = False
+    oauth_providers: list[str] = []
     preferred_budget_view: ViewMode
     preferred_dashboard_view: ViewMode
     created_at: datetime

@@ -147,8 +147,9 @@ Over-budget behavior: **soft warnings only**. Emphasize patterns across months s
 | Topic | Decision |
 |-------|----------|
 | Audience | Individual accounts first; design data so **households/shared budgets** could be added later |
-| v1 auth | **Username + password** (simple, working) |
-| Later | More robust auth (email verification, OAuth, password reset, etc.) |
+| Auth | Username + **email** + password, plus optional **Google / Facebook** OAuth |
+| Account linking | Users can attach email and link social providers to an **existing** account so budget data is never split |
+| Email verification | Not required yet (users should still enter a recoverable address) |
 | Demo / local-only mode | Optional for early UI work; production path is real accounts against the API |
 
 Do not build multi-user sharing in MVP, but avoid hard-coding assumptions that make “one budget, many members” impossible later (e.g. prefer `user_id` / future `workspace_id` ownership patterns).
@@ -207,7 +208,7 @@ Agents may adjust names, but keep **api / web / mobile** separation clear. Prefe
 
 Must include:
 
-- [ ] Username + password auth
+- [ ] Username + email + password auth, with optional Google/Facebook OAuth and account linking
 - [ ] Category CRUD (income / expense / savings)
 - [ ] Monthly budget plans with planned amounts
 - [ ] Budget **Monthly ↔ Annual** view toggle (annual grid editable)
@@ -236,7 +237,7 @@ Out of scope for Phase 1:
 
 ### Phase 3+ — Growth (do not build until asked)
 
-- Stronger auth
+- Email verification / password reset
 - CSV import with duplicate safeguards
 - Multi-currency
 - Custom budget periods (non-calendar)
@@ -271,7 +272,7 @@ Out of scope for Phase 1:
 
 Agents should refine this, but stay close to these concepts:
 
-- **User** — username, password hash, timestamps
+- **User** — username, email (required for password signup), password hash (nullable for OAuth-only), OAuth provider links, timestamps
 - **Category** — user_id, kind (`income` | `expense` | `savings`), name, archived flag, sort order
 - **BudgetMonth** — user_id, year, month (unique per user)
 - **BudgetLine** — budget_month_id, category_id, planned_amount
@@ -314,8 +315,8 @@ All user-owned rows must be scoped by authenticated user.
 | Dashboard | Robust, customizable widgets; insight for future adjustments |
 | Budget / Dashboard views | Monthly and Annual modes; easy swap; annual budget editing allowed |
 | Tracker findability | Search, sort, and filters required in MVP |
-| Auth now | Username + password |
-| Auth later | More robust system |
+| Auth now | Username + email + password; Google/Facebook OAuth with explicit account linking |
+| Auth later | Email verification, password reset |
 | Users | Individual accounts; households later |
 | Currency | USD now; multi-currency later |
 | Mobile | Phase 2 Expo Android after web+API MVP; shared API/DB |
@@ -329,7 +330,7 @@ All user-owned rows must be scoped by authenticated user.
 - Final product / brand name
 - Exact dashboard widget set and persistence of layouts
 - Whether Monthly/Annual view preference is stored per-user on the server or locally in the browser (either is fine for MVP; document the choice)
-- Password hashing / session strategy details (JWT vs cookies, etc.) — choose a secure FastAPI-common approach and document it in the API README when implemented
+- Password hashing / session strategy details — JWT Bearer + bcrypt; OAuth via Google/Facebook documented in `api/README.md`
 - Whether monorepo tooling (pnpm/npm workspaces, uv, etc.) is introduced at first scaffold
 
 If an agent needs a choice among reasonable options for an open item, pick a conventional secure default, document it briefly in code/README, and continue.

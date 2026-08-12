@@ -18,6 +18,19 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     algorithm: str = "HS256"
 
+    # Public URLs used for OAuth redirects (no trailing slash).
+    frontend_url: str = "http://localhost:5173"
+    api_public_url: str = "http://localhost:8000"
+
+    # Social login — leave unset to hide that provider in the UI.
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    facebook_app_id: str = ""
+    facebook_app_secret: str = ""
+
+    # When true, expose a local "dev" OAuth provider for tests / local demos.
+    oauth_dev_mode: bool = False
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
