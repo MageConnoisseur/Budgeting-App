@@ -1055,6 +1055,45 @@ button:focus-visible {
   margin: 1rem 0 0.35rem;
 }
 
+.chart-scale-note {
+  font-family: var(--font);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0;
+}
+
+.overlap-bands .chart-subtitle:first-of-type {
+  margin-top: 0.55rem;
+}
+
+.overlap-chart-block {
+  margin-bottom: 0.55rem;
+}
+
+.chart-track {
+  opacity: 0.85;
+}
+
+.chart-value-primary {
+  fill: var(--ink-soft);
+  font-size: 11px;
+  font-weight: 650;
+  font-family: var(--font);
+}
+
+.chart-value-secondary {
+  fill: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  font-family: var(--font);
+}
+
+.chart-value-secondary.is-over {
+  fill: var(--warn);
+  font-weight: 700;
+}
+
 .chart-table {
   margin-top: 0.75rem;
 }

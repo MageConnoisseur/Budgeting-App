@@ -2,9 +2,12 @@ import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { ApiError } from '../api/client'
 import * as dashboardApi from '../api/dashboard'
 import {
+  OverlappingPlanActualChart,
+  bandByMagnitude,
   GroupedBarChart,
   HorizontalBarChart,
   LineTrendChart,
+  type PlanActualItem,
 } from '../components/charts/TrendCharts'
 import { PeriodNavigator } from '../components/PeriodNavigator'
 import { KindBadge } from '../components/KindBadge'
@@ -441,18 +444,18 @@ export function DashboardPage() {
       .slice(0, 8)
   }, [monthly])
 
-  const monthlyPlanVsActual = useMemo(() => {
-    if (!monthly) return null
-    const cats = monthly.categories.filter((c) => c.kind === 'expense').slice(0, 8)
-    return {
-      labels: cats.map((c) =>
-        c.category_name.length > 10
-          ? `${c.category_name.slice(0, 9)}…`
-          : c.category_name,
-      ),
-      planned: cats.map((c) => Number(c.planned)),
-      actual: cats.map((c) => Number(c.actual)),
-    }
+  const expensePlanActualBands = useMemo(() => {
+    if (!monthly) return { major: [] as PlanActualItem[], smaller: [] as PlanActualItem[] }
+    const items: PlanActualItem[] = monthly.categories
+      .filter((c) => c.kind === 'expense')
+      .map((c) => ({
+        id: c.category_id,
+        label: c.category_name,
+        planned: Number(c.planned),
+        actual: Number(c.actual),
+      }))
+      .filter((c) => c.planned > 0 || c.actual > 0)
+    return bandByMagnitude(items)
   }, [monthly])
 
   function renderWidget(w: DashboardWidget) {
@@ -503,31 +506,46 @@ export function DashboardPage() {
       }
       if (w.type === 'category_breakdown') {
         const grouped = groupCategoriesByKind(monthly.categories)
+        const { major, smaller } = expensePlanActualBands
+        const hasExpenseChart = major.length > 0
         return (
           <div className="widget">
             <h3>{w.title || 'Categories'}</h3>
-            {monthlyPlanVsActual && monthlyPlanVsActual.labels.length > 0 && (
-              <>
-                <p className="muted compact">Expense plan vs actual this month</p>
-                <GroupedBarChart
-                  labels={monthlyPlanVsActual.labels}
-                  series={[
-                    {
-                      key: 'planned',
-                      label: 'Planned',
-                      color: COLOR.planned,
-                      values: monthlyPlanVsActual.planned,
-                    },
-                    {
-                      key: 'actual',
-                      label: 'Actual',
-                      color: COLOR.expense,
-                      values: monthlyPlanVsActual.actual,
-                    },
-                  ]}
-                  height={200}
+            {hasExpenseChart && (
+              <div className="overlap-bands">
+                <p className="muted compact">
+                  Expense plan vs actual — overlapping bars on a shared money
+                  axis. Large and small budgets are split so smaller categories
+                  stay readable.
+                </p>
+                <h4 className="chart-subtitle">
+                  {smaller.length > 0 ? 'Major expenses' : 'Expenses'}
+                  <span className="chart-scale-note"> shared $ scale</span>
+                </h4>
+                <OverlappingPlanActualChart
+                  items={major}
+                  ariaLabel="Major expense plan versus actual"
                 />
-              </>
+                {smaller.length > 0 && (
+                  <>
+                    <h4 className="chart-subtitle">
+                      Smaller expenses
+                      <span className="chart-scale-note">
+                        {' '}
+                        scaled to this group
+                      </span>
+                    </h4>
+                    <p className="muted compact">
+                      Separate money axis so these are not compressed by larger
+                      budget lines above.
+                    </p>
+                    <OverlappingPlanActualChart
+                      items={smaller}
+                      ariaLabel="Smaller expense plan versus actual"
+                    />
+                  </>
+                )}
+              </div>
             )}
             <p className="muted compact plan-table-legend">
               Planned vs actual by category. Over plan:{' '}
