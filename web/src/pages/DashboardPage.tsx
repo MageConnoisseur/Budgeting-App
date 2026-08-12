@@ -8,6 +8,7 @@ import {
 } from '../components/charts/TrendCharts'
 import { PeriodNavigator } from '../components/PeriodNavigator'
 import { SoftWarning } from '../components/SoftWarning'
+import { SavingsBucketsGuide } from '../components/SavingsBucketsGuide'
 import { ViewModeToggle } from '../components/ViewModeToggle'
 import { useAuth } from '../context/AuthContext'
 import {
@@ -312,6 +313,7 @@ export function DashboardPage() {
         return (
           <div className="widget">
             <h3>{w.title || 'Savings buckets'}</h3>
+            <SavingsBucketsGuide variant="dashboard" className="compact" />
             {monthly.savings_buckets.length === 0 ? (
               <p className="muted">No savings buckets yet.</p>
             ) : (
@@ -500,6 +502,7 @@ export function DashboardPage() {
         return (
           <div className="widget">
             <h3>{w.title || 'Savings buckets'}</h3>
+            <SavingsBucketsGuide variant="dashboard" className="compact" />
             {annual.savings_buckets.length === 0 ? (
               <p className="muted">No savings buckets yet.</p>
             ) : (

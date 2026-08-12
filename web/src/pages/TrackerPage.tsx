@@ -3,6 +3,7 @@ import * as categoriesApi from '../api/categories'
 import { ApiError } from '../api/client'
 import * as txApi from '../api/transactions'
 import { KindBadge } from '../components/KindBadge'
+import { SavingsBucketsGuide } from '../components/SavingsBucketsGuide'
 import { formatUsd, todayISO, toMoneyString } from '../lib/format'
 import type {
   Category,
@@ -236,13 +237,16 @@ export function TrackerPage() {
             </select>
           </label>
           <label>
-            Amount
+            {formKind === 'savings' ? 'Amount (+ in / − out)' : 'Amount'}
             <input
               inputMode="decimal"
               value={formAmount}
               onChange={(e) => setFormAmount(e.target.value)}
               required
-              placeholder={formKind === 'savings' ? '±0.00' : '0.00'}
+              placeholder={formKind === 'savings' ? 'e.g. 200 or -150' : '0.00'}
+              aria-describedby={
+                formKind === 'savings' ? 'savings-amount-hint' : undefined
+              }
             />
           </label>
           <label>
@@ -282,9 +286,9 @@ export function TrackerPage() {
           )}
         </div>
         {formKind === 'savings' && (
-          <p className="muted compact">
-            Savings: positive adds to the bucket; negative withdraws.
-          </p>
+          <div id="savings-amount-hint">
+            <SavingsBucketsGuide variant="tracker" defaultOpen />
+          </div>
         )}
       </form>
 

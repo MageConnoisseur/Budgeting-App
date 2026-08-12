@@ -1054,6 +1054,102 @@ button:focus-visible {
   }
 }
 
+/* —— Savings buckets guide —— */
+.savings-guide {
+  border: 1px solid rgba(47, 95, 122, 0.28);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(135deg, rgba(47, 95, 122, 0.08), transparent 55%),
+    var(--panel-solid);
+  padding: 0.65rem 0.9rem 0.75rem;
+  animation: fade-up 0.35s ease both;
+}
+
+.savings-guide summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--savings);
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  user-select: none;
+}
+
+.savings-guide summary::-webkit-details-marker {
+  display: none;
+}
+
+.savings-guide summary::before {
+  content: '';
+  width: 0.45rem;
+  height: 0.45rem;
+  border-right: 2px solid var(--savings);
+  border-bottom: 2px solid var(--savings);
+  transform: rotate(-45deg);
+  transition: transform 0.18s ease;
+  flex-shrink: 0;
+}
+
+.savings-guide[open] summary::before {
+  transform: rotate(45deg);
+}
+
+.savings-guide-body {
+  margin-top: 0.65rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  color: var(--ink-soft);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.savings-guide-body p {
+  margin: 0;
+}
+
+.savings-guide-list {
+  margin: 0;
+  padding-left: 1.15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.savings-guide-list code,
+.savings-guide-example code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.86em;
+  background: rgba(47, 95, 122, 0.1);
+  padding: 0.05em 0.35em;
+  border-radius: 4px;
+  color: var(--pine-deep);
+}
+
+.savings-guide-example {
+  padding: 0.55rem 0.7rem;
+  border-left: 3px solid rgba(47, 95, 122, 0.45);
+  background: rgba(47, 95, 122, 0.06);
+  border-radius: 0 8px 8px 0;
+}
+
+.savings-guide.compact {
+  padding: 0.5rem 0.75rem 0.6rem;
+}
+
+.savings-guide.compact .savings-guide-body {
+  font-size: 0.88rem;
+}
+
+.widget > .savings-guide {
+  margin-bottom: 0.75rem;
+}
+
+.budget-section > .savings-guide {
+  margin-bottom: 0.75rem;
+}
+
 @media (max-width: 720px) {
   .topbar-user {
     width: 100%;
