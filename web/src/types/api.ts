@@ -31,6 +31,8 @@ export interface Category {
   name: string
   archived: boolean
   sort_order: number
+  /** Optional savings goal amount; null when unset or non-savings. */
+  target_amount: string | null
   created_at: string
   updated_at: string
 }
@@ -127,6 +129,11 @@ export interface SavingsBucket {
   planned_this_period: string
   actual_this_period: string
   over_budget: boolean
+  target_amount: string | null
+  target_reached: boolean
+  projected_hit_year: number | null
+  projected_hit_month: number | null
+  monthly_contribution: string
 }
 
 export interface SpendingPaceDay {

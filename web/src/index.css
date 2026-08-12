@@ -822,6 +822,10 @@ button:focus-visible {
   font-weight: 600;
 }
 
+.bucket-target {
+  margin-top: 0.15rem;
+}
+
 .plan-coaching {
   margin-top: 1.1rem;
   padding-top: 0.9rem;

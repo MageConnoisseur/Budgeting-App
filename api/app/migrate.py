@@ -21,7 +21,7 @@ from sqlalchemy.engine import Engine
 
 from app.config import get_settings
 
-REVISION = "a1b2c3d4e5f6"
+REVISION = "b2c3d4e5f6a7"
 
 # Drop order does not matter with CASCADE; listed for clarity.
 APP_TABLES = (

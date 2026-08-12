@@ -73,12 +73,40 @@ class CategoryCreate(BaseModel):
     kind: CategoryKind
     name: str = Field(min_length=1, max_length=128)
     sort_order: int = 0
+    # Optional savings goal; ignored / rejected for non-savings kinds.
+    target_amount: Optional[Decimal] = Field(
+        default=None, max_digits=14, decimal_places=2
+    )
+
+    @field_validator("target_amount")
+    @classmethod
+    def validate_target(cls, v: Optional[Decimal]) -> Optional[Decimal]:
+        if v is None:
+            return v
+        q = v.quantize(Decimal("0.01"))
+        if q <= 0:
+            raise ValueError("target_amount must be > 0")
+        return q
 
 
 class CategoryUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=128)
     archived: Optional[bool] = None
     sort_order: Optional[int] = None
+    # Send null to clear a savings target. Omit to leave unchanged.
+    target_amount: Optional[Decimal] = Field(
+        default=None, max_digits=14, decimal_places=2
+    )
+
+    @field_validator("target_amount")
+    @classmethod
+    def validate_target(cls, v: Optional[Decimal]) -> Optional[Decimal]:
+        if v is None:
+            return v
+        q = v.quantize(Decimal("0.01"))
+        if q <= 0:
+            raise ValueError("target_amount must be > 0")
+        return q
 
 
 class CategoryOut(ORMModel):
@@ -87,6 +115,7 @@ class CategoryOut(ORMModel):
     name: str
     archived: bool
     sort_order: int
+    target_amount: Optional[Decimal] = None
     created_at: datetime
     updated_at: datetime
 
@@ -291,6 +320,17 @@ class SavingsBucketOut(BaseModel):
     planned_this_period: Decimal
     actual_this_period: Decimal
     over_budget: bool
+    # Optional goal on the savings category (null = no target set).
+    target_amount: Optional[Decimal] = None
+    # True when balance already meets or exceeds the target.
+    target_reached: bool = False
+    # Calendar month when the target is projected to be hit at the monthly
+    # contribution rate; null when unknown / no target / no contribution.
+    projected_hit_year: Optional[int] = None
+    projected_hit_month: Optional[int] = None
+    # Monthly contribution rate used for the projection (may differ from
+    # planned_this_period on annual views where that field is a year total).
+    monthly_contribution: Decimal = Decimal("0.00")
 
 
 class SpendingPaceDay(BaseModel):

@@ -87,6 +87,14 @@ export function SavingsBucketsGuide({
           </p>
         )}
 
+        {(variant === 'full' || variant === 'dashboard') && (
+          <p>
+            Optional <strong>targets</strong> turn buckets into goals: set a
+            target amount on Categories, keep a monthly contribution on Budget,
+            and the dashboard projects the month you&apos;ll hit it.
+          </p>
+        )}
+
         {variant === 'dashboard' && (
           <p className="muted compact">
             Negative tracker amounts reduce a bucket’s balance when you dip into

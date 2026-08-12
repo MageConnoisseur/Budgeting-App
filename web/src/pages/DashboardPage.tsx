@@ -20,6 +20,7 @@ import {
   MONTH_SHORT,
   currentYearMonth,
   formatUsd,
+  formatYearMonth,
 } from '../lib/format'
 import {
   dismissPlanSuggestion,
@@ -34,6 +35,7 @@ import type {
   KindTotals,
   MonthlyDashboard,
   PlanSuggestion,
+  SavingsBucket,
   SpendingPace,
   ViewMode,
 } from '../types/api'
@@ -57,6 +59,39 @@ function groupCategoriesByKind(categories: CategoryProgress[]) {
     kind,
     rows: categories.filter((c) => c.kind === kind),
   })).filter((g) => g.rows.length > 0)
+}
+
+function SavingsTargetLine({ bucket }: { bucket: SavingsBucket }) {
+  if (bucket.target_amount == null) return null
+  const hit = formatYearMonth(
+    bucket.projected_hit_year,
+    bucket.projected_hit_month,
+  )
+  if (bucket.target_reached) {
+    return (
+      <p className="muted compact bucket-target">
+        Target {formatUsd(bucket.target_amount)} · Reached
+      </p>
+    )
+  }
+  if (hit) {
+    return (
+      <p className="muted compact bucket-target">
+        Target {formatUsd(bucket.target_amount)} · Hit {hit}
+        {Number(bucket.monthly_contribution) > 0
+          ? ` at ${formatUsd(bucket.monthly_contribution)}/mo`
+          : ''}
+      </p>
+    )
+  }
+  return (
+    <p className="muted compact bucket-target">
+      Target {formatUsd(bucket.target_amount)}
+      {Number(bucket.monthly_contribution) <= 0
+        ? ' · Set a monthly contribution to project a hit month'
+        : ''}
+    </p>
+  )
 }
 
 const COLOR = {
@@ -552,6 +587,7 @@ export function DashboardPage() {
                       {b.over_budget ? ' · ' : ''}
                       {b.over_budget && <SoftWarning message="Over contribution plan" />}
                     </p>
+                    <SavingsTargetLine bucket={b} />
                   </li>
                 ))}
               </ul>
@@ -865,6 +901,12 @@ export function DashboardPage() {
                         <span>{b.category_name}</span>
                         <strong>{formatUsd(b.balance)}</strong>
                       </div>
+                      {Number(b.monthly_contribution) > 0 && (
+                        <p className="muted compact">
+                          Monthly plan {formatUsd(b.monthly_contribution)}
+                        </p>
+                      )}
+                      <SavingsTargetLine bucket={b} />
                     </li>
                   ))}
                 </ul>

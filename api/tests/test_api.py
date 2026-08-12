@@ -319,6 +319,37 @@ def test_transactions_search_sort_filter_and_dashboard(
     vac = next(b for b in balances.json() if b["category_id"] == vacation["id"])
     assert Decimal(vac["balance"]) == Decimal("100.00")
 
+    # Savings target + projected hit month on monthly dashboard
+    target_patch = client.patch(
+        f"/api/categories/{vacation['id']}",
+        headers=h,
+        json={"target_amount": "500.00"},
+    )
+    assert target_patch.status_code == 200, target_patch.text
+    assert Decimal(target_patch.json()["target_amount"]) == Decimal("500.00")
+
+    # Reject target on non-savings
+    bad_target = client.patch(
+        f"/api/categories/{groceries['id']}",
+        headers=h,
+        json={"target_amount": "100.00"},
+    )
+    assert bad_target.status_code == 400
+
+    dash_target = client.get("/api/dashboard/monthly/2026/5", headers=h)
+    assert dash_target.status_code == 200
+    vac_bucket = next(
+        b
+        for b in dash_target.json()["savings_buckets"]
+        if b["category_id"] == vacation["id"]
+    )
+    assert Decimal(vac_bucket["target_amount"]) == Decimal("500.00")
+    assert vac_bucket["target_reached"] is False
+    # Balance 100, need 400 more at $100/mo → 4 months → Aug 2026
+    assert vac_bucket["projected_hit_year"] == 2026
+    assert vac_bucket["projected_hit_month"] == 8
+    assert Decimal(vac_bucket["monthly_contribution"]) == Decimal("100.00")
+
     layout = client.put(
         "/api/dashboard/layout/monthly",
         headers=h,

@@ -3,6 +3,7 @@ import * as categoriesApi from '../api/categories'
 import { ApiError } from '../api/client'
 import { KindBadge } from '../components/KindBadge'
 import { SavingsBucketsGuide } from '../components/SavingsBucketsGuide'
+import { formatUsd, parseMoneyInput } from '../lib/format'
 import type { Category, CategoryKind } from '../types/api'
 
 const KINDS: CategoryKind[] = ['income', 'expense', 'savings']
@@ -13,10 +14,12 @@ export function CategoriesPage() {
   const [error, setError] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [kind, setKind] = useState<CategoryKind>('expense')
+  const [targetAmount, setTargetAmount] = useState('')
   const [showArchived, setShowArchived] = useState(false)
   const [saving, setSaving] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
+  const [editTarget, setEditTarget] = useState('')
   const [renaming, setRenaming] = useState(false)
 
   const load = useCallback(async () => {
@@ -43,8 +46,26 @@ export function CategoriesPage() {
     setSaving(true)
     setError(null)
     try {
-      await categoriesApi.createCategory({ kind, name: name.trim() })
+      const body: {
+        kind: CategoryKind
+        name: string
+        target_amount?: string | null
+      } = { kind, name: name.trim() }
+      if (kind === 'savings') {
+        const trimmed = targetAmount.trim()
+        if (trimmed) {
+          const parsed = parseMoneyInput(trimmed)
+          if (parsed == null || Number(parsed) <= 0) {
+            setError('Target amount must be a positive dollar amount')
+            setSaving(false)
+            return
+          }
+          body.target_amount = parsed
+        }
+      }
+      await categoriesApi.createCategory(body)
       setName('')
+      setTargetAmount('')
       await load()
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : 'Could not create')
@@ -53,18 +74,22 @@ export function CategoriesPage() {
     }
   }
 
-  function startRename(c: Category) {
+  function startEdit(c: Category) {
     setEditingId(c.id)
     setEditName(c.name)
+    setEditTarget(
+      c.kind === 'savings' && c.target_amount != null ? c.target_amount : '',
+    )
     setError(null)
   }
 
-  function cancelRename() {
+  function cancelEdit() {
     setEditingId(null)
     setEditName('')
+    setEditTarget('')
   }
 
-  async function onRename(e: FormEvent) {
+  async function onSaveEdit(e: FormEvent) {
     e.preventDefault()
     if (!editingId) return
     const trimmed = editName.trim()
@@ -72,15 +97,36 @@ export function CategoriesPage() {
       setError('Name is required')
       return
     }
+    const current = items.find((c) => c.id === editingId)
+    if (!current) return
+
+    const body: {
+      name: string
+      target_amount?: string | null
+    } = { name: trimmed }
+
+    if (current.kind === 'savings') {
+      const t = editTarget.trim()
+      if (!t) {
+        body.target_amount = null
+      } else {
+        const parsed = parseMoneyInput(t)
+        if (parsed == null || Number(parsed) <= 0) {
+          setError('Target amount must be a positive dollar amount')
+          return
+        }
+        body.target_amount = parsed
+      }
+    }
+
     setRenaming(true)
     setError(null)
     try {
-      await categoriesApi.updateCategory(editingId, { name: trimmed })
-      setEditingId(null)
-      setEditName('')
+      await categoriesApi.updateCategory(editingId, body)
+      cancelEdit()
       await load()
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail : 'Could not rename')
+      setError(err instanceof ApiError ? err.detail : 'Could not save')
     } finally {
       setRenaming(false)
     }
@@ -89,7 +135,7 @@ export function CategoriesPage() {
   async function onArchive(id: string) {
     try {
       await categoriesApi.archiveCategory(id)
-      if (editingId === id) cancelRename()
+      if (editingId === id) cancelEdit()
       await load()
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : 'Could not archive')
@@ -124,7 +170,11 @@ export function CategoriesPage() {
           Kind
           <select
             value={kind}
-            onChange={(e) => setKind(e.target.value as CategoryKind)}
+            onChange={(e) => {
+              const next = e.target.value as CategoryKind
+              setKind(next)
+              if (next !== 'savings') setTargetAmount('')
+            }}
           >
             {KINDS.map((k) => (
               <option key={k} value={k}>
@@ -149,6 +199,18 @@ export function CategoriesPage() {
             }
           />
         </label>
+        {kind === 'savings' && (
+          <label>
+            Target
+            <input
+              value={targetAmount}
+              onChange={(e) => setTargetAmount(e.target.value)}
+              inputMode="decimal"
+              placeholder="optional"
+              aria-label="Savings target amount"
+            />
+          </label>
+        )}
         <button className="btn primary" type="submit" disabled={saving}>
           Add
         </button>
@@ -156,8 +218,9 @@ export function CategoriesPage() {
 
       {kind === 'savings' && (
         <p className="muted compact">
-          Tip: after you create a savings bucket, set a monthly contribution on
-          Budget, then log deposits (+) and withdrawals (−) in Tracker.
+          Tip: set an optional target goal here, plan a monthly contribution on
+          Budget, then log deposits (+) and withdrawals (−) in Tracker. The
+          dashboard projects when you&apos;ll hit the target.
         </p>
       )}
 
@@ -184,6 +247,7 @@ export function CategoriesPage() {
               <tr>
                 <th>Kind</th>
                 <th>Name</th>
+                <th>Target</th>
                 <th>Status</th>
                 <th />
               </tr>
@@ -196,7 +260,7 @@ export function CategoriesPage() {
                   </td>
                   <td>
                     {editingId === c.id ? (
-                      <form className="inline-edit" onSubmit={onRename}>
+                      <form className="inline-edit" onSubmit={onSaveEdit}>
                         <input
                           value={editName}
                           onChange={(e) => setEditName(e.target.value)}
@@ -205,6 +269,15 @@ export function CategoriesPage() {
                           aria-label="Category name"
                           autoFocus
                         />
+                        {c.kind === 'savings' && (
+                          <input
+                            value={editTarget}
+                            onChange={(e) => setEditTarget(e.target.value)}
+                            inputMode="decimal"
+                            placeholder="Target (blank = none)"
+                            aria-label="Savings target amount"
+                          />
+                        )}
                         <button
                           className="btn tiny primary"
                           type="submit"
@@ -215,7 +288,7 @@ export function CategoriesPage() {
                         <button
                           className="btn tiny ghost"
                           type="button"
-                          onClick={cancelRename}
+                          onClick={cancelEdit}
                           disabled={renaming}
                         >
                           Cancel
@@ -224,6 +297,13 @@ export function CategoriesPage() {
                     ) : (
                       c.name
                     )}
+                  </td>
+                  <td>
+                    {c.kind !== 'savings'
+                      ? '—'
+                      : c.target_amount != null
+                        ? formatUsd(c.target_amount)
+                        : '—'}
                   </td>
                   <td>{c.archived ? 'Archived' : 'Active'}</td>
                   <td className="actions">
@@ -240,9 +320,9 @@ export function CategoriesPage() {
                         <button
                           type="button"
                           className="btn ghost"
-                          onClick={() => startRename(c)}
+                          onClick={() => startEdit(c)}
                         >
-                          Rename
+                          {c.kind === 'savings' ? 'Edit' : 'Rename'}
                         </button>
                         <button
                           type="button"

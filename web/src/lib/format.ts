@@ -67,6 +67,15 @@ export function shiftMonth(
   return { year: d.getFullYear(), month: d.getMonth() + 1 }
 }
 
+/** e.g. "Mar 2027" for a projected savings hit month. */
+export function formatYearMonth(
+  year: number | null | undefined,
+  month: number | null | undefined,
+): string | null {
+  if (year == null || month == null || month < 1 || month > 12) return null
+  return `${MONTH_SHORT[month - 1]} ${year}`
+}
+
 export function todayISO(): string {
   return new Date().toISOString().slice(0, 10)
 }

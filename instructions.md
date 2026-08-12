@@ -107,7 +107,8 @@ Savings categories are **buckets** that accumulate:
 - **Plan:** how much to contribute to the bucket this month
 - **Actual:** transfers in/out logged in the tracker
 - **Balance:** running total allocated to that bucket over time
-- **Dashboard:** show balance, contribution progress vs plan, and history
+- **Target (optional):** goal amount on the bucket; dashboard projects the **hit month** from balance + monthly contribution rate
+- **Dashboard:** show balance, contribution progress vs plan, target + projected hit month, and history
 
 ### 3.4 Transaction tracker (manual)
 
@@ -351,7 +352,7 @@ All user-owned rows must be scoped by authenticated user.
 | Current product bet | **Desktop web depth (v2 / Phase 1.x)** — robust desktop app before mobile or growth features |
 | Month model | Copy-forward auto-seed from latest planned month + copy/template tools |
 | Periods | Calendar months now; custom ranges later |
-| Savings | Buckets with allocated balances + monthly contribution plans |
+| Savings | Buckets with allocated balances, optional target goals + projected hit month, and monthly contribution plans |
 | Tracker | Manual transactions first; note memory autocomplete; CSV later with dedup concerns |
 | Over budget | Soft warnings; emphasize multi-month trends |
 | Plan coaching | After 3+ expense/savings overruns in a year: suggest raising the apply-month plan by the median overrun, or tip “looks seasonal” for a short contiguous cluster; one-click apply via annual budget cell; dismissals local-only |
