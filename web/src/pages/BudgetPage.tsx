@@ -7,6 +7,7 @@ import {
   sumByKind,
 } from '../components/BudgetBalance'
 import { PeriodNavigator } from '../components/PeriodNavigator'
+import { SavingsBucketsGuide } from '../components/SavingsBucketsGuide'
 import { ViewModeToggle } from '../components/ViewModeToggle'
 import { useAuth } from '../context/AuthContext'
 import {
@@ -306,6 +307,9 @@ export function BudgetPage() {
                   <h3 className="section-title">
                     {kind.charAt(0).toUpperCase() + kind.slice(1)}
                   </h3>
+                  {kind === 'savings' && (
+                    <SavingsBucketsGuide variant="budget" className="compact" />
+                  )}
                   <div className="budget-lines">
                     {grouped[kind].map((c) => (
                       <label key={c.id} className="budget-line">
@@ -421,6 +425,10 @@ export function BudgetPage() {
             title="Year plan balance"
             subtitle="Sum of all planned months — income − expenses − savings"
           />
+
+          {grouped.savings.length > 0 && (
+            <SavingsBucketsGuide variant="budget" className="compact" />
+          )}
 
           <div className="panel month-balance-strip">
             <h3 className="section-title">Monthly remainder</h3>

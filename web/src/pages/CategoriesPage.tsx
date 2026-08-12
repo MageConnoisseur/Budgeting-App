@@ -2,6 +2,7 @@ import { type FormEvent, useCallback, useEffect, useState } from 'react'
 import * as categoriesApi from '../api/categories'
 import { ApiError } from '../api/client'
 import { KindBadge } from '../components/KindBadge'
+import { SavingsBucketsGuide } from '../components/SavingsBucketsGuide'
 import type { Category, CategoryKind } from '../types/api'
 
 const KINDS: CategoryKind[] = ['income', 'expense', 'savings']
@@ -116,6 +117,8 @@ export function CategoriesPage() {
         </div>
       </header>
 
+      <SavingsBucketsGuide variant="full" />
+
       <form className="panel inline-form" onSubmit={onCreate}>
         <label>
           Kind
@@ -137,13 +140,26 @@ export function CategoriesPage() {
             onChange={(e) => setName(e.target.value)}
             required
             maxLength={128}
-            placeholder="e.g. Groceries"
+            placeholder={
+              kind === 'savings'
+                ? 'e.g. Emergency fund'
+                : kind === 'income'
+                  ? 'e.g. Paycheck'
+                  : 'e.g. Groceries'
+            }
           />
         </label>
         <button className="btn primary" type="submit" disabled={saving}>
           Add
         </button>
       </form>
+
+      {kind === 'savings' && (
+        <p className="muted compact">
+          Tip: after you create a savings bucket, set a monthly contribution on
+          Budget, then log deposits (+) and withdrawals (−) in Tracker.
+        </p>
+      )}
 
       <div className="toolbar">
         <label className="check">
