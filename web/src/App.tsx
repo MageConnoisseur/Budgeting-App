@@ -2,6 +2,8 @@ import type { ReactNode } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AppShell } from './components/AppShell'
 import { useAuth } from './context/AuthContext'
+import { AccountPage } from './pages/AccountPage'
+import { AuthCallbackPage } from './pages/AuthCallbackPage'
 import { BudgetPage } from './pages/BudgetPage'
 import { CategoriesPage } from './pages/CategoriesPage'
 import { DashboardPage } from './pages/DashboardPage'
@@ -27,6 +29,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/auth/callback" element={<AuthCallbackPage />} />
       <Route
         element={
           <RequireAuth>
@@ -38,6 +41,7 @@ export default function App() {
         <Route path="budget" element={<BudgetPage />} />
         <Route path="tracker" element={<TrackerPage />} />
         <Route path="categories" element={<CategoriesPage />} />
+        <Route path="account" element={<AccountPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

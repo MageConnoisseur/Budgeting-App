@@ -35,7 +35,10 @@ class User(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
     username: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
-    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Required for password signup; optional for legacy rows and OAuth-only users until set.
+    email: Mapped[Optional[str]] = mapped_column(String(320), unique=True, index=True, nullable=True)
+    # Nullable so OAuth-only accounts can exist without a password.
+    password_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     # Remember Budget / Dashboard Monthly ↔ Annual preference server-side.
     preferred_budget_view: Mapped[str] = mapped_column(
         String(16), nullable=False, default=ViewMode.monthly.value
@@ -53,11 +56,39 @@ class User(Base):
         nullable=False,
     )
 
+    oauth_accounts: Mapped[list[OAuthAccount]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
     categories: Mapped[list[Category]] = relationship(back_populates="user")
     budget_months: Mapped[list[BudgetMonth]] = relationship(back_populates="user")
     templates: Mapped[list[BudgetTemplate]] = relationship(back_populates="user")
     transactions: Mapped[list[Transaction]] = relationship(back_populates="user")
     dashboard_layouts: Mapped[list[DashboardLayout]] = relationship(back_populates="user")
+
+
+class OAuthAccount(Base):
+    """Linked external identity (Google, Facebook, …) for a user."""
+
+    __tablename__ = "oauth_accounts"
+    __table_args__ = (
+        UniqueConstraint(
+            "provider", "provider_subject", name="uq_oauth_accounts_provider_subject"
+        ),
+        UniqueConstraint("user_id", "provider", name="uq_oauth_accounts_user_provider"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    provider: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    provider_subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    provider_email: Mapped[Optional[str]] = mapped_column(String(320), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped[User] = relationship(back_populates="oauth_accounts")
 
 
 class Category(Base):

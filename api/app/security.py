@@ -1,7 +1,8 @@
 """Password hashing and JWT helpers.
 
-Auth strategy (MVP):
-- Username + password registration/login
+Auth strategy:
+- Username/email + password registration/login
+- Optional Google / Facebook (and local `dev`) OAuth with explicit account linking
 - Passwords hashed with bcrypt via passlib
 - Stateless JWT Bearer tokens (Authorization: Bearer <token>)
 - Token payload includes `sub` = user id (string)

@@ -8,9 +8,18 @@ export interface TokenResponse {
   token_type: string
 }
 
+export interface OAuthProviderInfo {
+  id: string
+  name: string
+  configured: boolean
+}
+
 export interface User {
   id: string
   username: string
+  email: string | null
+  has_password: boolean
+  oauth_providers: string[]
   preferred_budget_view: ViewMode
   preferred_dashboard_view: ViewMode
   created_at: string
