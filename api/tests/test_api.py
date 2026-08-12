@@ -311,6 +311,8 @@ def test_transactions_search_sort_filter_and_dashboard(
     assert annual.status_code == 200
     assert len(annual.json()["months"]) == 12
     assert "spending_pace" in annual.json()
+    assert "plan_suggestions" in annual.json()
+    assert isinstance(annual.json()["plan_suggestions"], list)
 
     balances = client.get("/api/dashboard/savings-balances", headers=h)
     assert balances.status_code == 200
@@ -341,6 +343,122 @@ def test_transactions_search_sort_filter_and_dashboard(
     assert "cashflow-trend" in ids
     assert "spending-pace" in ids
     assert len(widgets) >= 1
+
+
+def test_plan_suggestions_median_raise_and_apply(
+    auth_headers: dict[str, str],
+) -> None:
+    """3+ spread overruns → median raise suggestion; annual cell applies it."""
+    h = auth_headers
+    dining = client.post(
+        "/api/categories",
+        headers=h,
+        json={"kind": "expense", "name": "DiningOut"},
+    ).json()
+    cat_id = dining["id"]
+
+    # Spread overruns in Jan, Apr, Jul (not a contiguous seasonal cluster).
+    for month, planned, actual in (
+        (1, "100.00", "130.00"),
+        (2, "100.00", "90.00"),
+        (4, "100.00", "150.00"),
+        (5, "100.00", "80.00"),
+        (7, "100.00", "140.00"),
+        (8, "100.00", "70.00"),
+    ):
+        client.put(
+            f"/api/budgets/months/2026/{month}",
+            headers=h,
+            json={"lines": [{"category_id": cat_id, "planned_amount": planned}]},
+        )
+        client.post(
+            "/api/transactions",
+            headers=h,
+            json={
+                "category_id": cat_id,
+                "amount": actual,
+                "date": f"2026-{month:02d}-15",
+                "note": f"Spend {month}",
+            },
+        )
+
+    annual = client.get("/api/dashboard/annual/2026", headers=h)
+    assert annual.status_code == 200, annual.text
+    suggestions = annual.json()["plan_suggestions"]
+    match = [s for s in suggestions if s["category_id"] == cat_id]
+    assert len(match) == 1
+    s = match[0]
+    assert s["suggestion_kind"] == "median_raise"
+    assert s["months_over"] == 3
+    assert Decimal(s["median_overrun"]) == Decimal("40.00")
+    assert s["apply_year"] == 2026
+    if date.today().year == 2026:
+        assert s["apply_month"] == date.today().month
+    assert Decimal(s["suggested_planned"]) == Decimal(s["current_planned"]) + Decimal(
+        "40.00"
+    )
+
+    applied = client.put(
+        "/api/budgets/annual/cell",
+        headers=h,
+        json={
+            "year": s["apply_year"],
+            "month": s["apply_month"],
+            "category_id": cat_id,
+            "planned_amount": s["suggested_planned"],
+        },
+    )
+    assert applied.status_code == 200, applied.text
+    line = next(x for x in applied.json()["lines"] if x["category_id"] == cat_id)
+    assert Decimal(line["planned_amount"]) == Decimal(s["suggested_planned"])
+
+
+def test_plan_suggestions_seasonal_no_raise_cta(
+    auth_headers: dict[str, str],
+) -> None:
+    h = auth_headers
+    travel = client.post(
+        "/api/categories",
+        headers=h,
+        json={"kind": "expense", "name": "TravelCluster"},
+    ).json()
+    cat_id = travel["id"]
+
+    for month, planned, actual in (
+        (1, "200.00", "150.00"),
+        (2, "200.00", "180.00"),
+        (6, "200.00", "260.00"),
+        (7, "200.00", "280.00"),
+        (8, "200.00", "250.00"),
+        (9, "200.00", "190.00"),
+    ):
+        client.put(
+            f"/api/budgets/months/2026/{month}",
+            headers=h,
+            json={"lines": [{"category_id": cat_id, "planned_amount": planned}]},
+        )
+        client.post(
+            "/api/transactions",
+            headers=h,
+            json={
+                "category_id": cat_id,
+                "amount": actual,
+                "date": f"2026-{month:02d}-10",
+                "note": f"Travel {month}",
+            },
+        )
+
+    annual = client.get("/api/dashboard/annual/2026", headers=h)
+    assert annual.status_code == 200
+    match = [
+        s
+        for s in annual.json()["plan_suggestions"]
+        if s["category_id"] == cat_id
+    ]
+    assert len(match) == 1
+    assert match[0]["suggestion_kind"] == "seasonal"
+    assert match[0]["suggested_planned"] is None
+    assert "seasonal" in match[0]["message"].lower()
 
 
 def test_spending_pace_uses_average_income_and_clamps_to_tracking_start(

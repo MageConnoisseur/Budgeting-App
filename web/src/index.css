@@ -822,6 +822,54 @@ button:focus-visible {
   font-weight: 600;
 }
 
+.plan-coaching {
+  margin-top: 1.1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--line);
+}
+
+.plan-coaching h4 {
+  margin: 0 0 0.25rem;
+  font-size: 0.95rem;
+}
+
+.plan-coaching-list {
+  list-style: none;
+  margin: 0.65rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.plan-coaching-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  align-items: flex-start;
+}
+
+.plan-coaching-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: min(100%, 16rem);
+  flex: 1;
+}
+
+.plan-coaching-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.plan-coaching-status {
+  margin-top: 0.75rem;
+  display: inline-flex;
+}
+
 /* —— Budget plan balance —— */
 .budget-balance {
   margin-bottom: 1rem;

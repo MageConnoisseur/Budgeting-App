@@ -19,6 +19,7 @@ from app.schemas import (
     KindTotals,
     MonthlyDashboardOut,
     MonthlyTrendPoint,
+    PlanSuggestion,
     SavingsBucketOut,
     SpendingPaceDay,
     SpendingPaceOut,
@@ -30,6 +31,21 @@ MONEY = Decimal("0.01")
 # Rolling actuals window and income-average lookback (calendar-day based).
 PACE_WINDOW_DAYS = 30
 INCOME_LOOKBACK_DAYS = 183  # ~6 months; shorter if the user has less history
+PLAN_SUGGESTION_MIN_OVER_MONTHS = 3
+_MONTH_NAMES = (
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+)
 
 
 def _month_date_range(year: int, month: int) -> tuple[date, date]:
@@ -109,6 +125,135 @@ def savings_balances(db: Session, user_id: UUID, as_of: date | None = None) -> d
 
 def _money(value: Decimal) -> Decimal:
     return value.quantize(MONEY, rounding=ROUND_HALF_UP)
+
+
+def _median_money(values: list[Decimal]) -> Decimal:
+    """Median of money amounts; even counts average the two middle values."""
+    if not values:
+        return ZERO
+    ordered = sorted(values)
+    n = len(ordered)
+    mid = n // 2
+    if n % 2 == 1:
+        return _money(ordered[mid])
+    return _money((ordered[mid - 1] + ordered[mid]) / 2)
+
+
+def _apply_target_for_suggestion(
+    year: int,
+    samples: list[dict],
+    *,
+    today: date,
+) -> tuple[int, int, Decimal]:
+    """Pick the month to raise and a sensible current planned baseline."""
+    if year == today.year:
+        apply_month = today.month
+    else:
+        with_plan = [s for s in samples if s["planned"] > ZERO]
+        apply_month = max((s["month"] for s in with_plan), default=12)
+
+    apply_sample = next((s for s in samples if s["month"] == apply_month), None)
+    current = apply_sample["planned"] if apply_sample else ZERO
+    if current <= ZERO:
+        with_plan = [s for s in samples if s["planned"] > ZERO]
+        if with_plan:
+            latest = max(with_plan, key=lambda s: s["month"])
+            current = latest["planned"]
+    return year, apply_month, _money(current)
+
+
+def build_plan_suggestions(
+    year: int,
+    category_accum: dict[UUID, dict],
+    *,
+    today: date | None = None,
+) -> list[PlanSuggestion]:
+    """Soft coaching: median raise or seasonal tip after 3+ overrun months."""
+    as_of = today or date.today()
+    suggestions: list[PlanSuggestion] = []
+
+    for cid, data in category_accum.items():
+        kind: CategoryKind = data["kind"]
+        if kind not in (CategoryKind.expense, CategoryKind.savings):
+            continue
+
+        samples: list[dict] = data.get("samples") or []
+        over_samples = [
+            s
+            for s in samples
+            if s["over"] and s["planned"] > ZERO
+        ]
+        if len(over_samples) < PLAN_SUGGESTION_MIN_OVER_MONTHS:
+            continue
+
+        months_with_plan = [s for s in samples if s["planned"] > ZERO]
+        non_over = [s for s in months_with_plan if not s["over"]]
+        over_months_sorted = sorted(s["month"] for s in over_samples)
+        span = over_months_sorted[-1] - over_months_sorted[0] + 1
+        # Single-year seasonal: a short contiguous overrun cluster (not chronic).
+        is_seasonal = (
+            len(non_over) >= 1
+            and span == len(over_samples)
+            and len(over_samples) <= 4
+        )
+
+        if is_seasonal:
+            month_labels = ", ".join(
+                _MONTH_NAMES[m - 1] for m in over_months_sorted
+            )
+            suggestions.append(
+                PlanSuggestion(
+                    category_id=cid,
+                    category_name=data["name"],
+                    kind=kind,
+                    suggestion_kind="seasonal",
+                    months_over=len(over_samples),
+                    median_overrun=None,
+                    apply_year=None,
+                    apply_month=None,
+                    current_planned=None,
+                    suggested_planned=None,
+                    message=(
+                        f"This looks seasonal — overruns cluster in {month_labels}. "
+                        "Consider a higher plan only in those months."
+                    ),
+                )
+            )
+            continue
+
+        overruns = [_money(s["actual"] - s["planned"]) for s in over_samples]
+        median = _median_money(overruns)
+        apply_year, apply_month, current_planned = _apply_target_for_suggestion(
+            year, samples, today=as_of
+        )
+        suggested = _money(current_planned + median)
+        suggestions.append(
+            PlanSuggestion(
+                category_id=cid,
+                category_name=data["name"],
+                kind=kind,
+                suggestion_kind="median_raise",
+                months_over=len(over_samples),
+                median_overrun=median,
+                apply_year=apply_year,
+                apply_month=apply_month,
+                current_planned=current_planned,
+                suggested_planned=suggested,
+                message=(
+                    f"Raise plan by ${median} (median overrun over "
+                    f"{len(over_samples)} months)."
+                ),
+            )
+        )
+
+    suggestions.sort(
+        key=lambda s: (
+            0 if s.suggestion_kind == "median_raise" else 1,
+            -s.months_over,
+            s.category_name,
+        )
+    )
+    return suggestions
 
 
 def _first_tracking_date(db: Session, user_id: UUID) -> date | None:
@@ -396,14 +541,24 @@ def build_annual_dashboard(db: Session, user: User, year: int) -> AnnualDashboar
                     "under": 0,
                     "planned": ZERO,
                     "actual": ZERO,
+                    "samples": [],
                 },
             )
             slot["planned"] += row.planned
             slot["actual"] += row.actual
-            if row.over_budget:
+            over = bool(row.over_budget)
+            if over:
                 slot["over"] += 1
             elif row.planned > ZERO and row.actual < row.planned:
                 slot["under"] += 1
+            slot["samples"].append(
+                {
+                    "month": month,
+                    "planned": row.planned,
+                    "actual": row.actual,
+                    "over": over,
+                }
+            )
 
     trends = [
         CategoryTrend(
@@ -418,6 +573,7 @@ def build_annual_dashboard(db: Session, user: User, year: int) -> AnnualDashboar
         for cid, data in category_accum.items()
     ]
     trends.sort(key=lambda t: (-t.months_over_budget, t.category_name))
+    plan_suggestions = build_plan_suggestions(year, category_accum)
 
     def sum_kind(attr_planned: str, attr_actual: str) -> KindTotals:
         planned = sum((getattr(m, attr_planned) for m in months), ZERO)
@@ -465,6 +621,7 @@ def build_annual_dashboard(db: Session, user: User, year: int) -> AnnualDashboar
         year=year,
         months=months,
         category_trends=trends,
+        plan_suggestions=plan_suggestions,
         income=sum_kind("income_planned", "income_actual"),
         expense=sum_kind("expense_planned", "expense_actual"),
         savings=sum_kind("savings_planned", "savings_actual"),
