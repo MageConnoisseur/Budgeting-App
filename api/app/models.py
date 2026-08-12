@@ -63,6 +63,9 @@ class User(Base):
     budget_months: Mapped[list[BudgetMonth]] = relationship(back_populates="user")
     templates: Mapped[list[BudgetTemplate]] = relationship(back_populates="user")
     transactions: Mapped[list[Transaction]] = relationship(back_populates="user")
+    recurring_schedules: Mapped[list[RecurringSchedule]] = relationship(
+        back_populates="user"
+    )
     dashboard_layouts: Mapped[list[DashboardLayout]] = relationship(back_populates="user")
 
 
@@ -123,6 +126,9 @@ class Category(Base):
     budget_lines: Mapped[list[BudgetLine]] = relationship(back_populates="category")
     template_lines: Mapped[list[BudgetTemplateLine]] = relationship(back_populates="category")
     transactions: Mapped[list[Transaction]] = relationship(back_populates="category")
+    recurring_schedules: Mapped[list[RecurringSchedule]] = relationship(
+        back_populates="category"
+    )
 
 
 class BudgetMonth(Base):
@@ -271,6 +277,49 @@ class Transaction(Base):
 
     user: Mapped[User] = relationship(back_populates="transactions")
     category: Mapped[Category] = relationship(back_populates="transactions")
+
+
+class RecurringSchedule(Base):
+    """User-defined recurring income/expense reminder for the tracker.
+
+    Schedules do not auto-create transactions — they surface due dates so the
+    user can log (or skip) on payday / withdrawal day.
+    """
+
+    __tablename__ = "recurring_schedules"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    category_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("categories.id", ondelete="RESTRICT"),
+        index=True,
+        nullable=False,
+    )
+    amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    frequency: Mapped[str] = mapped_column(String(16), nullable=False)  # RecurrenceFrequency
+    # weekly/biweekly: ISO weekday 1=Mon … 7=Sun; monthly: day-of-month 1–28;
+    # semimonthly: ignored (occurrences on the 1st and 15th).
+    anchor_day: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    next_occurrence: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    user: Mapped[User] = relationship(back_populates="recurring_schedules")
+    category: Mapped[Category] = relationship(back_populates="recurring_schedules")
 
 
 class DashboardLayout(Base):

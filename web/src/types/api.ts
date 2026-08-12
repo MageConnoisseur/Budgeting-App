@@ -261,3 +261,82 @@ export interface DashboardLayout {
 
 export type TransactionSortBy = 'date' | 'amount' | 'category' | 'kind' | 'created_at'
 export type SortDir = 'asc' | 'desc'
+
+export type RecurrenceFrequency =
+  | 'weekly'
+  | 'biweekly'
+  | 'semimonthly'
+  | 'monthly'
+
+export interface RecurringSchedule {
+  id: string
+  category_id: string
+  amount: string
+  note: string | null
+  frequency: RecurrenceFrequency
+  anchor_day: number
+  start_date: string
+  end_date: string | null
+  next_occurrence: string
+  active: boolean
+  created_at: string
+  updated_at: string
+  category?: Category | null
+  is_due?: boolean
+}
+
+export interface RecurringScheduleList {
+  items: RecurringSchedule[]
+}
+
+export interface RecurringLogResult {
+  transaction: Transaction
+  schedule: RecurringSchedule
+}
+
+export interface RecurringPatternSuggestion {
+  category_id: string
+  category_name: string
+  kind: CategoryKind
+  suggested_amount: string
+  suggested_frequency: RecurrenceFrequency
+  suggested_anchor_day: number
+  sample_count: number
+  average_interval_days: string
+  last_date: string
+  sample_note: string | null
+  confidence: 'low' | 'medium' | 'high'
+  message: string
+}
+
+export interface RecurringPatternSuggestionList {
+  items: RecurringPatternSuggestion[]
+}
+
+export type IncomeEstimateMethod =
+  | 'schedule'
+  | 'history_median'
+  | 'history_mean'
+  | 'mixed'
+
+export interface IncomeEstimateCategory {
+  category_id: string
+  category_name: string
+  estimated_amount: string
+  method: IncomeEstimateMethod
+  occurrence_count: number
+  sample_months: number
+  message: string
+}
+
+export interface IncomeEstimate {
+  year: number
+  month: number
+  estimated_total: string
+  planned_total: string
+  actual_to_date: string
+  categories: IncomeEstimateCategory[]
+  based_on_schedules: number
+  based_on_history: number
+  message: string
+}

@@ -10,7 +10,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
-from app.enums import CategoryKind, ViewMode
+from app.enums import CategoryKind, RecurrenceFrequency, ViewMode
 
 
 class ORMModel(BaseModel):
@@ -466,3 +466,143 @@ class DashboardLayoutUpdate(BaseModel):
 
 class MessageOut(BaseModel):
     detail: str
+
+
+# --- Recurring schedules (tracker reminders) ---
+
+
+class RecurringScheduleCreate(BaseModel):
+    category_id: UUID
+    amount: Decimal = Field(..., max_digits=14, decimal_places=2)
+    note: Optional[str] = Field(default=None, max_length=2000)
+    frequency: RecurrenceFrequency
+    # weekly/biweekly: ISO weekday 1–7; monthly: day of month 1–28; semimonthly ignored.
+    anchor_day: int = Field(default=1, ge=1, le=28)
+    start_date: date
+    end_date: Optional[date] = None
+    active: bool = True
+
+    @field_validator("amount")
+    @classmethod
+    def quantize_amount(cls, v: Decimal) -> Decimal:
+        q = v.quantize(Decimal("0.01"))
+        if q == 0:
+            raise ValueError("amount must not be zero")
+        return q
+
+    @field_validator("end_date")
+    @classmethod
+    def end_after_start(cls, v: Optional[date], info) -> Optional[date]:
+        start = info.data.get("start_date")
+        if v is not None and start is not None and v < start:
+            raise ValueError("end_date must be on or after start_date")
+        return v
+
+
+class RecurringScheduleUpdate(BaseModel):
+    category_id: Optional[UUID] = None
+    amount: Optional[Decimal] = Field(default=None, max_digits=14, decimal_places=2)
+    note: Optional[str] = Field(default=None, max_length=2000)
+    frequency: Optional[RecurrenceFrequency] = None
+    anchor_day: Optional[int] = Field(default=None, ge=1, le=28)
+    start_date: Optional[Date] = None
+    end_date: Optional[Date] = None
+    next_occurrence: Optional[Date] = None
+    active: Optional[bool] = None
+
+    @field_validator("amount")
+    @classmethod
+    def quantize_amount(cls, v: Optional[Decimal]) -> Optional[Decimal]:
+        if v is None:
+            return v
+        q = v.quantize(Decimal("0.01"))
+        if q == 0:
+            raise ValueError("amount must not be zero")
+        return q
+
+
+class RecurringScheduleOut(ORMModel):
+    id: UUID
+    category_id: UUID
+    amount: Decimal
+    note: Optional[str]
+    frequency: RecurrenceFrequency
+    anchor_day: int
+    start_date: date
+    end_date: Optional[date]
+    next_occurrence: date
+    active: bool
+    created_at: datetime
+    updated_at: datetime
+    category: Optional[CategoryOut] = None
+    is_due: bool = False
+
+
+class RecurringScheduleListOut(BaseModel):
+    items: list[RecurringScheduleOut]
+
+
+class RecurringLogRequest(BaseModel):
+    """Optional overrides when logging a due schedule occurrence."""
+
+    amount: Optional[Decimal] = Field(default=None, max_digits=14, decimal_places=2)
+    date: Optional[Date] = None
+    note: Optional[str] = Field(default=None, max_length=2000)
+
+    @field_validator("amount")
+    @classmethod
+    def quantize_amount(cls, v: Optional[Decimal]) -> Optional[Decimal]:
+        if v is None:
+            return v
+        q = v.quantize(Decimal("0.01"))
+        if q == 0:
+            raise ValueError("amount must not be zero")
+        return q
+
+
+class RecurringLogResultOut(BaseModel):
+    transaction: TransactionOut
+    schedule: RecurringScheduleOut
+
+
+class RecurringPatternSuggestionOut(BaseModel):
+    """Detected from tracker history — soft suggestion to create a schedule."""
+
+    category_id: UUID
+    category_name: str
+    kind: CategoryKind
+    suggested_amount: Decimal
+    suggested_frequency: RecurrenceFrequency
+    suggested_anchor_day: int
+    sample_count: int
+    average_interval_days: Decimal
+    last_date: date
+    sample_note: Optional[str] = None
+    confidence: Literal["low", "medium", "high"]
+    message: str
+
+
+class RecurringPatternSuggestionListOut(BaseModel):
+    items: list[RecurringPatternSuggestionOut]
+
+
+class IncomeEstimateCategoryOut(BaseModel):
+    category_id: UUID
+    category_name: str
+    estimated_amount: Decimal
+    method: Literal["schedule", "history_median", "history_mean", "mixed"]
+    occurrence_count: int
+    sample_months: int
+    message: str
+
+
+class IncomeEstimateOut(BaseModel):
+    year: int
+    month: int
+    estimated_total: Decimal
+    planned_total: Decimal
+    actual_to_date: Decimal
+    categories: list[IncomeEstimateCategoryOut]
+    based_on_schedules: int
+    based_on_history: int
+    message: str

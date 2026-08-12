@@ -8,7 +8,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.config import get_settings
 from app.database import engine
-from app.routers import auth, budgets, categories, dashboard, transactions
+from app.routers import auth, budgets, categories, dashboard, recurring_schedules, transactions
 
 settings = get_settings()
 
@@ -37,6 +37,7 @@ app.include_router(auth.router, prefix="/api")
 app.include_router(categories.router, prefix="/api")
 app.include_router(budgets.router, prefix="/api")
 app.include_router(transactions.router, prefix="/api")
+app.include_router(recurring_schedules.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
 
 
