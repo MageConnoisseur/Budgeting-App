@@ -931,14 +931,7 @@ export function DashboardPage() {
       ) : (
         <div className="dashboard-layout">
           {widgets.map((w) => (
-            <div
-              key={w.id}
-              className={
-                w.type === 'true_leftover'
-                  ? 'widget-shell widget-shell-sticky'
-                  : 'widget-shell'
-              }
-            >
+            <div key={w.id} className="widget-shell">
               <div className="widget-controls">
                 <button
                   type="button"
