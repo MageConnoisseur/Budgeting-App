@@ -302,10 +302,15 @@ def test_transactions_search_sort_filter_and_dashboard(
     grocery_row = next(c for c in body["categories"] if c["category_id"] == groceries["id"])
     assert grocery_row["over_budget"] is True
     assert Decimal(grocery_row["actual"]) == Decimal("555.25")
+    assert "spending_pace" in body
+    assert body["spending_pace"]["has_data"] is True
+    assert body["spending_pace"]["window_days"] >= 1
+    assert Decimal(body["spending_pace"]["expense"]) >= Decimal("555.25")
 
     annual = client.get("/api/dashboard/annual/2026", headers=h)
     assert annual.status_code == 200
     assert len(annual.json()["months"]) == 12
+    assert "spending_pace" in annual.json()
 
     balances = client.get("/api/dashboard/savings-balances", headers=h)
     assert balances.status_code == 200
@@ -332,9 +337,87 @@ def test_transactions_search_sort_filter_and_dashboard(
     widgets = got.json()["widgets"]
     ids = {w["id"] for w in widgets}
     assert "expense-progress" in ids
-    # New default widgets (e.g. cashflow-trend) are appended for existing layouts.
+    # New default widgets (e.g. cashflow-trend, spending-pace) are appended for existing layouts.
     assert "cashflow-trend" in ids
+    assert "spending-pace" in ids
     assert len(widgets) >= 1
+
+
+def test_spending_pace_uses_average_income_and_clamps_to_tracking_start(
+    auth_headers: dict[str, str],
+) -> None:
+    """Pace compares rolling outflow to avg income; lookback starts at first tx."""
+    h = auth_headers
+    paycheck = client.post(
+        "/api/categories",
+        headers=h,
+        json={"kind": "income", "name": "Paycheck"},
+    ).json()
+    food = client.post(
+        "/api/categories",
+        headers=h,
+        json={"kind": "expense", "name": "Food"},
+    ).json()
+
+    # First tracking day is mid-month so the 30-day window clamps to it.
+    assert (
+        client.post(
+            "/api/transactions",
+            headers=h,
+            json={
+                "category_id": paycheck["id"],
+                "amount": "3000.00",
+                "date": "2026-05-15",
+                "note": "May pay",
+            },
+        ).status_code
+        == 201
+    )
+    assert (
+        client.post(
+            "/api/transactions",
+            headers=h,
+            json={
+                "category_id": food["id"],
+                "amount": "200.00",
+                "date": "2026-05-16",
+                "note": "Groceries",
+            },
+        ).status_code
+        == 201
+    )
+    assert (
+        client.post(
+            "/api/transactions",
+            headers=h,
+            json={
+                "category_id": food["id"],
+                "amount": "4000.00",
+                "date": "2026-05-28",
+                "note": "Big spend",
+            },
+        ).status_code
+        == 201
+    )
+
+    dash = client.get("/api/dashboard/monthly/2026/5", headers=h)
+    assert dash.status_code == 200, dash.text
+    pace = dash.json()["spending_pace"]
+    assert pace["has_data"] is True
+    assert pace["tracking_started_on"] == "2026-05-15"
+    assert pace["window_start"] == "2026-05-15"
+    assert pace["window_end"] == "2026-05-31"
+    assert pace["window_days"] == 17
+    assert pace["income_lookback_start"] == "2026-05-15"
+    assert pace["income_lookback_days"] == 17
+    assert Decimal(pace["income"]) == Decimal("3000.00")
+    assert Decimal(pace["expense"]) == Decimal("4200.00")
+    assert Decimal(pace["outflow"]) == Decimal("4200.00")
+    # Capacity for the clamped window equals total income in lookback ($3000).
+    assert Decimal(pace["expected_income"]) == Decimal("3000.00")
+    assert pace["overspending"] is True
+    assert len(pace["days"]) == pace["window_days"]
+    assert Decimal(pace["days"][-1]["cumulative_outflow"]) == Decimal("4200.00")
 
 
 def test_category_rename_and_transaction_update(auth_headers: dict[str, str]) -> None:

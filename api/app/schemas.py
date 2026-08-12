@@ -279,6 +279,44 @@ class SavingsBucketOut(BaseModel):
     over_budget: bool
 
 
+class SpendingPaceDay(BaseModel):
+    """One day inside the rolling pace window (cumulative totals are inclusive)."""
+
+    date: date
+    income: Decimal
+    expense: Decimal
+    savings: Decimal
+    cumulative_income: Decimal
+    cumulative_expense: Decimal
+    cumulative_savings: Decimal
+    cumulative_outflow: Decimal
+    cumulative_net: Decimal
+    cumulative_expected_income: Decimal
+
+
+class SpendingPaceOut(BaseModel):
+    """Rolling actual cash pace vs average income capacity (soft overspending signal)."""
+
+    as_of: date
+    window_start: date
+    window_end: date
+    window_days: int
+    income: Decimal
+    expense: Decimal
+    savings: Decimal
+    outflow: Decimal
+    net: Decimal
+    average_daily_income: Decimal
+    expected_income: Decimal
+    income_lookback_start: Optional[date] = None
+    income_lookback_end: Optional[date] = None
+    income_lookback_days: int = 0
+    tracking_started_on: Optional[date] = None
+    overspending: bool = False
+    has_data: bool = False
+    days: list[SpendingPaceDay] = Field(default_factory=list)
+
+
 class MonthlyDashboardOut(BaseModel):
     year: int
     month: int
@@ -287,6 +325,7 @@ class MonthlyDashboardOut(BaseModel):
     savings: KindTotals
     categories: list[CategoryProgress]
     savings_buckets: list[SavingsBucketOut]
+    spending_pace: SpendingPaceOut
 
 
 class MonthlyTrendPoint(BaseModel):
@@ -318,6 +357,7 @@ class AnnualDashboardOut(BaseModel):
     expense: KindTotals
     savings: KindTotals
     savings_buckets: list[SavingsBucketOut]
+    spending_pace: SpendingPaceOut
 
 
 class DashboardWidget(BaseModel):

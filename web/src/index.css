@@ -731,6 +731,47 @@ button:focus-visible {
   margin: 0 0 0.85rem;
 }
 
+.stat-grid.four {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.pace-hero {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 0.35rem 0 1rem;
+}
+
+.pace-label {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.pace-net {
+  margin: 0.25rem 0 0;
+  font-size: 1.45rem;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.pace-meter {
+  margin: 0 0 0.85rem;
+}
+
+.pace-meter-labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-bottom: 0.35rem;
+}
+
 .stat-grid dt {
   font-size: 0.75rem;
   color: var(--muted);
@@ -1066,6 +1107,14 @@ button:focus-visible {
   }
 
   .stat-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .stat-grid.four {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .pace-hero {
     grid-template-columns: 1fr;
   }
 

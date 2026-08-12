@@ -313,6 +313,7 @@ All user-owned rows must be scoped by authenticated user.
 | Tracker | Manual transactions first; CSV later with dedup concerns |
 | Over budget | Soft warnings; emphasize multi-month trends |
 | Dashboard | Robust, customizable widgets; insight for future adjustments |
+| Dashboard spending pace | Rolling ~30-day actuals vs average daily income (lookback ≤ ~6 months, clamped to first tracking day) — soft overspending signal that avoids mid-month paycheck skew |
 | Budget / Dashboard views | Monthly and Annual modes; easy swap; annual budget editing allowed |
 | Tracker findability | Search, sort, and filters required in MVP |
 | Auth now | Username + email + password; Google/Facebook OAuth with explicit account linking |

@@ -23,19 +23,21 @@ from app.services import dashboard as dashboard_service
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 DEFAULT_MONTHLY_WIDGETS = [
-    DashboardWidget(id="income-progress", type="kind_progress", title="Income", order=0, config={"kind": "income"}),
-    DashboardWidget(id="expense-progress", type="kind_progress", title="Expenses", order=1, config={"kind": "expense"}),
-    DashboardWidget(id="savings-progress", type="kind_progress", title="Savings", order=2, config={"kind": "savings"}),
-    DashboardWidget(id="cashflow-trend", type="cashflow_trend", title="Year cash-flow trend", order=3, config={}),
-    DashboardWidget(id="savings-buckets", type="savings_buckets", title="Savings buckets", order=4, config={}),
-    DashboardWidget(id="category-breakdown", type="category_breakdown", title="Categories", order=5, config={}),
+    DashboardWidget(id="spending-pace", type="spending_pace", title="Spending pace", order=0, config={}),
+    DashboardWidget(id="income-progress", type="kind_progress", title="Income", order=1, config={"kind": "income"}),
+    DashboardWidget(id="expense-progress", type="kind_progress", title="Expenses", order=2, config={"kind": "expense"}),
+    DashboardWidget(id="savings-progress", type="kind_progress", title="Savings", order=3, config={"kind": "savings"}),
+    DashboardWidget(id="cashflow-trend", type="cashflow_trend", title="Year cash-flow trend", order=4, config={}),
+    DashboardWidget(id="savings-buckets", type="savings_buckets", title="Savings buckets", order=5, config={}),
+    DashboardWidget(id="category-breakdown", type="category_breakdown", title="Categories", order=6, config={}),
 ]
 
 DEFAULT_ANNUAL_WIDGETS = [
-    DashboardWidget(id="year-totals", type="year_totals", title="Year totals", order=0, config={}),
-    DashboardWidget(id="month-trends", type="month_trends", title="Month-to-month trends", order=1, config={}),
-    DashboardWidget(id="over-budget-patterns", type="category_trends", title="Repeated overruns", order=2, config={}),
-    DashboardWidget(id="savings-buckets-year", type="savings_buckets", title="Savings buckets", order=3, config={}),
+    DashboardWidget(id="spending-pace-year", type="spending_pace", title="Spending pace", order=0, config={}),
+    DashboardWidget(id="year-totals", type="year_totals", title="Year totals", order=1, config={}),
+    DashboardWidget(id="month-trends", type="month_trends", title="Month-to-month trends", order=2, config={}),
+    DashboardWidget(id="over-budget-patterns", type="category_trends", title="Repeated overruns", order=3, config={}),
+    DashboardWidget(id="savings-buckets-year", type="savings_buckets", title="Savings buckets", order=4, config={}),
 ]
 
 
