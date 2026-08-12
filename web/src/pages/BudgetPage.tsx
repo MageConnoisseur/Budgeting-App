@@ -6,6 +6,7 @@ import {
   BudgetBalancePanel,
   sumByKind,
 } from '../components/BudgetBalance'
+import { BudgetPlanDiffStrip } from '../components/BudgetPlanDiffStrip'
 import { PeriodNavigator } from '../components/PeriodNavigator'
 import { SavingsBucketsGuide } from '../components/SavingsBucketsGuide'
 import { ViewModeToggle } from '../components/ViewModeToggle'
@@ -15,6 +16,7 @@ import {
   currentYearMonth,
   formatUsd,
   parseMoneyInput,
+  shiftMonth,
   toMoneyString,
 } from '../lib/format'
 import type {
@@ -40,6 +42,11 @@ export function BudgetPage() {
   const [annualMonths, setAnnualMonths] = useState<BudgetMonth[]>([])
   const [templates, setTemplates] = useState<BudgetTemplate[]>([])
   const [amounts, setAmounts] = useState<Record<string, string>>({})
+  /** Prior calendar month planned amounts for the "what changed" strip. */
+  const [priorAmounts, setPriorAmounts] = useState<Record<string, string> | null>(
+    null,
+  )
+  const [hasPriorPlan, setHasPriorPlan] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [status, setStatus] = useState<string | null>(null)
@@ -67,13 +74,32 @@ export function BudgetPage() {
       setTemplates(tpls)
 
       if (view === 'monthly') {
-        const bm = await budgetsApi.getBudgetMonth(year, month, true)
+        const prior = shiftMonth(year, month, -1)
+        // Annual fetch lists existing months only — avoids creating an empty prior.
+        const [bm, priorAnnual] = await Promise.all([
+          budgetsApi.getBudgetMonth(year, month, true),
+          budgetsApi.getAnnualBudget(prior.year),
+        ])
         setBudget(bm)
         const map: Record<string, string> = {}
         for (const line of bm.lines) {
           map[line.category_id] = toMoneyString(line.planned_amount)
         }
         setAmounts(map)
+
+        const priorMonth = priorAnnual.months.find((m) => m.month === prior.month)
+        if (priorMonth && priorMonth.lines.length > 0) {
+          const priorMap: Record<string, string> = {}
+          for (const line of priorMonth.lines) {
+            priorMap[line.category_id] = toMoneyString(line.planned_amount)
+          }
+          setPriorAmounts(priorMap)
+          setHasPriorPlan(true)
+        } else {
+          setPriorAmounts(null)
+          setHasPriorPlan(false)
+        }
+
         if (bm.seeded_from) {
           setStatus(`Seeded from ${bm.seeded_from}`)
         } else {
@@ -82,6 +108,8 @@ export function BudgetPage() {
       } else {
         const annual = await budgetsApi.getAnnualBudget(year)
         setAnnualMonths(annual.months)
+        setPriorAmounts(null)
+        setHasPriorPlan(false)
         setStatus(null)
       }
     } catch (e) {
@@ -103,6 +131,8 @@ export function BudgetPage() {
       /* preference is best-effort */
     }
   }
+
+  const priorPeriod = useMemo(() => shiftMonth(year, month, -1), [year, month])
 
   const grouped = useMemo(() => {
     const map: Record<CategoryKind, Category[]> = {
@@ -298,6 +328,15 @@ export function BudgetPage() {
             totals={monthlyBalance}
             title="Month plan balance"
             subtitle="Updates as you edit — income − expenses − savings"
+          />
+
+          <BudgetPlanDiffStrip
+            categories={categories}
+            currentAmounts={amounts}
+            priorAmounts={priorAmounts}
+            priorYear={priorPeriod.year}
+            priorMonth={priorPeriod.month}
+            hasPriorPlan={hasPriorPlan}
           />
 
           <form className="panel stack" onSubmit={saveMonthly}>

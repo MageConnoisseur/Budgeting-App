@@ -1040,6 +1040,83 @@ button:focus-visible {
   color: var(--savings);
 }
 
+/* —— Budget plan vs last month (what changed) —— */
+.budget-plan-diff {
+  margin-bottom: 1rem;
+}
+
+.budget-plan-diff-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.budget-plan-diff-empty {
+  margin: 0.55rem 0 0;
+  font-size: 0.92rem;
+}
+
+.budget-plan-diff-list {
+  list-style: none;
+  margin: 0.7rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.budget-plan-diff-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  padding: 0.35rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.55);
+  font-size: 0.86rem;
+  line-height: 1.2;
+}
+
+.budget-plan-diff-chip.is-raised {
+  border-color: rgba(61, 122, 95, 0.4);
+  background: rgba(61, 122, 95, 0.08);
+}
+
+.budget-plan-diff-chip.is-lowered {
+  border-color: rgba(176, 92, 64, 0.4);
+  background: rgba(176, 92, 64, 0.08);
+}
+
+.budget-plan-diff-arrow {
+  font-weight: 700;
+  font-size: 0.8rem;
+}
+
+.budget-plan-diff-chip.is-raised .budget-plan-diff-arrow,
+.budget-plan-diff-chip.is-raised .budget-plan-diff-delta {
+  color: var(--income);
+}
+
+.budget-plan-diff-chip.is-lowered .budget-plan-diff-arrow,
+.budget-plan-diff-chip.is-lowered .budget-plan-diff-delta {
+  color: var(--expense);
+}
+
+.budget-plan-diff-name {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.budget-plan-diff-delta {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.budget-plan-diff-more {
+  margin: 0.55rem 0 0;
+}
+
 /* —— Charts —— */
 .chart-block {
   margin: 0.35rem 0 0.85rem;
