@@ -38,6 +38,8 @@ DEFAULT_ANNUAL_WIDGETS = [
     DashboardWidget(id="month-trends", type="month_trends", title="Month-to-month trends", order=2, config={}),
     DashboardWidget(id="over-budget-patterns", type="category_trends", title="Repeated overruns", order=3, config={}),
     DashboardWidget(id="savings-buckets-year", type="savings_buckets", title="Savings buckets", order=4, config={}),
+    # Appended (not inserted mid-list) to reduce merge conflicts with parallel dashboard work.
+    DashboardWidget(id="category-health", type="category_health", title="Category health", order=5, config={}),
 ]
 
 

@@ -10,6 +10,7 @@ import {
   LineTrendChart,
   type PlanActualItem,
 } from '../components/charts/TrendCharts'
+import { CategoryHealthWidget } from '../components/CategoryHealthWidget'
 import { PeriodNavigator } from '../components/PeriodNavigator'
 import { KindBadge } from '../components/KindBadge'
 import { SoftWarning } from '../components/SoftWarning'
@@ -871,6 +872,14 @@ export function DashboardPage() {
               </>
             )}
           </div>
+        )
+      }
+      if (w.type === 'category_health') {
+        return (
+          <CategoryHealthWidget
+            scores={annual.category_health}
+            title={w.title}
+          />
         )
       }
     }

@@ -313,6 +313,8 @@ def test_transactions_search_sort_filter_and_dashboard(
     assert "spending_pace" in annual.json()
     assert "plan_suggestions" in annual.json()
     assert isinstance(annual.json()["plan_suggestions"], list)
+    assert "category_health" in annual.json()
+    assert isinstance(annual.json()["category_health"], list)
 
     balances = client.get("/api/dashboard/savings-balances", headers=h)
     assert balances.status_code == 200

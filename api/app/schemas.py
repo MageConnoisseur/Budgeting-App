@@ -379,11 +379,27 @@ class PlanSuggestion(BaseModel):
     message: str
 
 
+class CategoryHealthScore(BaseModel):
+    """Plan-vs-actual consistency over ~6 months (stable / volatile / under-planned)."""
+
+    category_id: UUID
+    category_name: str
+    kind: CategoryKind
+    status: Literal["stable", "volatile", "under_planned"]
+    months_scored: int
+    months_over_budget: int
+    mean_ratio: Decimal
+    volatility: float
+    lookback_months: int = 6
+    message: str
+
+
 class AnnualDashboardOut(BaseModel):
     year: int
     months: list[MonthlyTrendPoint]
     category_trends: list[CategoryTrend]
     plan_suggestions: list[PlanSuggestion] = Field(default_factory=list)
+    category_health: list[CategoryHealthScore] = Field(default_factory=list)
     income: KindTotals
     expense: KindTotals
     savings: KindTotals
