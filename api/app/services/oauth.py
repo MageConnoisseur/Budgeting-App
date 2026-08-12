@@ -352,7 +352,7 @@ def link_oauth_account(
     if existing and existing.user_id != user.id:
         raise OAuthError(
             "provider_linked_elsewhere",
-            "That social account is already linked to a different Budget Desk user",
+            "That social account is already linked to a different Hearth Budgeting user",
         )
     if existing is None:
         same_provider = db.scalar(

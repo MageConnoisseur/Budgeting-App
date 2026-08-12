@@ -47,7 +47,7 @@ export function RegisterPage() {
   return (
     <div className="auth-page">
       <div className="auth-panel">
-        <p className="brand-name auth-brand">Budget Desk</p>
+        <p className="brand-name auth-brand">Hearth Budgeting</p>
         <h1>Create account</h1>
         <p className="muted">
           Use Google or Facebook, or sign up with a username, email, and

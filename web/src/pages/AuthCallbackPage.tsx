@@ -31,7 +31,7 @@ export function AuthCallbackPage() {
   return (
     <div className="auth-page">
       <div className="auth-panel">
-        <p className="brand-name auth-brand">Budget Desk</p>
+        <p className="brand-name auth-brand">Hearth Budgeting</p>
         <h1>Finishing sign-in…</h1>
         {error ? (
           <p className="form-error">{error}</p>

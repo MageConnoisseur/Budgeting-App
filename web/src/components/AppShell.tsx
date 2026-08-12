@@ -18,7 +18,7 @@ export function AppShell() {
         <div className="brand-block">
           <span className="brand-mark" aria-hidden />
           <div>
-            <p className="brand-name">Budget Desk</p>
+            <p className="brand-name">Hearth Budgeting</p>
             <p className="brand-tag">Plan · Track · Adjust</p>
           </div>
         </div>

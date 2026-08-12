@@ -13,7 +13,7 @@ from app.routers import auth, budgets, categories, dashboard, transactions
 settings = get_settings()
 
 app = FastAPI(
-    title="Budgeting App API",
+    title="Hearth Budgeting API",
     description=(
         "Phase 1 REST API for personal budgeting: categories, monthly/annual plans, "
         "transactions (search/sort/filter), and dashboard insights. "
