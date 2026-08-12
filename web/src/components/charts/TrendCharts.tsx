@@ -488,11 +488,13 @@ export function bandByMagnitude<T extends { planned: number; actual: number }>(
   const threshold = peak * shareOfPeak
   const major = sorted.filter((i) => Math.max(i.planned, i.actual) >= threshold)
   const smaller = sorted.filter((i) => Math.max(i.planned, i.actual) < threshold)
-  // Keep a single band when the split is empty or trivial.
+  // Keep a single band when the split is empty or too thin to help.
   if (major.length === 0 || smaller.length === 0) {
     return { major: sorted, smaller: [] }
   }
-  if (major.length < 2 || smaller.length < 2) {
+  // Need at least two majors so the shared-$ comparison still matters;
+  // a single small category is still worth its own scale.
+  if (major.length < 2) {
     return { major: sorted, smaller: [] }
   }
   return { major, smaller }
