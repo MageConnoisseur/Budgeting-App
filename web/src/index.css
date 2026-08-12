@@ -1611,3 +1611,111 @@ button:focus-visible {
   cursor: pointer;
   font: inherit;
 }
+
+/* —— Category health scores (annual) —— */
+.health-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin: 0.75rem 0 0.35rem;
+}
+
+.health-pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  padding: 0.2rem 0.55rem;
+  border: 1px solid var(--line);
+  background: var(--paper-2);
+  color: var(--ink);
+}
+
+.health-pill-under {
+  border-color: color-mix(in srgb, #9a4b1f 45%, var(--line));
+  color: #7a3b2e;
+}
+
+.health-pill-volatile {
+  border-color: color-mix(in srgb, #8a6a2f 45%, var(--line));
+  color: #6a5320;
+}
+
+.health-pill-stable {
+  border-color: color-mix(in srgb, #1f5c4a 40%, var(--line));
+  color: #1f5c4a;
+}
+
+.health-list {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.health-item {
+  padding: 0.65rem 0.7rem;
+  border-left: 3px solid var(--line);
+  background: color-mix(in srgb, var(--paper-2) 70%, transparent);
+}
+
+.health-item.health-under_planned {
+  border-left-color: #9a4b1f;
+}
+
+.health-item.health-volatile {
+  border-left-color: #8a6a2f;
+}
+
+.health-item.health-stable {
+  border-left-color: #1f5c4a;
+}
+
+.health-item-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.4rem 0.75rem;
+  align-items: center;
+}
+
+.health-item-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.health-status {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.health-status-under_planned {
+  color: #7a3b2e;
+}
+
+.health-status-volatile {
+  color: #6a5320;
+}
+
+.health-status-stable {
+  color: #1f5c4a;
+}
+
+.health-message {
+  margin: 0.35rem 0 0;
+}
+
+.health-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.9rem;
+  margin-top: 0.35rem;
+  font-size: 0.8rem;
+}

@@ -211,11 +211,27 @@ export interface PlanSuggestion {
   message: string
 }
 
+export type CategoryHealthStatus = 'stable' | 'volatile' | 'under_planned'
+
+export interface CategoryHealthScore {
+  category_id: string
+  category_name: string
+  kind: CategoryKind
+  status: CategoryHealthStatus
+  months_scored: number
+  months_over_budget: number
+  mean_ratio: string
+  volatility: number
+  lookback_months: number
+  message: string
+}
+
 export interface AnnualDashboard {
   year: number
   months: MonthlyTrendPoint[]
   category_trends: CategoryTrend[]
   plan_suggestions: PlanSuggestion[]
+  category_health: CategoryHealthScore[]
   income: KindTotals
   expense: KindTotals
   savings: KindTotals
