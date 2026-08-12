@@ -25,6 +25,7 @@ from app.schemas import (
     SpendingPaceOut,
 )
 from app.services.budget import get_or_create_month
+from app.services.category_health import build_category_health_scores
 
 ZERO = Decimal("0.00")
 MONEY = Decimal("0.01")
@@ -574,6 +575,7 @@ def build_annual_dashboard(db: Session, user: User, year: int) -> AnnualDashboar
     ]
     trends.sort(key=lambda t: (-t.months_over_budget, t.category_name))
     plan_suggestions = build_plan_suggestions(year, category_accum)
+    category_health = build_category_health_scores(year, category_accum)
 
     def sum_kind(attr_planned: str, attr_actual: str) -> KindTotals:
         planned = sum((getattr(m, attr_planned) for m in months), ZERO)
@@ -622,6 +624,7 @@ def build_annual_dashboard(db: Session, user: User, year: int) -> AnnualDashboar
         months=months,
         category_trends=trends,
         plan_suggestions=plan_suggestions,
+        category_health=category_health,
         income=sum_kind("income_planned", "income_actual"),
         expense=sum_kind("expense_planned", "expense_actual"),
         savings=sum_kind("savings_planned", "savings_actual"),

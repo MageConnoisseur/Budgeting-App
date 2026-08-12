@@ -313,6 +313,8 @@ def test_transactions_search_sort_filter_and_dashboard(
     assert "spending_pace" in annual.json()
     assert "plan_suggestions" in annual.json()
     assert isinstance(annual.json()["plan_suggestions"], list)
+    assert "category_health" in annual.json()
+    assert isinstance(annual.json()["category_health"], list)
 
     balances = client.get("/api/dashboard/savings-balances", headers=h)
     assert balances.status_code == 200
@@ -339,9 +341,12 @@ def test_transactions_search_sort_filter_and_dashboard(
     widgets = got.json()["widgets"]
     ids = {w["id"] for w in widgets}
     assert "expense-progress" in ids
-    # New default widgets (e.g. cashflow-trend, spending-pace) are appended for existing layouts.
+    # New default widgets (e.g. cashflow-trend, spending-pace, true-leftover) are appended for existing layouts.
     assert "cashflow-trend" in ids
     assert "spending-pace" in ids
+    assert "true-leftover" in ids
+    leftover = next(w for w in widgets if w["id"] == "true-leftover")
+    assert leftover["type"] == "true_leftover"
     assert len(widgets) >= 1
 
 
