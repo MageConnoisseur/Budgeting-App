@@ -1534,3 +1534,126 @@ button:focus-visible {
   cursor: pointer;
   font: inherit;
 }
+
+/* --- Recurring schedules + income estimate (Tracker) --- */
+
+.income-estimate-panel,
+.recurring-panel {
+  gap: 0.85rem;
+}
+
+.income-estimate-lead,
+.recurring-lead {
+  margin: 0.25rem 0 0;
+  max-width: 42rem;
+}
+
+.income-estimate-period {
+  font-weight: 600;
+  min-width: 9rem;
+  text-align: center;
+}
+
+.income-estimate-totals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem 1.25rem;
+}
+
+.income-estimate-totals > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.income-estimate-totals strong {
+  font-size: 1.15rem;
+}
+
+.income-estimate-msg {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.income-estimate-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.income-estimate-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font-weight: 600;
+}
+
+.income-estimate-meta {
+  margin: 0.15rem 0 0;
+  font-size: 0.82rem;
+}
+
+.recurring-prompt {
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper-2);
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.recurring-prompt p {
+  margin: 0;
+}
+
+.recurring-subhead {
+  margin: 0 0 0.4rem;
+  font-size: 0.95rem;
+}
+
+.recurring-suggestions {
+  padding: 0.65rem 0.75rem;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+}
+
+.recurring-suggest-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.recurring-suggest-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+.recurring-suggest-list p {
+  margin: 0;
+  flex: 1 1 16rem;
+  font-size: 0.92rem;
+}
+
+.recurring-group + .recurring-group {
+  margin-top: 0.75rem;
+}
+
+.recurring-due-row td {
+  background: color-mix(in srgb, var(--pine) 8%, transparent);
+}
+
+@media (max-width: 720px) {
+  .income-estimate-totals {
+    grid-template-columns: 1fr;
+  }
+}

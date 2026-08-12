@@ -13,6 +13,8 @@ Hosts on **Render**; database is **PostgreSQL on Neon**. Web (Vite/React on Verc
 - Explicit **copy from month**, **save as template**, **apply template**
 - **Annual** budget surface (`GET /api/budgets/annual/{year}`, `PUT /api/budgets/annual/cell`)
 - Transactions with **search, sort, filters**, and pagination
+- **Recurring schedules** for payday / regular expense tracking reminders (manual log/skip)
+- **Income estimate** for a month from tracker patterns + schedules
 - Dashboard monthly/annual insights with **soft** over-budget flags
 - **Spending pace** widget: rolling ~30-day actuals vs average income capacity
 - Savings bucket balances derived from the transaction ledger
@@ -86,6 +88,7 @@ All data routes are under `/api` and require auth except `/api/auth/register`, `
 | Categories | `GET/POST /categories`, `GET/PATCH/DELETE /categories/{id}` |
 | Budgets | `GET/PUT /budgets/months/{year}/{month}`, `GET /budgets/annual/{year}`, `PUT /budgets/annual/cell`, copy/template actions |
 | Transactions | `GET/POST /transactions`, `GET/PATCH/DELETE /transactions/{id}` (`q`, `kind`, `category_id`, `date_from`, `date_to`, `sort_by`, `sort_dir`) |
+| Recurring | `GET/POST /recurring-schedules`, due/log/skip, `GET /recurring-schedules/suggestions`, `GET /recurring-schedules/income-estimate` |
 | Dashboard | `GET /dashboard/monthly/{year}/{month}`, `GET /dashboard/annual/{year}`, layout + savings balances |
 
 ## Migrations

@@ -2,8 +2,14 @@ import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react
 import * as categoriesApi from '../api/categories'
 import { ApiError } from '../api/client'
 import * as txApi from '../api/transactions'
+import { IncomeEstimatePanel } from '../components/IncomeEstimatePanel'
 import { KindBadge } from '../components/KindBadge'
 import { NoteAutocomplete } from '../components/NoteAutocomplete'
+import {
+  RecurringPrompt,
+  type RecurringPromptDraft,
+} from '../components/RecurringPrompt'
+import { RecurringSchedulesPanel } from '../components/RecurringSchedulesPanel'
 import { SavingsBucketsGuide } from '../components/SavingsBucketsGuide'
 import { formatUsd, todayISO, toMoneyString } from '../lib/format'
 import type {
@@ -41,6 +47,9 @@ export function TrackerPage() {
   const [formNote, setFormNote] = useState('')
   const [noteHint, setNoteHint] = useState<NoteSuggestion | null>(null)
   const [saving, setSaving] = useState(false)
+  const [recurringPrompt, setRecurringPrompt] =
+    useState<RecurringPromptDraft | null>(null)
+  const [schedulesKey, setSchedulesKey] = useState(0)
 
   const filteredCats = useMemo(() => {
     const active = categories.filter((c) => c.kind === formKind && !c.archived)
@@ -164,6 +173,9 @@ export function TrackerPage() {
         date: formDate,
         note: formNote.trim() || null,
       }
+      const wasCreate = !editingId
+      const promptKind = formKind
+      const promptCat = categories.find((c) => c.id === formCategory)
       if (editingId) {
         await txApi.updateTransaction(editingId, payload)
       } else {
@@ -172,6 +184,20 @@ export function TrackerPage() {
       resetForm()
       setOffset(0)
       await load()
+      if (
+        wasCreate &&
+        (promptKind === 'income' || promptKind === 'expense') &&
+        promptCat
+      ) {
+        setRecurringPrompt({
+          categoryId: promptCat.id,
+          categoryName: promptCat.name,
+          kind: promptKind,
+          amount: payload.amount,
+          date: payload.date,
+          note: payload.note,
+        })
+      }
     } catch (err) {
       setError(
         err instanceof ApiError
@@ -327,6 +353,25 @@ export function TrackerPage() {
           </div>
         )}
       </form>
+
+      {recurringPrompt && (
+        <RecurringPrompt
+          draft={recurringPrompt}
+          onDismiss={() => setRecurringPrompt(null)}
+          onCreated={() => setSchedulesKey((k) => k + 1)}
+        />
+      )}
+
+      <IncomeEstimatePanel />
+
+      <RecurringSchedulesPanel
+        key={schedulesKey}
+        categories={categories}
+        onLogged={() => {
+          setOffset(0)
+          void load()
+        }}
+      />
 
       <div className="panel stack">
         <h3 className="section-title">Find past entries</h3>
