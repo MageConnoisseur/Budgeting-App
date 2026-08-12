@@ -1,5 +1,6 @@
 """Category CRUD routes."""
 
+from decimal import Decimal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -14,6 +15,19 @@ from app.models import Category, User
 from app.schemas import CategoryCreate, CategoryOut, CategoryUpdate
 
 router = APIRouter(prefix="/categories", tags=["categories"])
+
+
+def _target_for_kind(kind: CategoryKind | str, target: Decimal | None) -> Decimal | None:
+    """Only savings categories may carry a target amount."""
+    kind_val = kind.value if isinstance(kind, CategoryKind) else kind
+    if target is None:
+        return None
+    if kind_val != CategoryKind.savings.value:
+        raise HTTPException(
+            status_code=400,
+            detail="target_amount is only allowed on savings categories",
+        )
+    return target
 
 
 @router.get("", response_model=list[CategoryOut])
@@ -38,11 +52,13 @@ def create_category(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Category:
+    target = _target_for_kind(body.kind, body.target_amount)
     cat = Category(
         user_id=user.id,
         kind=body.kind.value,
         name=body.name.strip(),
         sort_order=body.sort_order,
+        target_amount=target,
     )
     db.add(cat)
     try:
@@ -88,6 +104,8 @@ def update_category(
         cat.archived = body.archived
     if body.sort_order is not None:
         cat.sort_order = body.sort_order
+    if "target_amount" in body.model_fields_set:
+        cat.target_amount = _target_for_kind(cat.kind, body.target_amount)
     db.add(cat)
     try:
         db.commit()

@@ -105,6 +105,10 @@ class Category(Base):
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Optional goal for savings buckets only; null means no target.
+    target_amount: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(14, 2), nullable=True, default=None
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

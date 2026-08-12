@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from calendar import monthrange
 from datetime import date, timedelta
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, ROUND_CEILING, ROUND_HALF_UP
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -122,6 +122,107 @@ def savings_balances(db: Session, user_id: UUID, as_of: date | None = None) -> d
     for tx in txs:
         balances[tx.category_id] = balances.get(tx.category_id, ZERO) + tx.amount
     return balances
+
+
+def project_savings_hit(
+    *,
+    balance: Decimal,
+    target: Decimal | None,
+    monthly_contribution: Decimal,
+    from_year: int,
+    from_month: int,
+) -> tuple[bool, int | None, int | None]:
+    """Project when a savings target is reached at a steady monthly contribution.
+
+    Returns ``(target_reached, hit_year, hit_month)``.
+    Hit month assumes the first contribution lands in ``from_year/from_month``.
+    """
+    if target is None or target <= ZERO:
+        return False, None, None
+    bal = _money(balance)
+    tgt = _money(target)
+    if bal >= tgt:
+        return True, from_year, from_month
+    contrib = _money(monthly_contribution)
+    if contrib <= ZERO:
+        return False, None, None
+    remaining = tgt - bal
+    months_needed = int(
+        (remaining / contrib).to_integral_value(rounding=ROUND_CEILING)
+    )
+    if months_needed < 1:
+        months_needed = 1
+    # After N contributions starting this month → offset N-1 months ahead.
+    total = from_month - 1 + (months_needed - 1)
+    hit_year = from_year + total // 12
+    hit_month = total % 12 + 1
+    return False, hit_year, hit_month
+
+
+def latest_monthly_contribution(
+    db: Session,
+    user_id: UUID,
+    category_id: UUID,
+    *,
+    year: int,
+    month: int,
+) -> Decimal:
+    """Planned contribution for year/month, else most recent prior month's plan."""
+    from app.models import BudgetLine
+
+    rows = db.execute(
+        select(BudgetMonth.year, BudgetMonth.month, BudgetLine.planned_amount)
+        .join(BudgetLine, BudgetLine.budget_month_id == BudgetMonth.id)
+        .where(
+            BudgetMonth.user_id == user_id,
+            BudgetLine.category_id == category_id,
+        )
+        .order_by(BudgetMonth.year.desc(), BudgetMonth.month.desc())
+    ).all()
+    target_key = (year, month)
+    prior: Decimal | None = None
+    for y, m, amount in rows:
+        key = (y, m)
+        if key == target_key:
+            return _money(amount)
+        if key < target_key and prior is None:
+            prior = _money(amount)
+    return prior if prior is not None else ZERO
+
+
+def build_savings_bucket(
+    *,
+    category: Category,
+    balance: Decimal,
+    planned_this_period: Decimal,
+    actual_this_period: Decimal,
+    monthly_contribution: Decimal,
+    from_year: int,
+    from_month: int,
+) -> SavingsBucketOut:
+    over = actual_this_period > planned_this_period and (
+        planned_this_period > ZERO or actual_this_period > ZERO
+    )
+    reached, hit_year, hit_month = project_savings_hit(
+        balance=balance,
+        target=category.target_amount,
+        monthly_contribution=monthly_contribution,
+        from_year=from_year,
+        from_month=from_month,
+    )
+    return SavingsBucketOut(
+        category_id=category.id,
+        category_name=category.name,
+        balance=_money(balance),
+        planned_this_period=_money(planned_this_period),
+        actual_this_period=_money(actual_this_period),
+        over_budget=over,
+        target_amount=category.target_amount,
+        target_reached=reached,
+        projected_hit_year=hit_year,
+        projected_hit_month=hit_month,
+        monthly_contribution=_money(monthly_contribution),
+    )
 
 
 def _money(value: Decimal) -> Decimal:
@@ -480,14 +581,14 @@ def build_monthly_dashboard(
     balances = savings_balances(db, user.id, as_of=end)
     savings_cats = [c for c in categories if c.kind == CategoryKind.savings.value]
     buckets = [
-        SavingsBucketOut(
-            category_id=c.id,
-            category_name=c.name,
+        build_savings_bucket(
+            category=c,
             balance=balances.get(c.id, ZERO),
             planned_this_period=planned.get(c.id, ZERO),
             actual_this_period=actuals.get(c.id, ZERO),
-            over_budget=actuals.get(c.id, ZERO) > planned.get(c.id, ZERO)
-            and (planned.get(c.id, ZERO) > ZERO or actuals.get(c.id, ZERO) > ZERO),
+            monthly_contribution=planned.get(c.id, ZERO),
+            from_year=year,
+            from_month=month,
         )
         for c in savings_cats
     ]
@@ -596,27 +697,31 @@ def build_annual_dashboard(db: Session, user: User, year: int) -> AnnualDashboar
             Category.archived.is_(False),
         )
     ).all()
-    buckets = [
-        SavingsBucketOut(
-            category_id=c.id,
-            category_name=c.name,
-            balance=balances.get(c.id, ZERO),
-            planned_this_period=ZERO,
-            actual_this_period=ZERO,
-            over_budget=False,
-        )
-        for c in savings_cats
-    ]
-    for b in buckets:
-        if b.category_id in category_accum:
-            data = category_accum[b.category_id]
-            b.planned_this_period = data["planned"]
-            b.actual_this_period = data["actual"]
-            b.over_budget = data["actual"] > data["planned"] and (
-                data["planned"] > ZERO or data["actual"] > ZERO
-            )
-
+    # Projection reference: today when browsing the current/future year, else Dec.
     as_of = min(date.today(), date(year, 12, 31))
+    buckets = []
+    for c in savings_cats:
+        planned_year = ZERO
+        actual_year = ZERO
+        if c.id in category_accum:
+            data = category_accum[c.id]
+            planned_year = data["planned"]
+            actual_year = data["actual"]
+        monthly_rate = latest_monthly_contribution(
+            db, user.id, c.id, year=as_of.year, month=as_of.month
+        )
+        buckets.append(
+            build_savings_bucket(
+                category=c,
+                balance=balances.get(c.id, ZERO),
+                planned_this_period=planned_year,
+                actual_this_period=actual_year,
+                monthly_contribution=monthly_rate,
+                from_year=as_of.year,
+                from_month=as_of.month,
+            )
+        )
+
     spending_pace = build_spending_pace(db, user, as_of)
 
     return AnnualDashboardOut(

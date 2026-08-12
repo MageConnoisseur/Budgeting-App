@@ -91,15 +91,19 @@ def savings_balances(
             Category.archived.is_(False),
         )
     ).all()
+    today = date.today()
     zero = Decimal("0.00")
     return [
-        SavingsBucketOut(
-            category_id=c.id,
-            category_name=c.name,
+        dashboard_service.build_savings_bucket(
+            category=c,
             balance=balances.get(c.id, zero),
             planned_this_period=zero,
             actual_this_period=zero,
-            over_budget=False,
+            monthly_contribution=dashboard_service.latest_monthly_contribution(
+                db, user.id, c.id, year=today.year, month=today.month
+            ),
+            from_year=today.year,
+            from_month=today.month,
         )
         for c in cats
     ]

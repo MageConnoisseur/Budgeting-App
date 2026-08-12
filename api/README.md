@@ -16,6 +16,7 @@ Hosts on **Render**; database is **PostgreSQL on Neon**. Web (Vite/React on Verc
 - Dashboard monthly/annual insights with **soft** over-budget flags
 - **Spending pace** widget: rolling ~30-day actuals vs average income capacity
 - Savings bucket balances derived from the transaction ledger
+- Optional savings **targets** with projected hit month from balance + monthly contribution
 - Persisted dashboard widget layouts + Monthly/Annual view preferences on the user
 
 ## Auth strategy

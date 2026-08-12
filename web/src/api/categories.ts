@@ -16,6 +16,7 @@ export function createCategory(body: {
   kind: CategoryKind
   name: string
   sort_order?: number
+  target_amount?: string | null
 }) {
   return apiFetch<Category>('/categories', {
     method: 'POST',
@@ -25,7 +26,12 @@ export function createCategory(body: {
 
 export function updateCategory(
   id: string,
-  body: { name?: string; archived?: boolean; sort_order?: number },
+  body: {
+    name?: string
+    archived?: boolean
+    sort_order?: number
+    target_amount?: string | null
+  },
 ) {
   return apiFetch<Category>(`/categories/${id}`, {
     method: 'PATCH',
