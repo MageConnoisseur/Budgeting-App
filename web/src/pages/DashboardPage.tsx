@@ -14,6 +14,7 @@ import { PeriodNavigator } from '../components/PeriodNavigator'
 import { KindBadge } from '../components/KindBadge'
 import { SoftWarning } from '../components/SoftWarning'
 import { SavingsBucketsGuide } from '../components/SavingsBucketsGuide'
+import { TrueLeftoverWidget } from '../components/TrueLeftoverWidget'
 import { ViewModeToggle } from '../components/ViewModeToggle'
 import { useAuth } from '../context/AuthContext'
 import {
@@ -520,6 +521,21 @@ export function DashboardPage() {
       return <SpendingPaceWidget pace={pace} title={w.title} />
     }
 
+    if (w.type === 'true_leftover') {
+      const data = view === 'monthly' ? monthly : annual
+      if (data) {
+        return (
+          <TrueLeftoverWidget
+            income={data.income}
+            expense={data.expense}
+            savings={data.savings}
+            title={w.title}
+            scopeLabel={view === 'monthly' ? 'this month' : 'this year'}
+          />
+        )
+      }
+    }
+
     if (view === 'monthly' && monthly) {
       if (w.type === 'kind_progress') {
         const kind = (w.config.kind as string) || 'expense'
@@ -915,7 +931,14 @@ export function DashboardPage() {
       ) : (
         <div className="dashboard-layout">
           {widgets.map((w) => (
-            <div key={w.id} className="widget-shell">
+            <div
+              key={w.id}
+              className={
+                w.type === 'true_leftover'
+                  ? 'widget-shell widget-shell-sticky'
+                  : 'widget-shell'
+              }
+            >
               <div className="widget-controls">
                 <button
                   type="button"
