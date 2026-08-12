@@ -1,6 +1,7 @@
 import { apiFetch } from './client'
 import type {
   CategoryKind,
+  NoteSuggestionList,
   SortDir,
   Transaction,
   TransactionList,
@@ -59,4 +60,19 @@ export function deleteTransaction(id: string) {
   return apiFetch<{ detail: string }>(`/transactions/${id}`, {
     method: 'DELETE',
   })
+}
+
+export function suggestNotes(params: {
+  q?: string
+  category_id?: string
+  limit?: number
+} = {}) {
+  const q = new URLSearchParams()
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== '') q.set(key, String(value))
+  })
+  const qs = q.toString()
+  return apiFetch<NoteSuggestionList>(
+    `/transactions/note-suggestions${qs ? `?${qs}` : ''}`,
+  )
 }

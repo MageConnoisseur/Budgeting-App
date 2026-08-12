@@ -3,11 +3,13 @@ import * as categoriesApi from '../api/categories'
 import { ApiError } from '../api/client'
 import * as txApi from '../api/transactions'
 import { KindBadge } from '../components/KindBadge'
+import { NoteAutocomplete } from '../components/NoteAutocomplete'
 import { SavingsBucketsGuide } from '../components/SavingsBucketsGuide'
 import { formatUsd, todayISO, toMoneyString } from '../lib/format'
 import type {
   Category,
   CategoryKind,
+  NoteSuggestion,
   SortDir,
   Transaction,
   TransactionSortBy,
@@ -37,6 +39,7 @@ export function TrackerPage() {
   const [formAmount, setFormAmount] = useState('')
   const [formDate, setFormDate] = useState(todayISO())
   const [formNote, setFormNote] = useState('')
+  const [noteHint, setNoteHint] = useState<NoteSuggestion | null>(null)
   const [saving, setSaving] = useState(false)
 
   const filteredCats = useMemo(() => {
@@ -113,6 +116,7 @@ export function TrackerPage() {
     setFormKind('expense')
     setFormAmount('')
     setFormNote('')
+    setNoteHint(null)
     setFormDate(todayISO())
     const expenseCats = categories.filter((c) => c.kind === 'expense' && !c.archived)
     setFormCategory(expenseCats[0]?.id ?? '')
@@ -126,8 +130,19 @@ export function TrackerPage() {
     setFormAmount(tx.amount)
     setFormDate(tx.date)
     setFormNote(tx.note ?? '')
+    setNoteHint(null)
     setError(null)
     window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  function onNotePick(suggestion: NoteSuggestion) {
+    setNoteHint(suggestion)
+  }
+
+  function applyHintCategory() {
+    if (!noteHint) return
+    setFormKind(noteHint.last_kind)
+    setFormCategory(noteHint.last_category_id)
   }
 
   function cancelEdit() {
@@ -258,13 +273,16 @@ export function TrackerPage() {
               required
             />
           </label>
-          <label className="grow">
+          <label className="grow note-field">
             Note
-            <input
+            <NoteAutocomplete
               value={formNote}
-              onChange={(e) => setFormNote(e.target.value)}
-              maxLength={2000}
-              placeholder="Optional"
+              onChange={(v) => {
+                setFormNote(v)
+                setNoteHint(null)
+              }}
+              categoryId={formCategory || undefined}
+              onPick={onNotePick}
             />
           </label>
           <button className="btn primary" type="submit" disabled={saving}>
@@ -285,6 +303,24 @@ export function TrackerPage() {
             </button>
           )}
         </div>
+        {noteHint && (
+          <p className="note-memory-hint muted">
+            Last logged {formatUsd(noteHint.last_amount)} under{' '}
+            {noteHint.last_category_name} ({noteHint.last_date})
+            {noteHint.last_category_id !== formCategory && (
+              <>
+                {' '}
+                <button
+                  type="button"
+                  className="btn linkish"
+                  onClick={applyHintCategory}
+                >
+                  Use that category
+                </button>
+              </>
+            )}
+          </p>
+        )}
         {formKind === 'savings' && (
           <div id="savings-amount-hint">
             <SavingsBucketsGuide variant="tracker" defaultOpen />

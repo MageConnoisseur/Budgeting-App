@@ -13,12 +13,14 @@ from app.enums import CategoryKind
 from app.models import Category, Transaction, User
 from app.schemas import (
     MessageOut,
+    NoteSuggestionListOut,
+    NoteSuggestionOut,
     TransactionCreate,
     TransactionListOut,
     TransactionOut,
     TransactionUpdate,
 )
-from app.services.transactions import list_transactions
+from app.services.transactions import list_transactions, suggest_notes
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
 
@@ -63,6 +65,46 @@ def search_transactions(
         total=total,
         limit=limit,
         offset=offset,
+    )
+
+
+@router.get("/note-suggestions", response_model=NoteSuggestionListOut)
+def note_suggestions(
+    q: str | None = Query(None, description="Filter notes by prefix/substring"),
+    category_id: UUID | None = Query(
+        None, description="Prefer notes previously used with this category"
+    ),
+    limit: int = Query(10, ge=1, le=25),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> NoteSuggestionListOut:
+    if category_id is not None:
+        cat = db.scalar(
+            select(Category).where(Category.id == category_id, Category.user_id == user.id)
+        )
+        if cat is None:
+            raise HTTPException(status_code=404, detail="Category not found")
+
+    items = suggest_notes(
+        db,
+        user,
+        q=q,
+        category_id=category_id,
+        limit=limit,
+    )
+    return NoteSuggestionListOut(
+        items=[
+            NoteSuggestionOut(
+                note=i.note,
+                use_count=i.use_count,
+                last_date=i.last_date,
+                last_amount=i.last_amount,
+                last_category_id=i.last_category_id,
+                last_category_name=i.last_category_name,
+                last_kind=CategoryKind(i.last_kind),
+            )
+            for i in items
+        ]
     )
 
 
