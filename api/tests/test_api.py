@@ -337,6 +337,81 @@ def test_transactions_search_sort_filter_and_dashboard(
     assert len(widgets) >= 1
 
 
+def test_category_rename_and_transaction_update(auth_headers: dict[str, str]) -> None:
+    h = auth_headers
+    groceries = client.post(
+        "/api/categories",
+        headers=h,
+        json={"kind": "expense", "name": "Groceries"},
+    )
+    assert groceries.status_code == 201, groceries.text
+    groceries_id = groceries.json()["id"]
+
+    dining = client.post(
+        "/api/categories",
+        headers=h,
+        json={"kind": "expense", "name": "Dining"},
+    )
+    assert dining.status_code == 201, dining.text
+    dining_id = dining.json()["id"]
+
+    renamed = client.patch(
+        f"/api/categories/{groceries_id}",
+        headers=h,
+        json={"name": "Food at Home"},
+    )
+    assert renamed.status_code == 200, renamed.text
+    assert renamed.json()["name"] == "Food at Home"
+
+    # Duplicate name within the same kind should fail
+    dup = client.patch(
+        f"/api/categories/{dining_id}",
+        headers=h,
+        json={"name": "Food at Home"},
+    )
+    assert dup.status_code == 400
+
+    created = client.post(
+        "/api/transactions",
+        headers=h,
+        json={
+            "category_id": groceries_id,
+            "amount": "12.50",
+            "date": "2026-06-01",
+            "note": "typo amount",
+        },
+    )
+    assert created.status_code == 201, created.text
+    tx_id = created.json()["id"]
+
+    updated = client.patch(
+        f"/api/transactions/{tx_id}",
+        headers=h,
+        json={
+            "category_id": dining_id,
+            "amount": "18.75",
+            "date": "2026-06-02",
+            "note": "corrected lunch",
+        },
+    )
+    assert updated.status_code == 200, updated.text
+    body = updated.json()
+    assert body["category_id"] == dining_id
+    assert Decimal(body["amount"]) == Decimal("18.75")
+    assert body["date"] == "2026-06-02"
+    assert body["note"] == "corrected lunch"
+    assert body["category"]["name"] == "Dining"
+
+    # Clearing the note is supported
+    cleared = client.patch(
+        f"/api/transactions/{tx_id}",
+        headers=h,
+        json={"note": None},
+    )
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["note"] is None
+
+
 def test_preferences(auth_headers: dict[str, str]) -> None:
     h = auth_headers
     r = client.patch(

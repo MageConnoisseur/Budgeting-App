@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from datetime import date as Date
 from decimal import Decimal
 from typing import Any, Optional
 from uuid import UUID
@@ -216,7 +217,8 @@ class TransactionCreate(BaseModel):
 class TransactionUpdate(BaseModel):
     category_id: Optional[UUID] = None
     amount: Optional[Decimal] = Field(default=None, max_digits=14, decimal_places=2)
-    date: Optional[date] = None
+    # Use Date alias: `date: Optional[date] = None` shadows the type under PEP563.
+    date: Optional[Date] = None
     note: Optional[str] = Field(default=None, max_length=2000)
 
     @field_validator("amount")

@@ -30,6 +30,7 @@ export function TrackerPage() {
   const [sortBy, setSortBy] = useState<TransactionSortBy>('date')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
 
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [formKind, setFormKind] = useState<CategoryKind>('expense')
   const [formCategory, setFormCategory] = useState('')
   const [formAmount, setFormAmount] = useState('')
@@ -37,10 +38,17 @@ export function TrackerPage() {
   const [formNote, setFormNote] = useState('')
   const [saving, setSaving] = useState(false)
 
-  const filteredCats = useMemo(
-    () => categories.filter((c) => c.kind === formKind && !c.archived),
-    [categories, formKind],
-  )
+  const filteredCats = useMemo(() => {
+    const active = categories.filter((c) => c.kind === formKind && !c.archived)
+    // Keep the current selection visible while editing, even if archived.
+    if (formCategory && !active.some((c) => c.id === formCategory)) {
+      const current = categories.find((c) => c.id === formCategory)
+      if (current && current.kind === formKind) {
+        return [current, ...active]
+      }
+    }
+    return active
+  }, [categories, formKind, formCategory])
 
   const filterCats = useMemo(
     () =>
@@ -99,7 +107,33 @@ export function TrackerPage() {
     setOffset(0)
   }
 
-  async function onCreate(e: FormEvent) {
+  function resetForm() {
+    setEditingId(null)
+    setFormKind('expense')
+    setFormAmount('')
+    setFormNote('')
+    setFormDate(todayISO())
+    const expenseCats = categories.filter((c) => c.kind === 'expense' && !c.archived)
+    setFormCategory(expenseCats[0]?.id ?? '')
+  }
+
+  function startEdit(tx: Transaction) {
+    const txKind = tx.category?.kind ?? 'expense'
+    setEditingId(tx.id)
+    setFormKind(txKind)
+    setFormCategory(tx.category_id)
+    setFormAmount(tx.amount)
+    setFormDate(tx.date)
+    setFormNote(tx.note ?? '')
+    setError(null)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  function cancelEdit() {
+    resetForm()
+  }
+
+  async function onSubmit(e: FormEvent) {
     e.preventDefault()
     if (!formCategory) {
       setError('Select a category')
@@ -108,19 +142,28 @@ export function TrackerPage() {
     setSaving(true)
     setError(null)
     try {
-      await txApi.createTransaction({
+      const payload = {
         category_id: formCategory,
         amount: toMoneyString(formAmount),
         date: formDate,
         note: formNote.trim() || null,
-      })
-      setFormAmount('')
-      setFormNote('')
-      setFormDate(todayISO())
+      }
+      if (editingId) {
+        await txApi.updateTransaction(editingId, payload)
+      } else {
+        await txApi.createTransaction(payload)
+      }
+      resetForm()
       setOffset(0)
       await load()
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail : 'Could not log transaction')
+      setError(
+        err instanceof ApiError
+          ? err.detail
+          : editingId
+            ? 'Could not update transaction'
+            : 'Could not log transaction',
+      )
     } finally {
       setSaving(false)
     }
@@ -129,6 +172,7 @@ export function TrackerPage() {
   async function onDelete(id: string) {
     try {
       await txApi.deleteTransaction(id)
+      if (editingId === id) resetForm()
       await load()
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : 'Delete failed')
@@ -157,8 +201,10 @@ export function TrackerPage() {
         </div>
       </header>
 
-      <form className="panel stack" onSubmit={onCreate}>
-        <h3 className="section-title">Log transaction</h3>
+      <form className="panel stack" onSubmit={onSubmit}>
+        <h3 className="section-title">
+          {editingId ? 'Edit transaction' : 'Log transaction'}
+        </h3>
         <div className="inline-form wrap">
           <label>
             Kind
@@ -218,8 +264,22 @@ export function TrackerPage() {
             />
           </label>
           <button className="btn primary" type="submit" disabled={saving}>
-            {saving ? 'Saving…' : 'Add'}
+            {saving
+              ? 'Saving…'
+              : editingId
+                ? 'Save changes'
+                : 'Add'}
           </button>
+          {editingId && (
+            <button
+              className="btn ghost"
+              type="button"
+              onClick={cancelEdit}
+              disabled={saving}
+            >
+              Cancel
+            </button>
+          )}
         </div>
         {formKind === 'savings' && (
           <p className="muted compact">
@@ -361,7 +421,10 @@ export function TrackerPage() {
               </thead>
               <tbody>
                 {items.map((tx) => (
-                  <tr key={tx.id}>
+                  <tr
+                    key={tx.id}
+                    className={editingId === tx.id ? 'row-editing' : undefined}
+                  >
                     <td>{tx.date}</td>
                     <td>
                       {tx.category ? (
@@ -374,6 +437,14 @@ export function TrackerPage() {
                     <td className="num">{formatUsd(tx.amount)}</td>
                     <td className="note-cell">{tx.note || '—'}</td>
                     <td className="actions">
+                      <button
+                        type="button"
+                        className="btn ghost"
+                        onClick={() => startEdit(tx)}
+                        disabled={editingId === tx.id}
+                      >
+                        Edit
+                      </button>
                       <button
                         type="button"
                         className="btn ghost"
