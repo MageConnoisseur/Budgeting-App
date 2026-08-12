@@ -1,10 +1,14 @@
 """Add recurring_schedules for payday / monthly tracking reminders.
 
-Revision ID: b2c3d4e5f6a7
-Revises: a1b2c3d4e5f6
+Revision ID: c3d4e5f6a7b8
+Revises: b2c3d4e5f6a7
 Create Date: 2026-08-12 20:25:00.000000
 
 Additive migration — new table only; no changes to existing rows.
+
+Note: originally landed with the same revision id as the savings
+target_amount migration (b2c3d4e5f6a7). Re-id'd so Alembic can apply both
+in sequence after that revision was already stamped in production.
 """
 
 from typing import Sequence, Union
@@ -13,8 +17,8 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision: str = "b2c3d4e5f6a7"
-down_revision: Union[str, Sequence[str], None] = "a1b2c3d4e5f6"
+revision: str = "c3d4e5f6a7b8"
+down_revision: Union[str, Sequence[str], None] = "b2c3d4e5f6a7"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
