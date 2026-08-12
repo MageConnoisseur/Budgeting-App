@@ -89,6 +89,20 @@ export interface TransactionList {
   offset: number
 }
 
+export interface NoteSuggestion {
+  note: string
+  use_count: number
+  last_date: string
+  last_amount: string
+  last_category_id: string
+  last_category_name: string
+  last_kind: CategoryKind
+}
+
+export interface NoteSuggestionList {
+  items: NoteSuggestion[]
+}
+
 export interface KindTotals {
   planned: string
   actual: string

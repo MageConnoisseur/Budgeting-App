@@ -495,6 +495,116 @@ def test_category_rename_and_transaction_update(auth_headers: dict[str, str]) ->
     assert cleared.json()["note"] is None
 
 
+def test_note_suggestions(auth_headers: dict[str, str]) -> None:
+    h = auth_headers
+    groceries = client.post(
+        "/api/categories",
+        headers=h,
+        json={"kind": "expense", "name": "Groceries"},
+    )
+    assert groceries.status_code == 201, groceries.text
+    groceries_id = groceries.json()["id"]
+
+    rent_cat = client.post(
+        "/api/categories",
+        headers=h,
+        json={"kind": "expense", "name": "Housing"},
+    )
+    assert rent_cat.status_code == 201, rent_cat.text
+    housing_id = rent_cat.json()["id"]
+
+    for payload in (
+        {
+            "category_id": groceries_id,
+            "amount": "40.00",
+            "date": "2026-07-01",
+            "note": "Trader Joe's",
+        },
+        {
+            "category_id": groceries_id,
+            "amount": "55.25",
+            "date": "2026-07-08",
+            "note": " trader joe's ",
+        },
+        {
+            "category_id": groceries_id,
+            "amount": "12.00",
+            "date": "2026-07-09",
+            "note": "Costco",
+        },
+        {
+            "category_id": housing_id,
+            "amount": "1800.00",
+            "date": "2026-07-01",
+            "note": "rent",
+        },
+        {
+            "category_id": housing_id,
+            "amount": "1800.00",
+            "date": "2026-08-01",
+            "note": "Rent",
+        },
+        {
+            "category_id": housing_id,
+            "amount": "50.00",
+            "date": "2026-07-15",
+            "note": None,
+        },
+    ):
+        r = client.post("/api/transactions", headers=h, json=payload)
+        assert r.status_code == 201, r.text
+
+    # Empty query returns frequent notes (blank notes excluded)
+    top = client.get("/api/transactions/note-suggestions", headers=h)
+    assert top.status_code == 200, top.text
+    notes = [i["note"] for i in top.json()["items"]]
+    assert len(notes) == 3
+    assert notes[0].lower() in {"trader joe's", "rent"}
+    assert all(n.strip() for n in notes)
+
+    # Case-insensitive grouping + most recent casing/amount
+    trader = client.get(
+        "/api/transactions/note-suggestions",
+        headers=h,
+        params={"q": "trader"},
+    )
+    assert trader.status_code == 200, trader.text
+    items = trader.json()["items"]
+    assert len(items) == 1
+    assert items[0]["note"].lower() == "trader joe's"
+    assert items[0]["use_count"] == 2
+    assert items[0]["last_date"] == "2026-07-08"
+    assert Decimal(items[0]["last_amount"]) == Decimal("55.25")
+    assert items[0]["last_category_id"] == groceries_id
+    assert items[0]["last_kind"] == "expense"
+
+    # Prefix with one character
+    r_prefix = client.get(
+        "/api/transactions/note-suggestions",
+        headers=h,
+        params={"q": "r"},
+    )
+    assert r_prefix.status_code == 200
+    assert any(i["note"].lower() == "rent" for i in r_prefix.json()["items"])
+
+    # Category preference boosts notes used with that category
+    preferred = client.get(
+        "/api/transactions/note-suggestions",
+        headers=h,
+        params={"category_id": housing_id},
+    )
+    assert preferred.status_code == 200
+    preferred_notes = [i["note"].lower() for i in preferred.json()["items"]]
+    assert preferred_notes[0] == "rent"
+
+    missing = client.get(
+        "/api/transactions/note-suggestions",
+        headers=h,
+        params={"category_id": str(uuid.uuid4())},
+    )
+    assert missing.status_code == 404
+
+
 def test_preferences(auth_headers: dict[str, str]) -> None:
     h = auth_headers
     r = client.patch(

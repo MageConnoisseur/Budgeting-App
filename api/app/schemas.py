@@ -250,6 +250,20 @@ class TransactionListOut(BaseModel):
     offset: int
 
 
+class NoteSuggestionOut(BaseModel):
+    note: str
+    use_count: int
+    last_date: date
+    last_amount: Decimal
+    last_category_id: UUID
+    last_category_name: str
+    last_kind: CategoryKind
+
+
+class NoteSuggestionListOut(BaseModel):
+    items: list[NoteSuggestionOut]
+
+
 # --- Dashboard ---
 
 
