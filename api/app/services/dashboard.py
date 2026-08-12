@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from calendar import monthrange
-from datetime import date
-from decimal import Decimal
+from datetime import date, timedelta
+from decimal import Decimal, ROUND_HALF_UP
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.enums import CategoryKind
@@ -20,10 +20,16 @@ from app.schemas import (
     MonthlyDashboardOut,
     MonthlyTrendPoint,
     SavingsBucketOut,
+    SpendingPaceDay,
+    SpendingPaceOut,
 )
 from app.services.budget import get_or_create_month
 
 ZERO = Decimal("0.00")
+MONEY = Decimal("0.01")
+# Rolling actuals window and income-average lookback (calendar-day based).
+PACE_WINDOW_DAYS = 30
+INCOME_LOOKBACK_DAYS = 183  # ~6 months; shorter if the user has less history
 
 
 def _month_date_range(year: int, month: int) -> tuple[date, date]:
@@ -101,8 +107,189 @@ def savings_balances(db: Session, user_id: UUID, as_of: date | None = None) -> d
     return balances
 
 
+def _money(value: Decimal) -> Decimal:
+    return value.quantize(MONEY, rounding=ROUND_HALF_UP)
+
+
+def _first_tracking_date(db: Session, user_id: UUID) -> date | None:
+    return db.scalar(
+        select(func.min(Transaction.date)).where(Transaction.user_id == user_id)
+    )
+
+
+def _empty_spending_pace(as_of: date) -> SpendingPaceOut:
+    start = as_of - timedelta(days=PACE_WINDOW_DAYS - 1)
+    return SpendingPaceOut(
+        as_of=as_of,
+        window_start=start,
+        window_end=as_of,
+        window_days=PACE_WINDOW_DAYS,
+        income=ZERO,
+        expense=ZERO,
+        savings=ZERO,
+        outflow=ZERO,
+        net=ZERO,
+        average_daily_income=ZERO,
+        expected_income=ZERO,
+        income_lookback_start=None,
+        income_lookback_end=None,
+        income_lookback_days=0,
+        tracking_started_on=None,
+        overspending=False,
+        has_data=False,
+        days=[],
+    )
+
+
+def build_spending_pace(db: Session, user: User, as_of: date) -> SpendingPaceOut:
+    """Rolling actual income/expense/savings vs average income capacity.
+
+    Uses the last ~30 days of actuals (clamped to the first tracking day so new
+    users are not compared against empty pre-history). Income capacity is the
+    average daily income since tracking began, looking back at most ~6 months.
+    Soft overspending when window outflow (expenses + net savings) exceeds that
+    expected income for the same number of days.
+    """
+    tracking_started = _first_tracking_date(db, user.id)
+    if tracking_started is None or tracking_started > as_of:
+        return _empty_spending_pace(as_of)
+
+    raw_window_start = as_of - timedelta(days=PACE_WINDOW_DAYS - 1)
+    window_start = max(raw_window_start, tracking_started)
+    window_end = as_of
+    window_days = (window_end - window_start).days + 1
+
+    lookback_floor = as_of - timedelta(days=INCOME_LOOKBACK_DAYS - 1)
+    income_lookback_start = max(tracking_started, lookback_floor)
+    income_lookback_end = as_of
+    income_lookback_days = (income_lookback_end - income_lookback_start).days + 1
+
+    # Load every transaction needed for lookback income + the pace window.
+    load_start = min(income_lookback_start, window_start)
+    txs = db.scalars(
+        select(Transaction)
+        .options(joinedload(Transaction.category))
+        .where(
+            Transaction.user_id == user.id,
+            Transaction.date >= load_start,
+            Transaction.date <= as_of,
+        )
+        .order_by(Transaction.date.asc())
+    ).unique().all()
+
+    income_lookback_total = ZERO
+    daily: dict[date, dict[str, Decimal]] = {}
+    cursor = window_start
+    while cursor <= window_end:
+        daily[cursor] = {"income": ZERO, "expense": ZERO, "savings": ZERO}
+        cursor += timedelta(days=1)
+
+    for tx in txs:
+        kind = tx.category.kind
+        if kind == CategoryKind.income.value:
+            amount = abs(tx.amount)
+            if income_lookback_start <= tx.date <= income_lookback_end:
+                income_lookback_total += amount
+            if window_start <= tx.date <= window_end:
+                daily[tx.date]["income"] += amount
+        elif kind == CategoryKind.expense.value:
+            amount = abs(tx.amount)
+            if window_start <= tx.date <= window_end:
+                daily[tx.date]["expense"] += amount
+        elif kind == CategoryKind.savings.value:
+            if window_start <= tx.date <= window_end:
+                daily[tx.date]["savings"] += tx.amount
+
+    avg_daily_raw = (
+        income_lookback_total / Decimal(income_lookback_days)
+        if income_lookback_days > 0
+        else ZERO
+    )
+    avg_daily = _money(avg_daily_raw)
+    # Scale lookback income to the window length without intermediate drift.
+    expected_income = (
+        _money(
+            income_lookback_total
+            * Decimal(window_days)
+            / Decimal(income_lookback_days)
+        )
+        if income_lookback_days > 0
+        else ZERO
+    )
+
+    days_out: list[SpendingPaceDay] = []
+    cum_income = ZERO
+    cum_expense = ZERO
+    cum_savings = ZERO
+    ordered_dates = sorted(daily.keys())
+    for i, day in enumerate(ordered_dates):
+        bucket = daily[day]
+        cum_income += bucket["income"]
+        cum_expense += bucket["expense"]
+        cum_savings += bucket["savings"]
+        cum_outflow = cum_expense + cum_savings
+        day_count = i + 1
+        expected_to_date = (
+            _money(
+                income_lookback_total
+                * Decimal(day_count)
+                / Decimal(income_lookback_days)
+            )
+            if income_lookback_days > 0
+            else ZERO
+        )
+        days_out.append(
+            SpendingPaceDay(
+                date=day,
+                income=_money(bucket["income"]),
+                expense=_money(bucket["expense"]),
+                savings=_money(bucket["savings"]),
+                cumulative_income=_money(cum_income),
+                cumulative_expense=_money(cum_expense),
+                cumulative_savings=_money(cum_savings),
+                cumulative_outflow=_money(cum_outflow),
+                cumulative_net=_money(cum_income - cum_expense - cum_savings),
+                cumulative_expected_income=expected_to_date,
+            )
+        )
+
+    income_total = _money(cum_income)
+    expense_total = _money(cum_expense)
+    savings_total = _money(cum_savings)
+    outflow = _money(expense_total + savings_total)
+    net = _money(income_total - expense_total - savings_total)
+    overspending = expected_income > ZERO and outflow > expected_income
+
+    return SpendingPaceOut(
+        as_of=as_of,
+        window_start=window_start,
+        window_end=window_end,
+        window_days=window_days,
+        income=income_total,
+        expense=expense_total,
+        savings=savings_total,
+        outflow=outflow,
+        net=net,
+        average_daily_income=avg_daily,
+        expected_income=expected_income,
+        income_lookback_start=income_lookback_start,
+        income_lookback_end=income_lookback_end,
+        income_lookback_days=income_lookback_days,
+        tracking_started_on=tracking_started,
+        overspending=overspending,
+        has_data=True,
+        days=days_out,
+    )
+
+
 def build_monthly_dashboard(
-    db: Session, user: User, year: int, month: int, *, ensure_month: bool = True
+    db: Session,
+    user: User,
+    year: int,
+    month: int,
+    *,
+    ensure_month: bool = True,
+    include_pace: bool = True,
 ) -> MonthlyDashboardOut:
     budget_month = _load_budget_month(db, user, year, month, ensure=ensure_month)
     start, end = _month_date_range(year, month)
@@ -159,6 +346,13 @@ def build_monthly_dashboard(
         for c in savings_cats
     ]
 
+    if include_pace:
+        # Pace is "current health" as of today, or the month end when browsing history.
+        as_of = min(date.today(), end)
+        spending_pace = build_spending_pace(db, user, as_of)
+    else:
+        spending_pace = _empty_spending_pace(min(date.today(), end))
+
     return MonthlyDashboardOut(
         year=year,
         month=month,
@@ -167,6 +361,7 @@ def build_monthly_dashboard(
         savings=_kind_totals(by_kind[CategoryKind.savings]),
         categories=progress,
         savings_buckets=buckets,
+        spending_pace=spending_pace,
     )
 
 
@@ -176,7 +371,9 @@ def build_annual_dashboard(db: Session, user: User, year: int) -> AnnualDashboar
     category_accum: dict[UUID, dict] = {}
 
     for month in range(1, 13):
-        md = build_monthly_dashboard(db, user, year, month, ensure_month=False)
+        md = build_monthly_dashboard(
+            db, user, year, month, ensure_month=False, include_pace=False
+        )
         months.append(
             MonthlyTrendPoint(
                 year=year,
@@ -261,6 +458,9 @@ def build_annual_dashboard(db: Session, user: User, year: int) -> AnnualDashboar
                 data["planned"] > ZERO or data["actual"] > ZERO
             )
 
+    as_of = min(date.today(), date(year, 12, 31))
+    spending_pace = build_spending_pace(db, user, as_of)
+
     return AnnualDashboardOut(
         year=year,
         months=months,
@@ -269,4 +469,5 @@ def build_annual_dashboard(db: Session, user: User, year: int) -> AnnualDashboar
         expense=sum_kind("expense_planned", "expense_actual"),
         savings=sum_kind("savings_planned", "savings_actual"),
         savings_buckets=buckets,
+        spending_pace=spending_pace,
     )

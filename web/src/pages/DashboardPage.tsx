@@ -21,6 +21,7 @@ import type {
   DashboardWidget,
   KindTotals,
   MonthlyDashboard,
+  SpendingPace,
   ViewMode,
 } from '../types/api'
 
@@ -31,6 +32,139 @@ const COLOR = {
   planned: '#8aa396',
   actual: '#1f4b3a',
   balance: '#3d7a5f',
+}
+
+function formatShortDate(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number)
+  if (!y || !m || !d) return iso
+  return `${MONTH_SHORT[m - 1]} ${d}`
+}
+
+function SpendingPaceWidget({
+  pace,
+  title,
+}: {
+  pace: SpendingPace
+  title?: string | null
+}) {
+  if (!pace.has_data) {
+    return (
+      <div className="widget">
+        <h3>{title || 'Spending pace'}</h3>
+        <p className="muted">
+          Log income and expenses to see a rolling pace check. This uses actuals
+          over the last 30 days against your average income — not your monthly
+          plan — so mid-month paydays do not falsely look like overspending.
+        </p>
+      </div>
+    )
+  }
+
+  const outflow = Number(pace.outflow)
+  const expected = Number(pace.expected_income)
+  const pct =
+    expected > 0 ? Math.min(140, (outflow / expected) * 100) : outflow > 0 ? 100 : 0
+  const headroom = expected - outflow
+
+  const chartLabels = pace.days.map((d, i) => {
+    const show =
+      i === 0 || i === pace.days.length - 1 || (i + 1) % 5 === 0
+    return show ? String(Number(d.date.slice(8))) : ''
+  })
+
+  return (
+    <div className="widget">
+      <div className="widget-head">
+        <h3>{title || 'Spending pace'}</h3>
+        {pace.overspending && (
+          <SoftWarning message="Outflow above average income" />
+        )}
+      </div>
+      <p className="muted compact">
+        Actuals for {formatShortDate(pace.window_start)} –{' '}
+        {formatShortDate(pace.window_end)} ({pace.window_days} days). Capacity
+        uses average daily income over{' '}
+        {pace.income_lookback_days} day
+        {pace.income_lookback_days === 1 ? '' : 's'} of tracking
+        {pace.income_lookback_days < 183 ? ' (since you started)' : ' (last ~6 months)'}.
+      </p>
+
+      <div className="pace-hero">
+        <div>
+          <p className="pace-label">Net (income − expenses − savings)</p>
+          <p className={`pace-net ${Number(pace.net) < 0 ? 'warn-text' : ''}`}>
+            {formatUsd(pace.net)}
+          </p>
+        </div>
+        <div>
+          <p className="pace-label">Headroom vs avg income</p>
+          <p className={`pace-net ${headroom < 0 ? 'warn-text' : ''}`}>
+            {formatUsd(headroom)}
+          </p>
+        </div>
+      </div>
+
+      <dl className="stat-grid four">
+        <div>
+          <dt>Income</dt>
+          <dd>{formatUsd(pace.income)}</dd>
+        </div>
+        <div>
+          <dt>Expenses</dt>
+          <dd>{formatUsd(pace.expense)}</dd>
+        </div>
+        <div>
+          <dt>Savings</dt>
+          <dd>{formatUsd(pace.savings)}</dd>
+        </div>
+        <div>
+          <dt>Avg income capacity</dt>
+          <dd>{formatUsd(pace.expected_income)}</dd>
+        </div>
+      </dl>
+
+      <div className="pace-meter">
+        <div className="pace-meter-labels">
+          <span>Outflow {formatUsd(pace.outflow)}</span>
+          <span>Capacity {formatUsd(pace.expected_income)}</span>
+        </div>
+        <div className="progress-track" aria-hidden>
+          <div
+            className={`progress-fill ${pace.overspending ? 'over' : ''}`}
+            style={{ width: `${Math.min(100, pct)}%` }}
+          />
+        </div>
+      </div>
+
+      {pace.days.length > 1 && (
+        <>
+          <h4 className="chart-subtitle">
+            Cumulative outflow vs average income capacity
+          </h4>
+          <LineTrendChart
+            labels={chartLabels}
+            series={[
+              {
+                key: 'outflow',
+                label: 'Outflow (expenses + savings)',
+                color: COLOR.expense,
+                values: pace.days.map((d) => Number(d.cumulative_outflow)),
+              },
+              {
+                key: 'capacity',
+                label: 'Avg income capacity',
+                color: COLOR.income,
+                values: pace.days.map((d) =>
+                  Number(d.cumulative_expected_income),
+                ),
+              },
+            ]}
+            height={200}
+          />
+        </>
+      )}
+    </div>
+  )
 }
 
 function KindCard({
@@ -298,6 +432,12 @@ export function DashboardPage() {
   }, [monthly])
 
   function renderWidget(w: DashboardWidget) {
+    const pace =
+      view === 'monthly' ? monthly?.spending_pace : annual?.spending_pace
+    if (w.type === 'spending_pace' && pace) {
+      return <SpendingPaceWidget pace={pace} title={w.title} />
+    }
+
     if (view === 'monthly' && monthly) {
       if (w.type === 'kind_progress') {
         const kind = (w.config.kind as string) || 'expense'
@@ -545,7 +685,8 @@ export function DashboardPage() {
         <div>
           <h1>Dashboard</h1>
           <p className="muted">
-            Plan vs actual. Soft warnings only — overspending is never blocked.
+            Plan vs actual, plus a rolling spending-pace check against average
+            income. Soft warnings only — overspending is never blocked.
           </p>
         </div>
         <ViewModeToggle value={view} onChange={(m) => void onViewChange(m)} />

@@ -115,6 +115,40 @@ export interface SavingsBucket {
   over_budget: boolean
 }
 
+export interface SpendingPaceDay {
+  date: string
+  income: string
+  expense: string
+  savings: string
+  cumulative_income: string
+  cumulative_expense: string
+  cumulative_savings: string
+  cumulative_outflow: string
+  cumulative_net: string
+  cumulative_expected_income: string
+}
+
+export interface SpendingPace {
+  as_of: string
+  window_start: string
+  window_end: string
+  window_days: number
+  income: string
+  expense: string
+  savings: string
+  outflow: string
+  net: string
+  average_daily_income: string
+  expected_income: string
+  income_lookback_start: string | null
+  income_lookback_end: string | null
+  income_lookback_days: number
+  tracking_started_on: string | null
+  overspending: boolean
+  has_data: boolean
+  days: SpendingPaceDay[]
+}
+
 export interface MonthlyDashboard {
   year: number
   month: number
@@ -123,6 +157,7 @@ export interface MonthlyDashboard {
   savings: KindTotals
   categories: CategoryProgress[]
   savings_buckets: SavingsBucket[]
+  spending_pace: SpendingPace
 }
 
 export interface MonthlyTrendPoint {
@@ -154,6 +189,7 @@ export interface AnnualDashboard {
   expense: KindTotals
   savings: KindTotals
   savings_buckets: SavingsBucket[]
+  spending_pace: SpendingPace
 }
 
 export interface DashboardWidget {

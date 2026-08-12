@@ -14,6 +14,7 @@ Hosts on **Render**; database is **PostgreSQL on Neon**. Web (Vite/React on Verc
 - **Annual** budget surface (`GET /api/budgets/annual/{year}`, `PUT /api/budgets/annual/cell`)
 - Transactions with **search, sort, filters**, and pagination
 - Dashboard monthly/annual insights with **soft** over-budget flags
+- **Spending pace** widget: rolling ~30-day actuals vs average income capacity
 - Savings bucket balances derived from the transaction ledger
 - Persisted dashboard widget layouts + Monthly/Annual view preferences on the user
 
