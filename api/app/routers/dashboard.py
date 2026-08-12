@@ -30,9 +30,11 @@ DEFAULT_MONTHLY_WIDGETS = [
     DashboardWidget(id="cashflow-trend", type="cashflow_trend", title="Year cash-flow trend", order=4, config={}),
     DashboardWidget(id="savings-buckets", type="savings_buckets", title="Savings buckets", order=5, config={}),
     DashboardWidget(id="category-breakdown", type="category_breakdown", title="Categories", order=6, config={}),
-    # Append-only id — order 0 keeps it near the top after sort without renumbering peers.
-    DashboardWidget(id="true-leftover", type="true_leftover", title="True leftover", order=0, config={}),
 ]
+# Separate append keeps parallel agents from conflicting on the shared list literal.
+DEFAULT_MONTHLY_WIDGETS.append(
+    DashboardWidget(id="true-leftover", type="true_leftover", title="True leftover", order=0, config={}),
+)
 
 DEFAULT_ANNUAL_WIDGETS = [
     DashboardWidget(id="spending-pace-year", type="spending_pace", title="Spending pace", order=0, config={}),
@@ -40,8 +42,10 @@ DEFAULT_ANNUAL_WIDGETS = [
     DashboardWidget(id="month-trends", type="month_trends", title="Month-to-month trends", order=2, config={}),
     DashboardWidget(id="over-budget-patterns", type="category_trends", title="Repeated overruns", order=3, config={}),
     DashboardWidget(id="savings-buckets-year", type="savings_buckets", title="Savings buckets", order=4, config={}),
-    DashboardWidget(id="true-leftover-year", type="true_leftover", title="True leftover", order=0, config={}),
 ]
+DEFAULT_ANNUAL_WIDGETS.append(
+    DashboardWidget(id="true-leftover-year", type="true_leftover", title="True leftover", order=0, config={}),
+)
 
 
 @router.get("/monthly/{year}/{month}", response_model=MonthlyDashboardOut)
