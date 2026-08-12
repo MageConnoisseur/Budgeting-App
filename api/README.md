@@ -1,7 +1,7 @@
 """
-# Budgeting App API
+# Hearth Budgeting API
 
-FastAPI backend for the personal budgeting app (Phase 1 MVP).
+FastAPI backend for Hearth Budgeting (desktop web + shared API).
 
 Hosts on **Render**; database is **PostgreSQL on Neon**. Web (Vite/React on Vercel) and future mobile clients share this API.
 

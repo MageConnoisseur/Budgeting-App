@@ -1,4 +1,4 @@
-# Budgeting App — Agent Instructions
+# Hearth Budgeting — Agent Instructions
 
 Pass this file to new coding agents so they share the same product, architecture, and delivery context.
 
@@ -6,7 +6,7 @@ Pass this file to new coding agents so they share the same product, architecture
 
 ## 0. Current focus (read this first)
 
-**Status:** Phase 1 MVP is **shipped** on `main` (web + API). Working product name in UI: **Budget Desk**.
+**Status:** Phase 1 MVP is **shipped** on `main` (web + API). Product name: **Hearth Budgeting**.
 
 **What we are trying to accomplish now:** build a **very robust desktop web application** — the primary planning, tracking, and analysis surface. Depth and polish on `web/` + supporting `api/` work beat new clients or growth features.
 
@@ -261,7 +261,7 @@ Prioritize (order is guidance, not a rigid checklist):
 3. **Dashboard customization** — hide/show widgets, stronger layout controls, better annual vs monthly widget behavior
 4. **Account reliability** — password reset/recovery, OAuth/prod auth hardening, safer migrations (no sharp legacy rebuild surprises on real data)
 5. **Quality bar** — API tests kept green; add web smoke/E2E coverage for core flows; performance as data grows
-6. **Visual coherence** — coherent desktop visual system; working name **Budget Desk** until a final brand is chosen
+6. **Visual coherence** — coherent desktop visual system under the **Hearth Budgeting** brand
 
 **Explicitly not the active goal:** scaffolding Expo, App Store work, or Phase 3 growth features.
 
@@ -302,7 +302,7 @@ Only after desktop web feels robust:
 
 ### Design
 
-- Working product name: **Budget Desk** until a final brand is chosen.
+- Product name: **Hearth Budgeting** — use it in UI chrome, page titles, and user-facing copy.
 - Prefer a coherent visual system; avoid generic “AI slop” aesthetics when polishing UI.
 - Do not redesign the product as mobile-first while desktop depth is the active phase.
 
@@ -367,13 +367,12 @@ All user-owned rows must be scoped by authenticated user.
 | Schema | Alembic under `api/` is source of truth (not a separate `database/` SQL apply tree) |
 | Hosting | Neon (DB) + Render (API) + Vercel (web) |
 | Stack | React (Vite) web, FastAPI, PostgreSQL |
-| Working name | Budget Desk |
+| Product name | **Hearth Budgeting** |
 
 ---
 
 ## 11. Open items (do not block desktop depth)
 
-- Final product / brand name (UI may keep **Budget Desk**)
 - Exact dashboard widget set evolution and richer layout persistence (hide/show, denser controls)
 - Whether plan-suggestion dismissals stay local-only or move server-side
 - Monorepo tooling (pnpm/npm workspaces, uv, etc.) — optional; not required to keep shipping

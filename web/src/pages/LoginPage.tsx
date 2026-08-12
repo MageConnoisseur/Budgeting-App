@@ -55,7 +55,7 @@ export function LoginPage() {
   return (
     <div className="auth-page">
       <div className="auth-panel">
-        <p className="brand-name auth-brand">Budget Desk</p>
+        <p className="brand-name auth-brand">Hearth Budgeting</p>
         <h1>Sign in</h1>
         <p className="muted">Plan months, log spending, and spot trends.</p>
         <OAuthButtons
