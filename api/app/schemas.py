@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from datetime import date as Date
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
@@ -363,10 +363,27 @@ class CategoryTrend(BaseModel):
     total_actual: Decimal
 
 
+class PlanSuggestion(BaseModel):
+    """Soft optional coaching from multi-month overrun patterns."""
+
+    category_id: UUID
+    category_name: str
+    kind: CategoryKind
+    suggestion_kind: Literal["median_raise", "seasonal"]
+    months_over: int
+    median_overrun: Optional[Decimal] = None
+    apply_year: Optional[int] = None
+    apply_month: Optional[int] = None
+    current_planned: Optional[Decimal] = None
+    suggested_planned: Optional[Decimal] = None
+    message: str
+
+
 class AnnualDashboardOut(BaseModel):
     year: int
     months: list[MonthlyTrendPoint]
     category_trends: list[CategoryTrend]
+    plan_suggestions: list[PlanSuggestion] = Field(default_factory=list)
     income: KindTotals
     expense: KindTotals
     savings: KindTotals

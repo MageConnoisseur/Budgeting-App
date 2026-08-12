@@ -195,10 +195,27 @@ export interface CategoryTrend {
   total_actual: string
 }
 
+export type PlanSuggestionKind = 'median_raise' | 'seasonal'
+
+export interface PlanSuggestion {
+  category_id: string
+  category_name: string
+  kind: CategoryKind
+  suggestion_kind: PlanSuggestionKind
+  months_over: number
+  median_overrun: string | null
+  apply_year: number | null
+  apply_month: number | null
+  current_planned: string | null
+  suggested_planned: string | null
+  message: string
+}
+
 export interface AnnualDashboard {
   year: number
   months: MonthlyTrendPoint[]
   category_trends: CategoryTrend[]
+  plan_suggestions: PlanSuggestion[]
   income: KindTotals
   expense: KindTotals
   savings: KindTotals

@@ -312,6 +312,7 @@ All user-owned rows must be scoped by authenticated user.
 | Savings | Buckets with allocated balances + monthly contribution plans |
 | Tracker | Manual transactions first; CSV later with dedup concerns |
 | Over budget | Soft warnings; emphasize multi-month trends |
+| Plan coaching | After 3+ expense/savings overruns in a year: suggest raising the apply-month plan by the median overrun, or tip “looks seasonal” for a short contiguous cluster; one-click apply via annual budget cell; dismissals local-only |
 | Dashboard | Robust, customizable widgets; insight for future adjustments |
 | Dashboard spending pace | Rolling ~30-day actuals vs average daily income (lookback ≤ ~6 months, clamped to first tracking day) — soft overspending signal that avoids mid-month paycheck skew |
 | Budget / Dashboard views | Monthly and Annual modes; easy swap; annual budget editing allowed |

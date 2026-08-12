@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { ApiError } from '../api/client'
+import * as budgetsApi from '../api/budgets'
 import * as dashboardApi from '../api/dashboard'
 import {
   OverlappingPlanActualChart,
@@ -20,6 +21,11 @@ import {
   currentYearMonth,
   formatUsd,
 } from '../lib/format'
+import {
+  dismissPlanSuggestion,
+  loadDismissedPlanSuggestions,
+  visiblePlanSuggestions,
+} from '../lib/planSuggestions'
 import type {
   AnnualDashboard,
   CategoryKind,
@@ -27,6 +33,7 @@ import type {
   DashboardWidget,
   KindTotals,
   MonthlyDashboard,
+  PlanSuggestion,
   SpendingPace,
   ViewMode,
 } from '../types/api'
@@ -366,6 +373,13 @@ export function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [layoutStatus, setLayoutStatus] = useState<string | null>(null)
+  const [dismissedSuggestions, setDismissedSuggestions] = useState(() =>
+    loadDismissedPlanSuggestions(),
+  )
+  const [applyingSuggestionId, setApplyingSuggestionId] = useState<string | null>(
+    null,
+  )
+  const [suggestionStatus, setSuggestionStatus] = useState<string | null>(null)
 
   useEffect(() => {
     if (user?.preferred_dashboard_view) {
@@ -429,6 +443,47 @@ export function DashboardPage() {
       setError(e instanceof ApiError ? e.detail : 'Could not save layout')
       await load()
     }
+  }
+
+  async function onAcceptPlanSuggestion(s: PlanSuggestion) {
+    if (
+      s.suggestion_kind !== 'median_raise' ||
+      s.apply_year == null ||
+      s.apply_month == null ||
+      s.suggested_planned == null
+    ) {
+      return
+    }
+    setApplyingSuggestionId(s.category_id)
+    setSuggestionStatus(null)
+    try {
+      await budgetsApi.upsertAnnualCell({
+        year: s.apply_year,
+        month: s.apply_month,
+        category_id: s.category_id,
+        planned_amount: s.suggested_planned,
+      })
+      const when = `${MONTH_SHORT[s.apply_month - 1]} ${s.apply_year}`
+      setSuggestionStatus(
+        `Raised ${s.category_name} plan for ${when} to ${formatUsd(s.suggested_planned)}.`,
+      )
+      setDismissedSuggestions(
+        dismissPlanSuggestion(s.category_id, year, s.suggestion_kind),
+      )
+      await load()
+    } catch (e) {
+      setSuggestionStatus(
+        e instanceof ApiError ? e.detail : 'Could not apply plan raise',
+      )
+    } finally {
+      setApplyingSuggestionId(null)
+    }
+  }
+
+  function onDismissPlanSuggestion(s: PlanSuggestion) {
+    setDismissedSuggestions(
+      dismissPlanSuggestion(s.category_id, year, s.suggestion_kind),
+    )
   }
 
   const monthlyExpenseBars = useMemo(() => {
@@ -686,6 +741,11 @@ export function DashboardPage() {
           value: c.months_over_budget,
           color: '#9a4b1f',
         }))
+        const coaching = visiblePlanSuggestions(
+          annual.plan_suggestions,
+          year,
+          dismissedSuggestions,
+        )
         return (
           <div className="widget">
             <h3>{w.title || 'Repeated overruns'}</h3>
@@ -719,6 +779,65 @@ export function DashboardPage() {
                   ))}
                 </ul>
               </>
+            )}
+            {coaching.length > 0 && (
+              <div className="plan-coaching">
+                <h4>Plan coaching</h4>
+                <p className="muted compact">
+                  Optional tips from multi-month patterns — never required.
+                </p>
+                <ul className="plan-coaching-list">
+                  {coaching.map((s) => (
+                    <li key={`${s.category_id}-${s.suggestion_kind}`}>
+                      <div className="plan-coaching-row">
+                        <div className="plan-coaching-copy">
+                          <strong>{s.category_name}</strong>
+                          <span className="muted">{s.message}</span>
+                          {s.suggestion_kind === 'median_raise' &&
+                            s.apply_month != null &&
+                            s.suggested_planned != null && (
+                              <span className="muted compact">
+                                Would set{' '}
+                                {MONTH_SHORT[s.apply_month - 1]} {s.apply_year}{' '}
+                                to {formatUsd(s.suggested_planned)}
+                                {s.current_planned != null
+                                  ? ` (from ${formatUsd(s.current_planned)})`
+                                  : ''}
+                                .
+                              </span>
+                            )}
+                        </div>
+                        <div className="plan-coaching-actions">
+                          {s.suggestion_kind === 'median_raise' && (
+                            <button
+                              type="button"
+                              className="btn tiny"
+                              disabled={applyingSuggestionId === s.category_id}
+                              onClick={() => void onAcceptPlanSuggestion(s)}
+                            >
+                              {applyingSuggestionId === s.category_id
+                                ? 'Applying…'
+                                : s.median_overrun
+                                  ? `Raise by ${formatUsd(s.median_overrun)}`
+                                  : 'Accept raise'}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="btn ghost tiny"
+                            onClick={() => onDismissPlanSuggestion(s)}
+                          >
+                            Not now
+                          </button>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {suggestionStatus && (
+              <p className="status-chip plan-coaching-status">{suggestionStatus}</p>
             )}
           </div>
         )
