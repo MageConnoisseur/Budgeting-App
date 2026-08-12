@@ -1102,10 +1102,6 @@ button:focus-visible {
   width: 6.5rem;
 }
 
-.plan-vs-actual-table tbody tr:not(.plan-section-row):not(.plan-row-over) td {
-  background: transparent;
-}
-
 .plan-vs-actual-table tbody tr:not(.plan-section-row) td {
   border-bottom-color: color-mix(in srgb, var(--line) 75%, transparent);
 }
