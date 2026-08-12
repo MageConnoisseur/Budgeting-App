@@ -684,13 +684,6 @@ button:focus-visible {
   position: relative;
 }
 
-/* Keep discretionary cash visible while scrolling the dashboard. */
-.widget-shell-sticky {
-  position: sticky;
-  top: 0.65rem;
-  z-index: 3;
-}
-
 .widget.true-leftover.tone-surplus {
   border-color: rgba(47, 95, 122, 0.35);
   background:
