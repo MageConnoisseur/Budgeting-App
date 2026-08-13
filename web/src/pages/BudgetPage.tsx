@@ -29,6 +29,22 @@ import type {
 
 const KIND_ORDER: CategoryKind[] = ['income', 'expense', 'savings']
 
+function annualCellKey(categoryId: string, month: number) {
+  return `${categoryId}:${month}`
+}
+
+function draftFromAnnual(cats: Category[], months: BudgetMonth[]) {
+  const map: Record<string, string> = {}
+  for (const c of cats) {
+    for (let m = 1; m <= 12; m++) {
+      const bm = months.find((x) => x.month === m)
+      const line = bm?.lines.find((l) => l.category_id === c.id)
+      map[annualCellKey(c.id, m)] = line ? toMoneyString(line.planned_amount) : ''
+    }
+  }
+  return map
+}
+
 export function BudgetPage() {
   const { user, setPreferredView } = useAuth()
   const initial = currentYearMonth()
@@ -40,6 +56,7 @@ export function BudgetPage() {
   const [categories, setCategories] = useState<Category[]>([])
   const [budget, setBudget] = useState<BudgetMonth | null>(null)
   const [annualMonths, setAnnualMonths] = useState<BudgetMonth[]>([])
+  const [annualDraft, setAnnualDraft] = useState<Record<string, string>>({})
   const [templates, setTemplates] = useState<BudgetTemplate[]>([])
   const [amounts, setAmounts] = useState<Record<string, string>>({})
   /** Prior calendar month planned amounts for the "what changed" strip. */
@@ -108,6 +125,7 @@ export function BudgetPage() {
       } else {
         const annual = await budgetsApi.getAnnualBudget(year)
         setAnnualMonths(annual.months)
+        setAnnualDraft(draftFromAnnual(cats, annual.months))
         setPriorAmounts(null)
         setHasPriorPlan(false)
         setStatus(null)
@@ -156,26 +174,24 @@ export function BudgetPage() {
     [categories, amounts],
   )
 
-  /** Annual: year totals + per-month remainder for balanced-budget scanning. */
+  /** Annual: year totals + per-month remainder from draft inputs (live as you type). */
   const annualBalance = useMemo(() => {
+    const amountFor = (id: string, m: number) => {
+      const raw = annualDraft[annualCellKey(id, m)]
+      if (raw === undefined || raw === '') return 0
+      const n = Number(raw.replace(/[^0-9.-]/g, ''))
+      return Number.isNaN(n) ? 0 : n
+    }
     const yearTotals = sumByKind(categories, (id) => {
       let total = 0
-      for (const bm of annualMonths) {
-        const line = bm.lines.find((l) => l.category_id === id)
-        if (line) total += Number(line.planned_amount)
-      }
+      for (let m = 1; m <= 12; m++) total += amountFor(id, m)
       return total
     })
-    const byMonth = Array.from({ length: 12 }, (_, i) => {
-      const m = i + 1
-      const bm = annualMonths.find((x) => x.month === m)
-      return sumByKind(categories, (id) => {
-        const line = bm?.lines.find((l) => l.category_id === id)
-        return line ? Number(line.planned_amount) : 0
-      })
-    })
+    const byMonth = Array.from({ length: 12 }, (_, i) =>
+      sumByKind(categories, (id) => amountFor(id, i + 1)),
+    )
     return { yearTotals, byMonth }
-  }, [categories, annualMonths])
+  }, [categories, annualDraft])
 
   async function saveMonthly(e: FormEvent) {
     e.preventDefault()
@@ -199,32 +215,64 @@ export function BudgetPage() {
     }
   }
 
-  async function onAnnualCellBlur(
-    categoryId: string,
-    m: number,
-    raw: string,
-  ) {
-    const parsed = parseMoneyInput(raw)
-    if (parsed === null) return
+  async function saveAnnual(e: FormEvent) {
+    e.preventDefault()
+    setSaving(true)
     setError(null)
     try {
-      await budgetsApi.upsertAnnualCell({
-        year,
-        month: m,
-        category_id: categoryId,
-        planned_amount: parsed,
-      })
-      const annual = await budgetsApi.getAnnualBudget(year)
-      setAnnualMonths(annual.months)
-    } catch (err) {
-      setError(err instanceof ApiError ? err.detail : 'Cell update failed')
-    }
-  }
+      const dirtyByMonth = new Map<
+        number,
+        { category_id: string; planned_amount: string }[]
+      >()
+      for (const c of categories) {
+        for (let m = 1; m <= 12; m++) {
+          const raw = annualDraft[annualCellKey(c.id, m)] ?? ''
+          const parsed = raw.trim() === '' ? '' : parseMoneyInput(raw)
+          if (parsed === null) {
+            setError(`Enter a valid amount for ${c.name} (${MONTH_SHORT[m - 1]})`)
+            return
+          }
+          const bm = annualMonths.find((x) => x.month === m)
+          const line = bm?.lines.find((l) => l.category_id === c.id)
+          const prev = line ? toMoneyString(line.planned_amount) : ''
+          if (parsed === prev) continue
+          const list = dirtyByMonth.get(m) ?? []
+          list.push({
+            category_id: c.id,
+            planned_amount: parsed === '' ? '0.00' : parsed,
+          })
+          dirtyByMonth.set(m, list)
+        }
+      }
 
-  function annualAmount(categoryId: string, m: number): string {
-    const bm = annualMonths.find((x) => x.month === m)
-    const line = bm?.lines.find((l) => l.category_id === categoryId)
-    return line ? toMoneyString(line.planned_amount) : ''
+      if (dirtyByMonth.size > 0) {
+        const months = [...dirtyByMonth.keys()].sort((a, b) => a - b)
+        for (const m of months) {
+          const lines = dirtyByMonth.get(m)
+          if (!lines?.length) continue
+          await budgetsApi.upsertAnnualCell({
+            year,
+            month: m,
+            category_id: lines[0].category_id,
+            planned_amount: lines[0].planned_amount,
+          })
+          if (lines.length > 1) {
+            await budgetsApi.upsertBudgetMonth(year, m, {
+              lines,
+              replace_all: false,
+            })
+          }
+        }
+        const annual = await budgetsApi.getAnnualBudget(year)
+        setAnnualMonths(annual.months)
+        setAnnualDraft(draftFromAnnual(categories, annual.months))
+      }
+      setStatus('Saved')
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : 'Save failed')
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function onCopyFrom(e: FormEvent) {
@@ -312,7 +360,19 @@ export function BudgetPage() {
             setMonth(m)
           }}
         />
-        {status && <p className="status-chip">{status}</p>}
+        <div className="row-gap">
+          {view === 'annual' && !loading && categories.length > 0 && (
+            <button
+              className="btn primary"
+              type="submit"
+              form="annual-save-form"
+              disabled={saving}
+            >
+              {saving ? 'Saving…' : 'Save year'}
+            </button>
+          )}
+          {status && <p className="status-chip">{status}</p>}
+        </div>
       </div>
 
       {error && <p className="form-error">{error}</p>}
@@ -472,7 +532,8 @@ export function BudgetPage() {
           <div className="panel month-balance-strip">
             <h3 className="section-title">Monthly remainder</h3>
             <p className="muted compact">
-              Each month’s planned income − expenses − savings after cell edits.
+              Each month’s planned income − expenses − savings as you edit.
+              Save the year to keep changes.
             </p>
             <div className="month-balance-grid">
               {annualBalance.byMonth.map((t, i) => {
@@ -492,63 +553,76 @@ export function BudgetPage() {
             </div>
           </div>
 
-          <div className="table-wrap annual-wrap">
-            <table className="data-table annual-grid">
-              <colgroup>
-                <col className="annual-cat-col" />
-                {MONTH_SHORT.map((m) => (
-                  <col key={m} className="annual-month-col" />
-                ))}
-              </colgroup>
-              <thead>
-                <tr>
-                  <th className="annual-cat-col" scope="col">
-                    Category
-                  </th>
+          <form
+            id="annual-save-form"
+            className="annual-form"
+            onSubmit={(e) => void saveAnnual(e)}
+          >
+            <div className="table-wrap annual-wrap">
+              <table className="data-table annual-grid">
+                <colgroup>
+                  <col className="annual-cat-col" />
                   {MONTH_SHORT.map((m) => (
-                    <th key={m} className="annual-month-col" scope="col">
-                      {m}
-                    </th>
+                    <col key={m} className="annual-month-col" />
                   ))}
-                </tr>
-              </thead>
-              <tbody>
-                {KIND_ORDER.map((kind) =>
-                  grouped[kind].map((c, idx) => (
-                    <tr key={c.id}>
-                      <th className="annual-cat-col" scope="row" title={c.name}>
-                        {idx === 0 && (
-                          <span className="kind-inline">
-                            {kind.charAt(0).toUpperCase() + kind.slice(1)} ·{' '}
-                          </span>
-                        )}
-                        {c.name}
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th className="annual-cat-col" scope="col">
+                      Category
+                    </th>
+                    {MONTH_SHORT.map((m) => (
+                      <th key={m} className="annual-month-col" scope="col">
+                        {m}
                       </th>
-                      {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-                        <td key={m} className="annual-month-col">
-                          <input
-                            className="cell-input"
-                            inputMode="decimal"
-                            defaultValue={annualAmount(c.id, m)}
-                            key={`${c.id}-${m}-${annualAmount(c.id, m)}`}
-                            onBlur={(e) =>
-                              void onAnnualCellBlur(c.id, m, e.target.value)
-                            }
-                            placeholder="—"
-                            aria-label={`${c.name} ${MONTH_SHORT[m - 1]}`}
-                          />
-                        </td>
-                      ))}
-                    </tr>
-                  )),
-                )}
-              </tbody>
-            </table>
-            <p className="muted compact">
-              Edit any cell to update that month’s plan. Empty months seed from
-              prior plans when needed.
-            </p>
-          </div>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {KIND_ORDER.map((kind) =>
+                    grouped[kind].map((c, idx) => (
+                      <tr key={c.id}>
+                        <th className="annual-cat-col" scope="row" title={c.name}>
+                          {idx === 0 && (
+                            <span className="kind-inline">
+                              {kind.charAt(0).toUpperCase() + kind.slice(1)} ·{' '}
+                            </span>
+                          )}
+                          {c.name}
+                        </th>
+                        {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                          <td key={m} className="annual-month-col">
+                            <input
+                              className="cell-input"
+                              inputMode="decimal"
+                              value={annualDraft[annualCellKey(c.id, m)] ?? ''}
+                              onChange={(e) =>
+                                setAnnualDraft((prev) => ({
+                                  ...prev,
+                                  [annualCellKey(c.id, m)]: e.target.value,
+                                }))
+                              }
+                              placeholder="—"
+                              aria-label={`${c.name} ${MONTH_SHORT[m - 1]}`}
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                    )),
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div className="annual-save-bar">
+              <button className="btn primary" type="submit" disabled={saving}>
+                {saving ? 'Saving…' : 'Save year'}
+              </button>
+              <p className="muted compact">
+                Edit any cell, then save. Empty months seed from prior plans
+                when needed.
+              </p>
+            </div>
+          </form>
         </>
       )}
     </div>
