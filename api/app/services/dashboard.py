@@ -26,6 +26,7 @@ from app.schemas import (
 )
 from app.services.budget import get_or_create_month
 from app.services.category_health import build_category_health_scores
+from app.services.coach import CoachLine, build_budget_coach
 
 ZERO = Decimal("0.00")
 MONEY = Decimal("0.01")
@@ -600,15 +601,33 @@ def build_monthly_dashboard(
     else:
         spending_pace = _empty_spending_pace(min(date.today(), end))
 
+    income_totals = _kind_totals(by_kind[CategoryKind.income])
+    expense_totals = _kind_totals(by_kind[CategoryKind.expense])
+    savings_totals = _kind_totals(by_kind[CategoryKind.savings])
+    coach = build_budget_coach(
+        year=year,
+        month=month,
+        income=income_totals,
+        expense=expense_totals,
+        savings=savings_totals,
+        lines=[
+            CoachLine(c.category_id, c.category_name, c.kind, c.planned)
+            for c in progress
+        ],
+        buckets=buckets,
+        pace_overspending=bool(spending_pace.has_data and spending_pace.overspending),
+    )
+
     return MonthlyDashboardOut(
         year=year,
         month=month,
-        income=_kind_totals(by_kind[CategoryKind.income]),
-        expense=_kind_totals(by_kind[CategoryKind.expense]),
-        savings=_kind_totals(by_kind[CategoryKind.savings]),
+        income=income_totals,
+        expense=expense_totals,
+        savings=savings_totals,
         categories=progress,
         savings_buckets=buckets,
         spending_pace=spending_pace,
+        coach=coach,
     )
 
 
@@ -724,15 +743,53 @@ def build_annual_dashboard(db: Session, user: User, year: int) -> AnnualDashboar
 
     spending_pace = build_spending_pace(db, user, as_of)
 
+    plan_month_count = max(
+        sum(
+            1
+            for m in months
+            if m.income_planned + m.expense_planned + m.savings_planned > ZERO
+        ),
+        1,
+    )
+    income_totals = sum_kind("income_planned", "income_actual")
+    expense_totals = sum_kind("expense_planned", "expense_actual")
+    savings_totals = sum_kind("savings_planned", "savings_actual")
+    under_planned_ids = {
+        h.category_id for h in category_health if h.status == "under_planned"
+    }
+    coach_lines = [
+        CoachLine(
+            t.category_id,
+            t.category_name,
+            t.kind,
+            _money(t.total_planned / Decimal(plan_month_count)),
+        )
+        for t in trends
+    ]
+    coach = build_budget_coach(
+        year=year,
+        month=None,
+        income=income_totals,
+        expense=expense_totals,
+        savings=savings_totals,
+        lines=coach_lines,
+        buckets=buckets,
+        pace_overspending=bool(spending_pace.has_data and spending_pace.overspending),
+        plan_suggestions=plan_suggestions,
+        under_planned_ids=under_planned_ids,
+        plan_month_count=plan_month_count,
+    )
+
     return AnnualDashboardOut(
         year=year,
         months=months,
         category_trends=trends,
         plan_suggestions=plan_suggestions,
         category_health=category_health,
-        income=sum_kind("income_planned", "income_actual"),
-        expense=sum_kind("expense_planned", "expense_actual"),
-        savings=sum_kind("savings_planned", "savings_actual"),
+        income=income_totals,
+        expense=expense_totals,
+        savings=savings_totals,
         savings_buckets=buckets,
         spending_pace=spending_pace,
+        coach=coach,
     )

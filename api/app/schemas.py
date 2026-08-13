@@ -371,6 +371,47 @@ class SpendingPaceOut(BaseModel):
     days: list[SpendingPaceDay] = Field(default_factory=list)
 
 
+class CoachTip(BaseModel):
+    """One optional coaching action. Apply is never required."""
+
+    id: str
+    kind: Literal[
+        "get_started",
+        "allocate_surplus",
+        "close_shortfall",
+        "fund_savings",
+        "raise_plan",
+        "seasonal",
+        "pace_warning",
+        "balanced",
+    ]
+    title: str
+    message: str
+    priority: int = 0
+    category_id: Optional[UUID] = None
+    category_name: Optional[str] = None
+    apply_year: Optional[int] = None
+    apply_month: Optional[int] = None
+    current_planned: Optional[Decimal] = None
+    suggested_planned: Optional[Decimal] = None
+    amount: Optional[Decimal] = None
+    apply_label: Optional[str] = None
+    cta_href: Optional[str] = None
+    cta_label: Optional[str] = None
+
+
+class BudgetCoachOut(BaseModel):
+    """Deterministic leftover / plan-balance coach for a month or year."""
+
+    headline: str
+    tone: Literal["getting_started", "surplus", "shortfall", "balanced", "watch"]
+    leftover_planned: Decimal
+    leftover_actual: Decimal
+    apply_year: int
+    apply_month: int
+    tips: list[CoachTip] = Field(default_factory=list)
+
+
 class MonthlyDashboardOut(BaseModel):
     year: int
     month: int
@@ -380,6 +421,7 @@ class MonthlyDashboardOut(BaseModel):
     categories: list[CategoryProgress]
     savings_buckets: list[SavingsBucketOut]
     spending_pace: SpendingPaceOut
+    coach: BudgetCoachOut
 
 
 class MonthlyTrendPoint(BaseModel):
@@ -445,6 +487,7 @@ class AnnualDashboardOut(BaseModel):
     savings: KindTotals
     savings_buckets: list[SavingsBucketOut]
     spending_pace: SpendingPaceOut
+    coach: BudgetCoachOut
 
 
 class DashboardWidget(BaseModel):

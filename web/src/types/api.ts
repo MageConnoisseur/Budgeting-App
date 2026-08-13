@@ -170,6 +170,51 @@ export interface SpendingPace {
   days: SpendingPaceDay[]
 }
 
+export type CoachTipKind =
+  | 'get_started'
+  | 'allocate_surplus'
+  | 'close_shortfall'
+  | 'fund_savings'
+  | 'raise_plan'
+  | 'seasonal'
+  | 'pace_warning'
+  | 'balanced'
+
+export type CoachTone =
+  | 'getting_started'
+  | 'surplus'
+  | 'shortfall'
+  | 'balanced'
+  | 'watch'
+
+export interface CoachTip {
+  id: string
+  kind: CoachTipKind
+  title: string
+  message: string
+  priority: number
+  category_id: string | null
+  category_name: string | null
+  apply_year: number | null
+  apply_month: number | null
+  current_planned: string | null
+  suggested_planned: string | null
+  amount: string | null
+  apply_label: string | null
+  cta_href: string | null
+  cta_label: string | null
+}
+
+export interface BudgetCoach {
+  headline: string
+  tone: CoachTone
+  leftover_planned: string
+  leftover_actual: string
+  apply_year: number
+  apply_month: number
+  tips: CoachTip[]
+}
+
 export interface MonthlyDashboard {
   year: number
   month: number
@@ -179,6 +224,7 @@ export interface MonthlyDashboard {
   categories: CategoryProgress[]
   savings_buckets: SavingsBucket[]
   spending_pace: SpendingPace
+  coach: BudgetCoach
 }
 
 export interface MonthlyTrendPoint {
@@ -244,6 +290,7 @@ export interface AnnualDashboard {
   savings: KindTotals
   savings_buckets: SavingsBucket[]
   spending_pace: SpendingPace
+  coach: BudgetCoach
 }
 
 export interface DashboardWidget {

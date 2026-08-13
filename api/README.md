@@ -17,6 +17,7 @@ Hosts on **Render**; database is **PostgreSQL on Neon**. Web (Vite/React on Verc
 - **Income estimate** for a month from tracker patterns + schedules
 - Dashboard monthly/annual insights with **soft** over-budget flags
 - **Spending pace** widget: rolling ~30-day actuals vs average income capacity
+- **Budget coach:** leftover allocation, plan shortfall, savings-target funding, and existing plan-raise tips (deterministic; apply is optional)
 - Savings bucket balances derived from the transaction ledger
 - Optional savings **targets** with projected hit month from balance + monthly contribution
 - Persisted dashboard widget layouts + Monthly/Annual view preferences on the user

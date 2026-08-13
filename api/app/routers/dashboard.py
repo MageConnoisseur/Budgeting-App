@@ -35,6 +35,9 @@ DEFAULT_MONTHLY_WIDGETS = [
 DEFAULT_MONTHLY_WIDGETS.append(
     DashboardWidget(id="true-leftover", type="true_leftover", title="True leftover", order=0, config={}),
 )
+DEFAULT_MONTHLY_WIDGETS.append(
+    DashboardWidget(id="budget-coach", type="budget_coach", title="Budget coach", order=-1, config={}),
+)
 
 DEFAULT_ANNUAL_WIDGETS = [
     DashboardWidget(id="spending-pace-year", type="spending_pace", title="Spending pace", order=0, config={}),
@@ -47,6 +50,9 @@ DEFAULT_ANNUAL_WIDGETS = [
 ]
 DEFAULT_ANNUAL_WIDGETS.append(
     DashboardWidget(id="true-leftover-year", type="true_leftover", title="True leftover", order=0, config={}),
+)
+DEFAULT_ANNUAL_WIDGETS.append(
+    DashboardWidget(id="budget-coach-year", type="budget_coach", title="Budget coach", order=-1, config={}),
 )
 
 

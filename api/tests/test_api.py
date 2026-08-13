@@ -315,6 +315,11 @@ def test_transactions_search_sort_filter_and_dashboard(
     assert isinstance(annual.json()["plan_suggestions"], list)
     assert "category_health" in annual.json()
     assert isinstance(annual.json()["category_health"], list)
+    assert "coach" in body
+    assert "headline" in body["coach"]
+    assert "tips" in body["coach"]
+    assert "coach" in annual.json()
+    assert isinstance(annual.json()["coach"]["tips"], list)
 
     balances = client.get("/api/dashboard/savings-balances", headers=h)
     assert balances.status_code == 200
@@ -378,7 +383,73 @@ def test_transactions_search_sort_filter_and_dashboard(
     assert "true-leftover" in ids
     leftover = next(w for w in widgets if w["id"] == "true-leftover")
     assert leftover["type"] == "true_leftover"
+    assert "budget-coach" in ids
+    coach_w = next(w for w in widgets if w["id"] == "budget-coach")
+    assert coach_w["type"] == "budget_coach"
     assert len(widgets) >= 1
+
+
+def test_budget_coach_surplus_funds_savings_target(
+    auth_headers: dict[str, str],
+) -> None:
+    """Unassigned leftover → fund the savings bucket with a target."""
+    h = auth_headers
+    paycheck = client.post(
+        "/api/categories",
+        headers=h,
+        json={"kind": "income", "name": "Paycheck"},
+    )
+    assert paycheck.status_code == 201, paycheck.text
+    paycheck = paycheck.json()
+    rent = client.post(
+        "/api/categories",
+        headers=h,
+        json={"kind": "expense", "name": "Rent"},
+    ).json()
+    emergency = client.post(
+        "/api/categories",
+        headers=h,
+        json={"kind": "savings", "name": "Emergency", "target_amount": "2000.00"},
+    )
+    assert emergency.status_code == 201, emergency.text
+    emergency = emergency.json()
+    put = client.put(
+        "/api/budgets/months/2026/8",
+        headers=h,
+        json={
+            "lines": [
+                {"category_id": paycheck["id"], "planned_amount": "4000.00"},
+                {"category_id": rent["id"], "planned_amount": "3000.00"},
+                {"category_id": emergency["id"], "planned_amount": "200.00"},
+            ]
+        },
+    )
+    assert put.status_code == 200, put.text
+
+    dash = client.get("/api/dashboard/monthly/2026/8", headers=h)
+    assert dash.status_code == 200, dash.text
+    coach = dash.json()["coach"]
+    assert coach["tone"] == "surplus"
+    assert Decimal(coach["leftover_planned"]) == Decimal("800.00")
+    fund = next(t for t in coach["tips"] if t["kind"] == "fund_savings")
+    assert fund["category_id"] == emergency["id"]
+    assert Decimal(fund["suggested_planned"]) == Decimal("1000.00")
+    assert fund["apply_month"] == 8
+
+    applied = client.put(
+        "/api/budgets/annual/cell",
+        headers=h,
+        json={
+            "year": fund["apply_year"],
+            "month": fund["apply_month"],
+            "category_id": fund["category_id"],
+            "planned_amount": fund["suggested_planned"],
+        },
+    )
+    assert applied.status_code == 200, applied.text
+    after = client.get("/api/dashboard/monthly/2026/8", headers=h)
+    assert Decimal(after.json()["coach"]["leftover_planned"]) == Decimal("0.00")
+    assert after.json()["coach"]["tone"] in ("balanced", "watch")
 
 
 def test_plan_suggestions_median_raise_and_apply(
