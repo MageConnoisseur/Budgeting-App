@@ -384,6 +384,7 @@ class CoachTip(BaseModel):
         "seasonal",
         "pace_warning",
         "balanced",
+        "income_short",
     ]
     title: str
     message: str

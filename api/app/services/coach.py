@@ -6,6 +6,7 @@ user's own plan, actuals, and savings targets (not an LLM).
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
@@ -30,6 +31,7 @@ CoachTipKind = Literal[
     "seasonal",
     "pace_warning",
     "balanced",
+    "income_short",
 ]
 
 ZERO = Decimal("0.00")
@@ -37,6 +39,28 @@ MONEY = Decimal("0.01")
 # Ignore leftover noise under a dollar.
 MIN_MOVE = Decimal("1.00")
 MAX_TIPS = 6
+# Housing / debt / insurance — usually not the line to trim first.
+_FIXED_NAME_RE = re.compile(
+    r"\b(rent|mortgage|housing|lease|hoa|home\s*loan|"
+    r"car\s*payment|auto\s*loan|car\s*loan|vehicle|"
+    r"student\s*loan|tuition|daycare|child\s*care|childcare|"
+    r"health\s*insurance|car\s*insurance|auto\s*insurance|"
+    r"life\s*insurance|renters?\s*insurance|homeowners?|"
+    r"condo\s*fee|parking|apartment)\b",
+    re.I,
+)
+_DISCRETIONARY_NAME_RE = re.compile(
+    r"(dining|restaurant|eating\s*out|takeout|take-out|coffee|"
+    r"entertainment|shopping|clothes|clothing|hobb(?:y|ies)|"
+    r"subscription|streaming|travel|gifts?|alcohol|"
+    r"\bbars?\b|games?|personal\s*care|beauty|"
+    r"fast\s*food|delivery|going\s*out|nightlife|"
+    r"concerts?|movies?|\bfun\b)",
+    re.I,
+)
+# If one unnamed expense is this share of planned spend and something else
+# exists, treat it as likely fixed (custom-named housing).
+_DOMINANT_SHARE = Decimal("0.50")
 _MONTH_NAMES = (
     "Jan",
     "Feb",
@@ -59,6 +83,7 @@ class CoachLine:
     category_name: str
     kind: CategoryKind
     planned: Decimal
+    actual: Decimal = ZERO
 
 
 def _money(value: Decimal) -> Decimal:
@@ -177,6 +202,57 @@ def _getting_started_tips(
     return []
 
 
+def _is_named_fixed(name: str) -> bool:
+    return bool(_FIXED_NAME_RE.search(name))
+
+
+def _is_discretionary(name: str) -> bool:
+    return bool(_DISCRETIONARY_NAME_RE.search(name))
+
+
+def _pick_shortfall_line(
+    lines: list[CoachLine],
+    *,
+    under_planned_ids: set[UUID],
+    gap: Decimal,
+) -> CoachLine | None:
+    """Prefer flexible spend over rent/mortgage-sized fixed costs."""
+    expenses = [
+        l
+        for l in lines
+        if l.kind == CategoryKind.expense
+        and l.planned >= MIN_MOVE
+        and l.category_id not in under_planned_ids
+    ]
+    if not expenses:
+        return None
+    total = sum((l.planned for l in expenses), ZERO)
+
+    def is_dominant(line: CoachLine) -> bool:
+        if _is_discretionary(line.category_name):
+            return False
+        return (
+            len(expenses) >= 2
+            and total > ZERO
+            and line.planned >= total * _DOMINANT_SHARE
+        )
+
+    flexible = [
+        l
+        for l in expenses
+        if not _is_named_fixed(l.category_name) and not is_dominant(l)
+    ]
+    if not flexible:
+        return None
+
+    discretionary = [l for l in flexible if _is_discretionary(l.category_name)]
+    ranked = discretionary if discretionary else flexible
+    absorb = [l for l in ranked if l.planned - gap >= MIN_MOVE]
+    pool = absorb if absorb else ranked
+    pool.sort(key=lambda l: (-l.planned, l.category_name))
+    return pool[0]
+
+
 def _shortfall_tip(
     lines: list[CoachLine],
     *,
@@ -190,14 +266,9 @@ def _shortfall_tip(
     scope = _scope_phrase(month)
     gap_total = _money(abs(total))
     gap = _money(abs(amount))
-    candidates = [
-        l
-        for l in lines
-        if l.kind == CategoryKind.expense
-        and l.planned >= MIN_MOVE
-        and l.category_id not in under_planned_ids
-    ]
-    candidates.sort(key=lambda l: (-l.planned, l.category_name))
+    line = _pick_shortfall_line(
+        lines, under_planned_ids=under_planned_ids, gap=gap
+    )
     apply_when = f"{_MONTH_NAMES[apply_month - 1]} {apply_year}"
     year_note = (
         f" About {_usd(gap)} of that is a typical month’s share."
@@ -205,7 +276,7 @@ def _shortfall_tip(
         else ""
     )
 
-    if not candidates:
+    if line is None:
         return CoachTip(
             id="close-shortfall",
             kind="close_shortfall",
@@ -213,9 +284,10 @@ def _shortfall_tip(
             message=(
                 f"{_usd(gap_total)} more is planned than income for {scope}."
                 f"{year_note} "
-                "Raise an income line or trim expense/savings plans until "
-                "the remainder is zero. Soft advice only — you can keep a "
-                "shortfall if that is intentional."
+                "Rent, mortgage, and other large fixed lines are left alone. "
+                "Raise income or trim flexible spend (dining, shopping, …) "
+                "on Budget. Soft advice only — you can keep a shortfall if "
+                "that is intentional."
             ),
             priority=1,
             amount=gap,
@@ -223,22 +295,21 @@ def _shortfall_tip(
             cta_label="Edit Budget",
         )
 
-    line = candidates[0]
     suggested = _money(line.planned - gap)
     can_apply = suggested >= MIN_MOVE
     if can_apply:
         message = (
             f"{_usd(gap_total)} more is planned than income for {scope}."
             f"{year_note} "
-            f"{line.category_name} is the largest expense that is not "
-            f"chronically under-planned. Trimming it to {_usd(suggested)} "
-            f"for {apply_when} would close this month’s share."
+            f"{line.category_name} looks more flexible than housing or loan "
+            f"payments. Trimming it to {_usd(suggested)} for {apply_when} "
+            "would close this month’s share."
         )
     else:
         message = (
             f"{_usd(gap_total)} more is planned than income for {scope}."
             f"{year_note} "
-            f"{line.category_name} is the largest expense "
+            f"{line.category_name} is a flexible expense "
             f"({_usd(line.planned)}), but trimming it would not cover the "
             "gap — raise income or spread cuts across a few lines on Budget."
         )
@@ -338,6 +409,49 @@ def _surplus_tip(
     )
 
 
+def _income_short_tip(
+    lines: list[CoachLine],
+    income: KindTotals,
+    *,
+    month: int | None,
+) -> CoachTip | None:
+    """Only used when paydays (or the month) are already due."""
+    if month is None:
+        return None
+    gap = _money(income.planned - income.actual)
+    if gap < MIN_MOVE:
+        return None
+    shorts = [
+        l
+        for l in lines
+        if l.kind == CategoryKind.income
+        and l.planned >= MIN_MOVE
+        and l.planned - l.actual >= MIN_MOVE
+    ]
+    if not shorts:
+        return None
+    shorts.sort(key=lambda l: (-(l.planned - l.actual), l.category_name))
+    line = shorts[0]
+    missed = _money(line.planned - line.actual)
+    return CoachTip(
+        id=f"income-short:{line.category_id}",
+        kind="income_short",
+        title=f"{line.category_name} is short of the plan",
+        message=(
+            f"{_usd(missed)} of planned {line.category_name} for this month "
+            "never showed up after the payday (or month) was due. Log the "
+            "deposit in Tracker if it arrived, or lower the income plan if "
+            "pay changed. Future months are not flagged until they are due."
+        ),
+        priority=1,
+        category_id=line.category_id,
+        category_name=line.category_name,
+        amount=missed,
+        cta_href="/tracker",
+        cta_label="Log income",
+    )
+
+
 def _plan_suggestion_tips(suggestions: list[PlanSuggestion]) -> list[CoachTip]:
     tips: list[CoachTip] = []
     raises = [s for s in suggestions if s.suggestion_kind == "median_raise"]
@@ -416,6 +530,7 @@ def build_budget_coach(
     plan_suggestions: list[PlanSuggestion] | None = None,
     under_planned_ids: set[UUID] | None = None,
     plan_month_count: int = 1,
+    income_due: bool = False,
     today: date | None = None,
 ) -> BudgetCoachOut:
     """Build a short, ordered list of optional coaching tips."""
@@ -460,6 +575,10 @@ def build_budget_coach(
                     amount=period_leftover,
                 )
             )
+        if income_due:
+            missed = _income_short_tip(lines, income, month=month)
+            if missed is not None:
+                tips.append(missed)
 
     if plan_suggestions:
         funded_ids = {t.category_id for t in tips if t.category_id}

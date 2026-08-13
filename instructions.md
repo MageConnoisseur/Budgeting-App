@@ -157,7 +157,7 @@ Shipped / expected direction:
 - **Month-to-month trends** and readable plan-vs-actual visuals (including overlapping bars / major vs smaller bands where useful)
 - **Spending pace:** rolling ~30-day actuals vs average daily income capacity (soft overspending signal)
 - **Plan coaching:** after repeated expense/savings overruns, soft suggestions to raise plans (median overrun) or tip seasonal clusters; one-click apply via annual budget cell; dismissals may be local-only
-- **Budget coach:** deterministic leftover / shortfall / savings-target recommendations (monthly and annual). Optional one-click apply; dedicated Coach page plus a compact Dashboard widget. Not an LLM — dollar amounts come from the user’s plan.
+- **Budget coach:** deterministic leftover / shortfall / savings-target recommendations (monthly and annual). Shortfall tips skip rent/mortgage-like fixed costs. Income under-plan is overrun only after paydays (or the month) are due. Optional one-click apply; dedicated Coach page plus a compact Dashboard widget. Not an LLM — dollar amounts come from the user’s plan.
 - Category drill-downs and filters as the widget set grows
 
 Over-budget behavior: **soft warnings only**. Emphasize patterns across months so users can raise allocations where they repeatedly overrun.
@@ -361,7 +361,7 @@ All user-owned rows must be scoped by authenticated user.
 | Tracker | Manual transactions first; note memory autocomplete; CSV later with dedup concerns |
 | Over budget | Soft warnings; emphasize multi-month trends |
 | Plan coaching | After 3+ expense/savings overruns in a year: suggest raising the apply-month plan by the median overrun, or tip “looks seasonal” for a short contiguous cluster; one-click apply via annual budget cell; dismissals local-only |
-| Budget coach | Deterministic leftover coach (Phase 1.x): unassigned plan leftover → fund a savings bucket (prefer unmet targets); plan shortfall → optional trim of the largest expense that is not chronically under-planned; plus existing raise/seasonal tips and spending-pace warnings. Dedicated **Coach** page + compact Dashboard widget. Apply is optional; dismissals local-only. |
+| Budget coach | Deterministic leftover coach (Phase 1.x): unassigned plan leftover → fund a savings bucket (prefer unmet targets); plan shortfall → optional trim of **flexible** spend (skip rent/mortgage/dominant housing-sized lines); income under-plan is only flagged after paydays or the month are due; plus existing raise/seasonal tips and spending-pace warnings. Dedicated **Coach** page + compact Dashboard widget. Apply is optional; dismissals local-only. |
 | AI / LLM coach | **Later (Phase 3+), not now.** If added, it must wrap the deterministic engine (explain tips, answer “why”) and must not invent dollar amounts or bypass soft-advisory rules. No API-key LLM in the current desktop-depth phase. |
 | Dashboard | Robust, customizable widgets; insight for future adjustments |
 | Dashboard spending pace | Rolling ~30-day actuals vs average daily income capacity (lookback ≤ ~6 months, clamped to first tracking day) — soft overspending signal that avoids mid-month paycheck skew |

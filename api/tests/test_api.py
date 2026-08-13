@@ -452,6 +452,51 @@ def test_budget_coach_surplus_funds_savings_target(
     assert after.json()["coach"]["tone"] in ("balanced", "watch")
 
 
+def test_income_overrun_skips_future_months_flags_past_months(
+    auth_headers: dict[str, str],
+) -> None:
+    """Planned income ahead of time is not overrun until the month is due."""
+    h = auth_headers
+    paycheck = client.post(
+        "/api/categories",
+        headers=h,
+        json={"kind": "income", "name": "Paycheck"},
+    )
+    assert paycheck.status_code == 201, paycheck.text
+    cat_id = paycheck.json()["id"]
+
+    for year, month in ((2020, 3), (2099, 6)):
+        put = client.put(
+            f"/api/budgets/months/{year}/{month}",
+            headers=h,
+            json={"lines": [{"category_id": cat_id, "planned_amount": "4000.00"}]},
+        )
+        assert put.status_code == 200, put.text
+
+    past = client.get("/api/dashboard/monthly/2020/3", headers=h)
+    assert past.status_code == 200, past.text
+    past_row = next(c for c in past.json()["categories"] if c["category_id"] == cat_id)
+    assert past_row["over_budget"] is True
+    assert past.json()["income"]["over_budget"] is True
+    assert any(t["kind"] == "income_short" for t in past.json()["coach"]["tips"])
+
+    future = client.get("/api/dashboard/monthly/2099/6", headers=h)
+    assert future.status_code == 200, future.text
+    future_row = next(
+        c for c in future.json()["categories"] if c["category_id"] == cat_id
+    )
+    assert future_row["over_budget"] is False
+    assert future.json()["income"]["over_budget"] is False
+    assert not any(t["kind"] == "income_short" for t in future.json()["coach"]["tips"])
+
+    annual = client.get("/api/dashboard/annual/2099", headers=h)
+    assert annual.status_code == 200
+    trend = next(
+        t for t in annual.json()["category_trends"] if t["category_id"] == cat_id
+    )
+    assert trend["months_over_budget"] == 0
+
+
 def test_plan_suggestions_median_raise_and_apply(
     auth_headers: dict[str, str],
 ) -> None:

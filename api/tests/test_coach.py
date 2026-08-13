@@ -148,7 +148,7 @@ def test_surplus_without_buckets_points_to_categories() -> None:
     assert tip.suggested_planned is None
 
 
-def test_shortfall_offers_trim_on_largest_expense() -> None:
+def test_shortfall_trims_flexible_spend_not_rent() -> None:
     rent = uuid4()
     dining = uuid4()
     coach = build_budget_coach(
@@ -169,9 +169,93 @@ def test_shortfall_offers_trim_on_largest_expense() -> None:
     assert coach.tone == "shortfall"
     assert coach.leftover_planned == Decimal("-500.00")
     tip = next(t for t in coach.tips if t.kind == "close_shortfall")
-    assert tip.category_id == rent
-    assert tip.current_planned == Decimal("2000.00")
-    assert tip.suggested_planned == Decimal("1500.00")
+    assert tip.category_id == dining
+    assert tip.current_planned == Decimal("1400.00")
+    assert tip.suggested_planned == Decimal("900.00")
+    assert "Rent" not in (tip.apply_label or "")
+
+
+def test_shortfall_only_housing_is_advisory() -> None:
+    rent = uuid4()
+    coach = build_budget_coach(
+        year=2026,
+        month=8,
+        income=_totals("2000.00"),
+        expense=_totals("2500.00"),
+        savings=_totals("0.00"),
+        lines=[
+            _line("Paycheck", CategoryKind.income, "2000.00"),
+            _line("Mortgage", CategoryKind.expense, "2500.00", rent),
+        ],
+        buckets=[],
+        today=date(2026, 8, 13),
+    )
+    tip = next(t for t in coach.tips if t.kind == "close_shortfall")
+    assert tip.category_id is None
+    assert tip.suggested_planned is None
+    assert tip.cta_href == "/budget"
+    assert "fixed" in tip.message.lower()
+
+
+def test_shortfall_skips_dominant_unnamed_housing() -> None:
+    apt = uuid4()
+    dining = uuid4()
+    coach = build_budget_coach(
+        year=2026,
+        month=8,
+        income=_totals("3000.00"),
+        expense=_totals("3300.00"),
+        savings=_totals("0.00"),
+        lines=[
+            _line("Paycheck", CategoryKind.income, "3000.00"),
+            _line("Main place", CategoryKind.expense, "2500.00", apt),
+            _line("Dining", CategoryKind.expense, "800.00", dining),
+        ],
+        buckets=[],
+        today=date(2026, 8, 13),
+    )
+    tip = next(t for t in coach.tips if t.kind == "close_shortfall")
+    assert tip.category_id == dining
+
+
+def test_income_short_only_when_due() -> None:
+    paycheck = uuid4()
+    lines = [
+        _line("Paycheck", CategoryKind.income, "4000.00", paycheck),
+        _line("Rent", CategoryKind.expense, "2000.00"),
+        _line("Dining", CategoryKind.expense, "500.00"),
+    ]
+    # Mutate actual on income line
+    lines[0] = CoachLine(
+        paycheck, "Paycheck", CategoryKind.income, Decimal("4000.00"), Decimal("0.00")
+    )
+    not_due = build_budget_coach(
+        year=2026,
+        month=10,
+        income=_totals("4000.00", "0.00"),
+        expense=_totals("2500.00"),
+        savings=_totals("0.00"),
+        lines=lines,
+        buckets=[],
+        income_due=False,
+        today=date(2026, 8, 13),
+    )
+    assert not any(t.kind == "income_short" for t in not_due.tips)
+
+    due = build_budget_coach(
+        year=2026,
+        month=6,
+        income=_totals("4000.00", "0.00"),
+        expense=_totals("2500.00"),
+        savings=_totals("0.00"),
+        lines=lines,
+        buckets=[],
+        income_due=True,
+        today=date(2026, 8, 13),
+    )
+    tip = next(t for t in due.tips if t.kind == "income_short")
+    assert tip.category_id == paycheck
+    assert tip.cta_href == "/tracker"
 
 
 def test_shortfall_skips_under_planned_expense() -> None:

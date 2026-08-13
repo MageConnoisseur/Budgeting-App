@@ -11,7 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.enums import CategoryKind
-from app.models import BudgetMonth, Category, Transaction, User
+from app.models import BudgetMonth, Category, RecurringSchedule, Transaction, User
 from app.schemas import (
     AnnualDashboardOut,
     CategoryProgress,
@@ -27,6 +27,7 @@ from app.schemas import (
 from app.services.budget import get_or_create_month
 from app.services.category_health import build_category_health_scores
 from app.services.coach import CoachLine, build_budget_coach
+from app.services.recurring import occurrences_in_month
 
 ZERO = Decimal("0.00")
 MONEY = Decimal("0.01")
@@ -530,6 +531,52 @@ def build_spending_pace(db: Session, user: User, as_of: date) -> SpendingPaceOut
     )
 
 
+def income_shortfall_is_due(
+    *,
+    month_start: date,
+    month_end: date,
+    today: date,
+    payday_dates: list[date],
+) -> bool:
+    """Income under-plan is overrun only after expected pay dates have passed.
+
+    Future months never flag. The current month waits until every scheduled
+    payday in that month is strictly in the past (or, with no schedule, until
+    the month has ended).
+    """
+    if today > month_end:
+        return True
+    if today < month_start:
+        return False
+    if not payday_dates:
+        return False
+    upcoming = [d for d in payday_dates if d >= today]
+    past = [d for d in payday_dates if d < today]
+    return len(upcoming) == 0 and len(past) > 0
+
+
+def _income_paydays_in_month(
+    db: Session, user_id: UUID, year: int, month: int
+) -> dict[UUID, list[date]]:
+    rows = db.scalars(
+        select(RecurringSchedule)
+        .join(Category)
+        .where(
+            RecurringSchedule.user_id == user_id,
+            RecurringSchedule.active.is_(True),
+            Category.kind == CategoryKind.income.value,
+        )
+    ).all()
+    out: dict[UUID, list[date]] = {}
+    for sched in rows:
+        dates = occurrences_in_month(sched, year, month)
+        if dates:
+            out.setdefault(sched.category_id, []).extend(dates)
+    for cid, dates in out.items():
+        out[cid] = sorted(set(dates))
+    return out
+
+
 def build_monthly_dashboard(
     db: Session,
     user: User,
@@ -538,11 +585,14 @@ def build_monthly_dashboard(
     *,
     ensure_month: bool = True,
     include_pace: bool = True,
+    today: date | None = None,
 ) -> MonthlyDashboardOut:
     budget_month = _load_budget_month(db, user, year, month, ensure=ensure_month)
     start, end = _month_date_range(year, month)
     planned = _planned_by_category(budget_month)
     actuals = _actuals_by_category(db, user.id, start, end)
+    as_of = today or date.today()
+    paydays = _income_paydays_in_month(db, user.id, year, month)
 
     categories = db.scalars(
         select(Category)
@@ -558,7 +608,13 @@ def build_monthly_dashboard(
             a = abs(a)
         remaining = p - a
         if cat.kind == CategoryKind.income.value:
-            over_budget = a < p and p > ZERO
+            due = income_shortfall_is_due(
+                month_start=start,
+                month_end=end,
+                today=as_of,
+                payday_dates=paydays.get(cat.id, []),
+            )
+            over_budget = due and a < p and p > ZERO
         else:
             over_budget = a > p and (p > ZERO or a > ZERO)
         progress.append(
@@ -596,14 +652,17 @@ def build_monthly_dashboard(
 
     if include_pace:
         # Pace is "current health" as of today, or the month end when browsing history.
-        as_of = min(date.today(), end)
-        spending_pace = build_spending_pace(db, user, as_of)
+        pace_as_of = min(as_of, end)
+        spending_pace = build_spending_pace(db, user, pace_as_of)
     else:
-        spending_pace = _empty_spending_pace(min(date.today(), end))
+        spending_pace = _empty_spending_pace(min(as_of, end))
 
     income_totals = _kind_totals(by_kind[CategoryKind.income])
     expense_totals = _kind_totals(by_kind[CategoryKind.expense])
     savings_totals = _kind_totals(by_kind[CategoryKind.savings])
+    # Income "over" means short of plan after paydays were due — not earned more.
+    income_short = any(r.over_budget for r in by_kind[CategoryKind.income])
+    income_totals = income_totals.model_copy(update={"over_budget": income_short})
     coach = build_budget_coach(
         year=year,
         month=month,
@@ -611,11 +670,13 @@ def build_monthly_dashboard(
         expense=expense_totals,
         savings=savings_totals,
         lines=[
-            CoachLine(c.category_id, c.category_name, c.kind, c.planned)
+            CoachLine(c.category_id, c.category_name, c.kind, c.planned, c.actual)
             for c in progress
         ],
         buckets=buckets,
         pace_overspending=bool(spending_pace.has_data and spending_pace.overspending),
+        income_due=income_short,
+        today=as_of,
     )
 
     return MonthlyDashboardOut(
@@ -631,14 +692,23 @@ def build_monthly_dashboard(
     )
 
 
-def build_annual_dashboard(db: Session, user: User, year: int) -> AnnualDashboardOut:
+def build_annual_dashboard(
+    db: Session, user: User, year: int, *, today: date | None = None
+) -> AnnualDashboardOut:
     """Year view — reads existing months only (does not auto-seed all 12)."""
     months: list[MonthlyTrendPoint] = []
     category_accum: dict[UUID, dict] = {}
+    clock = today or date.today()
 
     for month in range(1, 13):
         md = build_monthly_dashboard(
-            db, user, year, month, ensure_month=False, include_pace=False
+            db,
+            user,
+            year,
+            month,
+            ensure_month=False,
+            include_pace=False,
+            today=clock,
         )
         months.append(
             MonthlyTrendPoint(
@@ -717,7 +787,7 @@ def build_annual_dashboard(db: Session, user: User, year: int) -> AnnualDashboar
         )
     ).all()
     # Projection reference: today when browsing the current/future year, else Dec.
-    as_of = min(date.today(), date(year, 12, 31))
+    as_of = min(clock, date(year, 12, 31))
     buckets = []
     for c in savings_cats:
         planned_year = ZERO
@@ -754,6 +824,14 @@ def build_annual_dashboard(db: Session, user: User, year: int) -> AnnualDashboar
     income_totals = sum_kind("income_planned", "income_actual")
     expense_totals = sum_kind("expense_planned", "expense_actual")
     savings_totals = sum_kind("savings_planned", "savings_actual")
+    income_totals = income_totals.model_copy(
+        update={
+            "over_budget": any(
+                t.kind == CategoryKind.income and t.months_over_budget > 0
+                for t in trends
+            )
+        }
+    )
     under_planned_ids = {
         h.category_id for h in category_health if h.status == "under_planned"
     }
@@ -778,6 +856,7 @@ def build_annual_dashboard(db: Session, user: User, year: int) -> AnnualDashboar
         plan_suggestions=plan_suggestions,
         under_planned_ids=under_planned_ids,
         plan_month_count=plan_month_count,
+        today=clock,
     )
 
     return AnnualDashboardOut(

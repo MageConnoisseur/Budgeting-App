@@ -179,6 +179,7 @@ export type CoachTipKind =
   | 'seasonal'
   | 'pace_warning'
   | 'balanced'
+  | 'income_short'
 
 export type CoachTone =
   | 'getting_started'

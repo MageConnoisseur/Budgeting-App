@@ -55,8 +55,9 @@ const KIND_SECTION_LABEL: Record<CategoryKind, string> = {
   savings: 'Savings',
 }
 
-/** Actual exceeds planned — soft visual cue only (never blocks logging). */
-function exceedsPlan(c: CategoryProgress): boolean {
+/** Soft visual cue only (never blocks logging). */
+function rowNeedsWarning(c: CategoryProgress): boolean {
+  if (c.kind === 'income') return c.over_budget
   const planned = Number(c.planned)
   const actual = Number(c.actual)
   return actual > planned && (planned > 0 || actual > 0)
@@ -247,20 +248,24 @@ function SpendingPaceWidget({
 function KindCard({
   title,
   totals,
+  kind,
 }: {
   title: string
   totals: KindTotals
+  kind?: CategoryKind
 }) {
   const pct =
     Number(totals.planned) > 0
       ? Math.min(100, (Number(totals.actual) / Number(totals.planned)) * 100)
       : 0
+  const warn =
+    kind === 'income' ? 'Short of income plan' : undefined
 
   return (
     <div className="widget">
       <div className="widget-head">
         <h3>{title}</h3>
-        {totals.over_budget && <SoftWarning />}
+        {totals.over_budget && <SoftWarning message={warn} />}
       </div>
       <dl className="stat-grid">
         <div>
@@ -645,7 +650,13 @@ export function DashboardPage() {
             : kind === 'savings'
               ? monthly.savings
               : monthly.expense
-        return <KindCard title={w.title || kind} totals={totals} />
+        return (
+          <KindCard
+            title={w.title || kind}
+            totals={totals}
+            kind={kind as CategoryKind}
+          />
+        )
       }
       if (w.type === 'savings_buckets') {
         return (
@@ -746,7 +757,7 @@ export function DashboardPage() {
                         </td>
                       </tr>
                       {rows.map((c) => {
-                        const over = exceedsPlan(c)
+                        const over = rowNeedsWarning(c)
                         return (
                           <tr
                             key={c.category_id}
@@ -762,7 +773,7 @@ export function DashboardPage() {
                                   className={`soft-warning-${kind}`}
                                   message={
                                     kind === 'income'
-                                      ? 'Over income plan'
+                                      ? 'Short of income plan'
                                       : kind === 'savings'
                                         ? 'Over savings plan'
                                         : 'Over expense plan'
@@ -840,9 +851,9 @@ export function DashboardPage() {
       if (w.type === 'year_totals') {
         return (
           <div className="widget-grid three">
-            <KindCard title="Income" totals={annual.income} />
-            <KindCard title="Expenses" totals={annual.expense} />
-            <KindCard title="Savings" totals={annual.savings} />
+            <KindCard title="Income" totals={annual.income} kind="income" />
+            <KindCard title="Expenses" totals={annual.expense} kind="expense" />
+            <KindCard title="Savings" totals={annual.savings} kind="savings" />
           </div>
         )
       }

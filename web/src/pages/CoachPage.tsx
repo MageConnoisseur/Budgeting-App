@@ -162,8 +162,14 @@ export function CoachPage() {
           </li>
           <li>
             <strong>Shortfall</strong> means the plan spends more than income.
-            The coach may suggest trimming the largest expense that is not
-            chronically under-planned.
+            The coach will not suggest cutting rent, mortgage, or other large
+            fixed lines — it looks for more flexible spend (dining, shopping)
+            or asks you to raise income.
+          </li>
+          <li>
+            <strong>Income short of plan</strong> only appears after the payday
+            (or the month) is actually due. Planning income a few months ahead
+            is not an overrun.
           </li>
           <li>
             <strong>Repeated overruns</strong> still surface as optional plan
