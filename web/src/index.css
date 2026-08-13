@@ -471,16 +471,120 @@ a.btn {
   font-weight: inherit;
 }
 
+/* Annual budget: use monitor width so 12 months can sit on one row. */
+.shell:has(.page-budget-annual) {
+  max-width: min(100%, 96rem);
+}
+
 .annual-wrap {
   max-width: 100%;
 }
 
+.annual-grid {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.82rem;
+}
+
+.annual-grid th,
+.annual-grid td {
+  padding: 0.28rem 0.18rem;
+}
+
+.annual-grid thead th {
+  text-align: center;
+  padding: 0.45rem 0.12rem;
+}
+
+.annual-grid col.annual-cat-col,
+.annual-grid .annual-cat-col {
+  width: 10.25rem;
+}
+
+.annual-grid .annual-cat-col {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  padding-left: 0.7rem;
+  padding-right: 0.5rem;
+  text-align: left;
+  font-weight: 650;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: var(--panel-solid);
+  box-shadow: 6px 0 10px -8px rgba(20, 35, 28, 0.38);
+}
+
+.annual-grid tbody .annual-cat-col {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: inherit;
+  background: var(--panel-solid);
+}
+
+.annual-grid thead .annual-cat-col {
+  z-index: 3;
+  background: var(--paper-2);
+}
+
+.annual-grid .annual-month-col {
+  text-align: center;
+}
+
 .annual-grid .cell-input {
-  width: 4.6rem;
-  min-height: 2rem;
-  padding: 0.3rem 0.4rem;
+  width: 100%;
+  min-width: 0;
+  min-height: 1.85rem;
+  padding: 0.18rem 0.22rem;
   text-align: right;
+  font-size: 0.8rem;
   font-variant-numeric: tabular-nums;
+}
+
+.annual-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.annual-save-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.annual-save-bar .muted.compact {
+  margin: 0;
+}
+
+.page-budget-annual .month-balance-grid {
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+}
+
+.page-budget-annual .month-balance-cell {
+  padding: 0.4rem 0.3rem;
+}
+
+.page-budget-annual .month-balance-cell strong {
+  font-size: 0.82rem;
+}
+
+@media (max-width: 1100px) {
+  .page-budget-annual .month-balance-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .page-budget-annual .month-balance-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 .kind-inline {
