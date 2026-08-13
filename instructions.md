@@ -157,6 +157,7 @@ Shipped / expected direction:
 - **Month-to-month trends** and readable plan-vs-actual visuals (including overlapping bars / major vs smaller bands where useful)
 - **Spending pace:** rolling ~30-day actuals vs average daily income capacity (soft overspending signal)
 - **Plan coaching:** after repeated expense/savings overruns, soft suggestions to raise plans (median overrun) or tip seasonal clusters; one-click apply via annual budget cell; dismissals may be local-only
+- **Budget coach:** deterministic leftover / shortfall / savings-target recommendations (monthly and annual). Shortfall tips skip rent/mortgage-like fixed costs. Income under-plan is overrun only after paydays (or the month) are due. Optional one-click apply; dedicated Coach page plus a compact Dashboard widget. Not an LLM — dollar amounts come from the user’s plan.
 - Category drill-downs and filters as the widget set grows
 
 Over-budget behavior: **soft warnings only**. Emphasize patterns across months so users can raise allocations where they repeatedly overrun.
@@ -241,6 +242,7 @@ Shipped on `main`:
 - [x] Dashboard **Monthly ↔ Annual** view toggle
 - [x] Soft over-budget indicators + month-to-month trend views
 - [x] Spending pace widget; plan-raise coaching; tracker note memory; savings bucket guidance
+- [x] Deterministic budget coach (leftover allocation, shortfall, savings-target funding) with Coach page + dashboard widget
 
 Out of scope for Phase 1 (still out of scope unless asked):
 
@@ -264,6 +266,8 @@ Prioritize (order is guidance, not a rigid checklist):
 5. **Quality bar** — API tests kept green; add web smoke/E2E coverage for core flows; performance as data grows
 6. **Visual coherence** — coherent desktop visual system under the **Hearth Budgeting** brand
 
+Coach depth that stays **rule-based** (clearer copy, more apply actions, dismissal persistence) is in-scope. A conversational LLM coach is **not** the active goal.
+
 **Explicitly not the active goal:** scaffolding Expo, App Store work, or Phase 3 growth features.
 
 ### Phase 2 — Mobile (DEFERRED)
@@ -282,7 +286,7 @@ Only after desktop web feels robust:
 - Multi-currency
 - Custom budget periods (non-calendar)
 - Households / shared budgets
-- Deeper automated advice beyond soft plan coaching
+- Conversational / LLM “AI coach” (must sit **on top of** the deterministic coach engine — never invent planned amounts; see decision log)
 
 ---
 
@@ -293,7 +297,8 @@ Only after desktop web feels robust:
 - Optimize for **desktop**: clear month/year navigation, fast editing of planned amounts, obvious copy/template controls, prominent **Monthly / Annual** switch, comfortable use of wide viewports.
 - Annual budget view: editable category × month grid suitable for scanning and bulk mental planning; prefer density and clarity over mobile-style card stacks.
 - Tracker: cascaded kind → category dropdowns; quick date + amount entry; note memory; **search/sort/filter** should make “did I already log X?” easy.
-- Dashboard: clarity and customization; same **Monthly / Annual** preference as Budget; soft coaching and pace signals stay advisory.
+- Dashboard: clarity and customization; same **Monthly / Annual** preference as Budget; soft coaching, leftover allocation tips, and pace signals stay advisory.
+- Coach: first-class desktop page for plan-balance advice; compact widget on Dashboard. Stay advisory; do not add a chat UI unless Phase 3+ LLM work is explicitly requested.
 - Keyboard support and accessibility basics matter on desktop (labels, focus, contrast).
 
 ### Mobile (when eventually built)
@@ -336,7 +341,7 @@ All user-owned rows must be scoped by authenticated user.
 5. **Budget and Dashboard must support Monthly and Annual views** with easy switching; annual budget view remains editable.
 6. **Tracker must support solid search, sort, and filter** so users can find past entries.
 7. **Savings = buckets with balances**; do not flatten them into normal expenses without discussion.
-8. **Over-budget = soft warning**, never a hard block. Plan coaching stays optional/advisory.
+8. **Over-budget = soft warning**, never a hard block. Plan coaching and the budget coach stay optional/advisory. The coach must not prescribe a generic 50/30/20 split; it assigns leftover using the user’s categories and savings targets.
 9. **USD-only** until multi-currency is explicitly requested — still keep amounts as proper decimal/money types, not floats.
 10. **No secrets in git.** Use env vars for Neon, Render, and Vercel config.
 11. **Migrate the database** deliberately with Alembic; do not add a parallel SQL-apply schema track.
@@ -356,6 +361,8 @@ All user-owned rows must be scoped by authenticated user.
 | Tracker | Manual transactions first; note memory autocomplete; CSV later with dedup concerns |
 | Over budget | Soft warnings; emphasize multi-month trends |
 | Plan coaching | After 3+ expense/savings overruns in a year: suggest raising the apply-month plan by the median overrun, or tip “looks seasonal” for a short contiguous cluster; one-click apply via annual budget cell; dismissals local-only |
+| Budget coach | Deterministic leftover coach (Phase 1.x): unassigned plan leftover → fund a savings bucket (prefer unmet targets); plan shortfall → optional trim of **flexible** spend (skip rent/mortgage/dominant housing-sized lines); income under-plan is only flagged after paydays or the month are due; plus existing raise/seasonal tips and spending-pace warnings. Dedicated **Coach** page + compact Dashboard widget. Apply is optional; dismissals local-only. |
+| AI / LLM coach | **Later (Phase 3+), not now.** If added, it must wrap the deterministic engine (explain tips, answer “why”) and must not invent dollar amounts or bypass soft-advisory rules. No API-key LLM in the current desktop-depth phase. |
 | Dashboard | Robust, customizable widgets; insight for future adjustments |
 | Dashboard spending pace | Rolling ~30-day actuals vs average daily income capacity (lookback ≤ ~6 months, clamped to first tracking day) — soft overspending signal that avoids mid-month paycheck skew |
 | Budget / Dashboard views | Monthly and Annual modes; easy swap; annual budget editing allowed; preferences stored on the user |
@@ -375,7 +382,8 @@ All user-owned rows must be scoped by authenticated user.
 ## 11. Open items (do not block desktop depth)
 
 - Exact dashboard widget set evolution and richer layout persistence (hide/show, denser controls)
-- Whether plan-suggestion dismissals stay local-only or move server-side
+- Whether plan-suggestion and coach-tip dismissals stay local-only or move server-side
+- Whether a future LLM layer is used only for copy, or also for ranking which deterministic tips to show
 - Monorepo tooling (pnpm/npm workspaces, uv, etc.) — optional; not required to keep shipping
 
 If an agent needs a choice among reasonable options for an open item, pick a conventional secure default, document it briefly in code/README, and continue.

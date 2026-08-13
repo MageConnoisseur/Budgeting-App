@@ -6,6 +6,7 @@ import { AccountPage } from './pages/AccountPage'
 import { AuthCallbackPage } from './pages/AuthCallbackPage'
 import { BudgetPage } from './pages/BudgetPage'
 import { CategoriesPage } from './pages/CategoriesPage'
+import { CoachPage } from './pages/CoachPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { LoginPage } from './pages/LoginPage'
 import { RegisterPage } from './pages/RegisterPage'
@@ -40,6 +41,7 @@ export default function App() {
         <Route index element={<DashboardPage />} />
         <Route path="budget" element={<BudgetPage />} />
         <Route path="tracker" element={<TrackerPage />} />
+        <Route path="coach" element={<CoachPage />} />
         <Route path="categories" element={<CategoriesPage />} />
         <Route path="account" element={<AccountPage />} />
       </Route>

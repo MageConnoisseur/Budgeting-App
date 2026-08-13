@@ -11,6 +11,7 @@ import {
   type PlanActualItem,
 } from '../components/charts/TrendCharts'
 import { CategoryHealthWidget } from '../components/CategoryHealthWidget'
+import { BudgetCoachWidget } from '../components/BudgetCoachWidget'
 import { PeriodNavigator } from '../components/PeriodNavigator'
 import { KindBadge } from '../components/KindBadge'
 import { SoftWarning } from '../components/SoftWarning'
@@ -29,10 +30,15 @@ import {
   loadDismissedPlanSuggestions,
   visiblePlanSuggestions,
 } from '../lib/planSuggestions'
+import {
+  dismissCoachTip,
+  loadDismissedCoachTips,
+} from '../lib/coachTips'
 import type {
   AnnualDashboard,
   CategoryKind,
   CategoryProgress,
+  CoachTip,
   DashboardWidget,
   KindTotals,
   MonthlyDashboard,
@@ -49,8 +55,9 @@ const KIND_SECTION_LABEL: Record<CategoryKind, string> = {
   savings: 'Savings',
 }
 
-/** Actual exceeds planned — soft visual cue only (never blocks logging). */
-function exceedsPlan(c: CategoryProgress): boolean {
+/** Soft visual cue only (never blocks logging). */
+function rowNeedsWarning(c: CategoryProgress): boolean {
+  if (c.kind === 'income') return c.over_budget
   const planned = Number(c.planned)
   const actual = Number(c.actual)
   return actual > planned && (planned > 0 || actual > 0)
@@ -241,20 +248,24 @@ function SpendingPaceWidget({
 function KindCard({
   title,
   totals,
+  kind,
 }: {
   title: string
   totals: KindTotals
+  kind?: CategoryKind
 }) {
   const pct =
     Number(totals.planned) > 0
       ? Math.min(100, (Number(totals.actual) / Number(totals.planned)) * 100)
       : 0
+  const warn =
+    kind === 'income' ? 'Short of income plan' : undefined
 
   return (
     <div className="widget">
       <div className="widget-head">
         <h3>{title}</h3>
-        {totals.over_budget && <SoftWarning />}
+        {totals.over_budget && <SoftWarning message={warn} />}
       </div>
       <dl className="stat-grid">
         <div>
@@ -417,6 +428,11 @@ export function DashboardPage() {
     null,
   )
   const [suggestionStatus, setSuggestionStatus] = useState<string | null>(null)
+  const [dismissedCoachTips, setDismissedCoachTips] = useState(() =>
+    loadDismissedCoachTips(),
+  )
+  const [applyingCoachId, setApplyingCoachId] = useState<string | null>(null)
+  const [coachStatus, setCoachStatus] = useState<string | null>(null)
 
   useEffect(() => {
     if (user?.preferred_dashboard_view) {
@@ -523,6 +539,40 @@ export function DashboardPage() {
     )
   }
 
+  async function onAcceptCoachTip(tip: CoachTip) {
+    if (
+      tip.suggested_planned == null ||
+      tip.apply_year == null ||
+      tip.apply_month == null ||
+      tip.category_id == null
+    ) {
+      return
+    }
+    setApplyingCoachId(tip.id)
+    setCoachStatus(null)
+    try {
+      await budgetsApi.upsertAnnualCell({
+        year: tip.apply_year,
+        month: tip.apply_month,
+        category_id: tip.category_id,
+        planned_amount: tip.suggested_planned,
+      })
+      const when = `${MONTH_SHORT[tip.apply_month - 1]} ${tip.apply_year}`
+      const name = tip.category_name || 'category'
+      setCoachStatus(
+        `Updated ${name} for ${when} to ${formatUsd(tip.suggested_planned)}.`,
+      )
+      setDismissedCoachTips(dismissCoachTip(tip.id, year))
+      await load()
+    } catch (e) {
+      setCoachStatus(
+        e instanceof ApiError ? e.detail : 'Could not apply that change',
+      )
+    } finally {
+      setApplyingCoachId(null)
+    }
+  }
+
   const monthlyExpenseBars = useMemo(() => {
     if (!monthly) return []
     return monthly.categories
@@ -557,6 +607,25 @@ export function DashboardPage() {
       return <SpendingPaceWidget pace={pace} title={w.title} />
     }
 
+    if (w.type === 'budget_coach') {
+      const coach = view === 'monthly' ? monthly?.coach : annual?.coach
+      if (coach) {
+        return (
+          <BudgetCoachWidget
+            coach={coach}
+            year={year}
+            title={w.title}
+            variant="compact"
+            dismissed={dismissedCoachTips}
+            applyingId={applyingCoachId}
+            status={coachStatus}
+            onApply={(t) => void onAcceptCoachTip(t)}
+            onDismiss={(t) => setDismissedCoachTips(dismissCoachTip(t.id, year))}
+          />
+        )
+      }
+    }
+
     if (w.type === 'true_leftover') {
       const data = view === 'monthly' ? monthly : annual
       if (data) {
@@ -581,7 +650,13 @@ export function DashboardPage() {
             : kind === 'savings'
               ? monthly.savings
               : monthly.expense
-        return <KindCard title={w.title || kind} totals={totals} />
+        return (
+          <KindCard
+            title={w.title || kind}
+            totals={totals}
+            kind={kind as CategoryKind}
+          />
+        )
       }
       if (w.type === 'savings_buckets') {
         return (
@@ -682,7 +757,7 @@ export function DashboardPage() {
                         </td>
                       </tr>
                       {rows.map((c) => {
-                        const over = exceedsPlan(c)
+                        const over = rowNeedsWarning(c)
                         return (
                           <tr
                             key={c.category_id}
@@ -698,7 +773,7 @@ export function DashboardPage() {
                                   className={`soft-warning-${kind}`}
                                   message={
                                     kind === 'income'
-                                      ? 'Over income plan'
+                                      ? 'Short of income plan'
                                       : kind === 'savings'
                                         ? 'Over savings plan'
                                         : 'Over expense plan'
@@ -776,9 +851,9 @@ export function DashboardPage() {
       if (w.type === 'year_totals') {
         return (
           <div className="widget-grid three">
-            <KindCard title="Income" totals={annual.income} />
-            <KindCard title="Expenses" totals={annual.expense} />
-            <KindCard title="Savings" totals={annual.savings} />
+            <KindCard title="Income" totals={annual.income} kind="income" />
+            <KindCard title="Expenses" totals={annual.expense} kind="expense" />
+            <KindCard title="Savings" totals={annual.savings} kind="savings" />
           </div>
         )
       }
