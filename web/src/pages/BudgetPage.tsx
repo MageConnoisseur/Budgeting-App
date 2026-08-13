@@ -290,7 +290,7 @@ export function BudgetPage() {
   }
 
   return (
-    <div className="page">
+    <div className={`page${view === 'annual' ? ' page-budget-annual' : ''}`}>
       <header className="page-header">
         <div>
           <h1>Budget</h1>
@@ -494,11 +494,21 @@ export function BudgetPage() {
 
           <div className="table-wrap annual-wrap">
             <table className="data-table annual-grid">
+              <colgroup>
+                <col className="annual-cat-col" />
+                {MONTH_SHORT.map((m) => (
+                  <col key={m} className="annual-month-col" />
+                ))}
+              </colgroup>
               <thead>
                 <tr>
-                  <th>Category</th>
+                  <th className="annual-cat-col" scope="col">
+                    Category
+                  </th>
                   {MONTH_SHORT.map((m) => (
-                    <th key={m}>{m}</th>
+                    <th key={m} className="annual-month-col" scope="col">
+                      {m}
+                    </th>
                   ))}
                 </tr>
               </thead>
@@ -506,16 +516,16 @@ export function BudgetPage() {
                 {KIND_ORDER.map((kind) =>
                   grouped[kind].map((c, idx) => (
                     <tr key={c.id}>
-                      <td>
+                      <th className="annual-cat-col" scope="row" title={c.name}>
                         {idx === 0 && (
                           <span className="kind-inline">
                             {kind.charAt(0).toUpperCase() + kind.slice(1)} ·{' '}
                           </span>
                         )}
                         {c.name}
-                      </td>
+                      </th>
                       {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
-                        <td key={m}>
+                        <td key={m} className="annual-month-col">
                           <input
                             className="cell-input"
                             inputMode="decimal"
