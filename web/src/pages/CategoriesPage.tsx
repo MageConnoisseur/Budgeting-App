@@ -219,8 +219,10 @@ export function CategoriesPage() {
       {kind === 'savings' && (
         <p className="muted compact">
           Tip: set an optional target goal here, plan a monthly contribution on
-          Budget, then log deposits (+) and withdrawals (−) in Tracker. The
-          dashboard projects when you&apos;ll hit the target.
+          Budget, and mark big bills as <strong>paid from</strong> that bucket
+          so those months stay manageable. Log deposits (+) and withdrawals (−)
+          in Tracker (the expense form offers to withdraw when the plan is
+          funded). The dashboard projects when you&apos;ll hit the target.
         </p>
       )}
 

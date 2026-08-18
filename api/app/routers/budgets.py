@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
 from app.deps import get_current_user
-from app.models import BudgetMonth, BudgetTemplate, User
+from app.models import BudgetMonth, BudgetTemplate, Category, User
 from app.schemas import (
     AnnualBudgetCell,
     AnnualBudgetOut,
@@ -17,10 +17,12 @@ from app.schemas import (
     BudgetMonthUpsert,
     BudgetTemplateOut,
     CopyFromMonthRequest,
+    ExpenseFundingOut,
     MessageOut,
     SaveTemplateRequest,
 )
 from app.services import budget as budget_service
+from app.services.funding import get_expense_funding
 
 router = APIRouter(prefix="/budgets", tags=["budgets"])
 
@@ -47,6 +49,36 @@ def get_budget_month(
         db, user, year, month, auto_seed=seed
     )
     return _month_out(bm, seeded_from)
+
+
+@router.get(
+    "/months/{year}/{month}/expense-funding/{category_id}",
+    response_model=ExpenseFundingOut,
+)
+def expense_funding(
+    year: int,
+    month: int,
+    category_id: UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ExpenseFundingOut:
+    """Return whether this expense is planned to be paid from a savings bucket.
+
+    Does not create or seed a budget month.
+    """
+    if month < 1 or month > 12:
+        raise HTTPException(status_code=400, detail="month must be 1-12")
+    cat = db.scalar(
+        select(Category).where(Category.id == category_id, Category.user_id == user.id)
+    )
+    if cat is None:
+        raise HTTPException(status_code=404, detail="Category not found")
+    funded_id, funded_name = get_expense_funding(db, user, year, month, category_id)
+    return ExpenseFundingOut(
+        category_id=category_id,
+        funded_by_category_id=funded_id,
+        funded_by_category_name=funded_name,
+    )
 
 
 @router.put("/months/{year}/{month}", response_model=BudgetMonthOut)
@@ -87,7 +119,14 @@ def upsert_annual_cell(
 ) -> BudgetMonthOut:
     """Editable annual grid cell — creates/seeds the month when needed."""
     bm = budget_service.upsert_annual_cell(
-        db, user, body.year, body.month, body.category_id, body.planned_amount
+        db,
+        user,
+        body.year,
+        body.month,
+        body.category_id,
+        body.planned_amount,
+        funded_by_category_id=body.funded_by_category_id,
+        set_funded_by="funded_by_category_id" in body.model_fields_set,
     )
     return _month_out(bm)
 

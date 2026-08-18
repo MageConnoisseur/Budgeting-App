@@ -4,6 +4,7 @@ import type { Category, CategoryKind } from '../types/api'
 export interface BudgetKindTotals {
   income: number
   expense: number
+  expenseFromSavings: number
   savings: number
   balance: number
 }
@@ -11,19 +12,24 @@ export interface BudgetKindTotals {
 export function sumByKind(
   categories: Category[],
   amountFor: (categoryId: string, kind: CategoryKind) => number,
+  fundedBy?: Record<string, string>,
 ): BudgetKindTotals {
   let income = 0
   let expense = 0
+  let expenseFromSavings = 0
   let savings = 0
   for (const c of categories) {
     const n = amountFor(c.id, c.kind)
     if (c.kind === 'income') income += n
-    else if (c.kind === 'expense') expense += n
-    else savings += n
+    else if (c.kind === 'expense') {
+      if (fundedBy?.[c.id]) expenseFromSavings += n
+      else expense += n
+    } else savings += n
   }
   return {
     income,
     expense,
+    expenseFromSavings,
     savings,
     balance: income - expense - savings,
   }
@@ -34,10 +40,10 @@ function balanceTone(balance: number): 'balanced' | 'surplus' | 'deficit' {
   return balance > 0 ? 'surplus' : 'deficit'
 }
 
-function balanceMessage(balance: number): string {
-  const tone = balanceTone(balance)
+function balanceMessage(totals: BudgetKindTotals): string {
+  const tone = balanceTone(totals.balance)
   if (tone === 'balanced') {
-    return 'Balanced — income covers expenses and savings.'
+    return 'Balanced — income covers expenses paid from this month and savings contributions.'
   }
   if (tone === 'surplus') {
     return 'Surplus left to allocate — raise savings or spending plans.'
@@ -48,7 +54,7 @@ function balanceMessage(balance: number): string {
 export function BudgetBalancePanel({
   totals,
   title = 'Plan balance',
-  subtitle = 'Income − expenses − savings',
+  subtitle = 'Income − expenses (from income) − savings',
 }: {
   totals: BudgetKindTotals
   title?: string
@@ -84,7 +90,7 @@ export function BudgetBalancePanel({
           −
         </span>
         <div className="eq-term expense">
-          <span>Expenses</span>
+          <span>From income</span>
           <strong>{formatUsd(totals.expense)}</strong>
         </div>
         <span className="eq-op" aria-hidden>
@@ -103,7 +109,14 @@ export function BudgetBalancePanel({
         </div>
       </div>
 
-      <p className="balance-hint">{balanceMessage(totals.balance)}</p>
+      {totals.expenseFromSavings > 0.005 && (
+        <p className="balance-hint">
+          {formatUsd(totals.expenseFromSavings)} of expenses is paid from
+          savings and does not count against this month’s income.
+        </p>
+      )}
+
+      <p className="balance-hint">{balanceMessage(totals)}</p>
     </aside>
   )
 }

@@ -11,7 +11,11 @@ export function upsertBudgetMonth(
   year: number,
   month: number,
   body: {
-    lines: { category_id: string; planned_amount: string }[]
+    lines: {
+      category_id: string
+      planned_amount: string
+      funded_by_category_id?: string | null
+    }[]
     replace_all?: boolean
   },
 ) {
@@ -30,6 +34,7 @@ export function upsertAnnualCell(body: {
   month: number
   category_id: string
   planned_amount: string
+  funded_by_category_id?: string | null
 }) {
   return apiFetch<BudgetMonth>('/budgets/annual/cell', {
     method: 'PUT',
@@ -82,4 +87,16 @@ export function deleteTemplate(template_id: string) {
   return apiFetch<{ detail: string }>(`/budgets/templates/${template_id}`, {
     method: 'DELETE',
   })
+}
+
+export function getExpenseFunding(
+  year: number,
+  month: number,
+  categoryId: string,
+) {
+  return apiFetch<{
+    category_id: string
+    funded_by_category_id: string | null
+    funded_by_category_name: string | null
+  }>(`/budgets/months/${year}/${month}/expense-funding/${categoryId}`)
 }

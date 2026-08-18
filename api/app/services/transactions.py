@@ -5,8 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
-from uuid import UUID
+from uuid import UUID, uuid4
 
+from fastapi import HTTPException
 from sqlalchemy import asc, cast, desc, func, or_, select
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.types import String
@@ -234,3 +235,116 @@ def list_transactions(
     stmt = stmt.order_by(order, desc(Transaction.created_at))
     items = db.scalars(stmt.limit(limit).offset(offset)).unique().all()
     return list(items), int(total)
+
+
+def _load_tx(db: Session, user: User, tx_id: UUID) -> Transaction | None:
+    return db.scalar(
+        select(Transaction)
+        .options(joinedload(Transaction.category))
+        .where(Transaction.id == tx_id, Transaction.user_id == user.id)
+    )
+
+
+def create_transaction(
+    db: Session,
+    user: User,
+    *,
+    category: Category,
+    amount,
+    date,
+    note: str | None,
+    withdraw_from_category_id: UUID | None = None,
+) -> Transaction:
+    """Create a transaction, optionally pairing an expense with a savings withdrawal."""
+    pair_id = None
+    withdrawal_cat = None
+    if withdraw_from_category_id is not None:
+        if category.kind != CategoryKind.expense.value:
+            raise HTTPException(
+                status_code=400,
+                detail="Only expenses can withdraw from a savings bucket",
+            )
+        if amount <= Decimal("0.00"):
+            raise HTTPException(
+                status_code=400,
+                detail="Expense amount must be positive when withdrawing from savings",
+            )
+        withdrawal_cat = db.scalar(
+            select(Category).where(
+                Category.id == withdraw_from_category_id,
+                Category.user_id == user.id,
+            )
+        )
+        if withdrawal_cat is None:
+            raise HTTPException(status_code=404, detail="Savings bucket not found")
+        if withdrawal_cat.kind != CategoryKind.savings.value:
+            raise HTTPException(
+                status_code=400,
+                detail="withdraw_from_category_id must be a savings category",
+            )
+        if withdrawal_cat.archived:
+            raise HTTPException(
+                status_code=400, detail="Cannot withdraw from an archived bucket"
+            )
+        pair_id = uuid4()
+
+    tx = Transaction(
+        user_id=user.id,
+        category_id=category.id,
+        amount=amount,
+        date=date,
+        note=note,
+        pair_id=pair_id,
+    )
+    db.add(tx)
+    if withdrawal_cat is not None and pair_id is not None:
+        db.add(
+            Transaction(
+                user_id=user.id,
+                category_id=withdrawal_cat.id,
+                amount=-amount,
+                date=date,
+                note=note,
+                pair_id=pair_id,
+            )
+        )
+    db.commit()
+    loaded = _load_tx(db, user, tx.id)
+    assert loaded is not None
+    return loaded
+
+
+def paired_sibling(db: Session, user: User, tx: Transaction) -> Transaction | None:
+    if tx.pair_id is None:
+        return None
+    return db.scalar(
+        select(Transaction).where(
+            Transaction.user_id == user.id,
+            Transaction.pair_id == tx.pair_id,
+            Transaction.id != tx.id,
+        )
+    )
+
+
+def sync_pair_from(db: Session, user: User, tx: Transaction) -> None:
+    """Keep a paired expense/withdrawal on the same date, note, and absolute amount."""
+    sibling = paired_sibling(db, user, tx)
+    if sibling is None:
+        return
+    sibling.date = tx.date
+    sibling.note = tx.note
+    magnitude = abs(tx.amount)
+    sib_cat = db.get(Category, sibling.category_id)
+    if sib_cat is not None and sib_cat.kind == CategoryKind.savings.value:
+        sibling.amount = -magnitude
+    else:
+        sibling.amount = magnitude
+    db.add(sibling)
+
+
+def delete_transaction_and_pair(db: Session, user: User, tx: Transaction) -> None:
+    sibling = paired_sibling(db, user, tx)
+    db.delete(tx)
+    if sibling is not None:
+        db.delete(sibling)
+    db.commit()

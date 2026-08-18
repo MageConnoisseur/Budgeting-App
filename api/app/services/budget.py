@@ -18,6 +18,7 @@ from app.models import (
     User,
 )
 from app.schemas import BudgetLineUpsert
+from app.services.funding import MONTH_LOAD_OPTIONS, resolve_funded_by
 
 
 def _period_key(year: int, month: int) -> int:
@@ -41,7 +42,7 @@ def get_or_create_month(
 
     existing = db.scalar(
         select(BudgetMonth)
-        .options(joinedload(BudgetMonth.lines).joinedload(BudgetLine.category))
+        .options(*MONTH_LOAD_OPTIONS)
         .where(
             BudgetMonth.user_id == user.id,
             BudgetMonth.year == year,
@@ -67,7 +68,7 @@ def get_or_create_month(
     return (
         db.scalar(
             select(BudgetMonth)
-            .options(joinedload(BudgetMonth.lines).joinedload(BudgetLine.category))
+            .options(*MONTH_LOAD_OPTIONS)
             .where(BudgetMonth.id == budget_month.id)
         ),
         seeded_from,
@@ -93,8 +94,18 @@ def _find_most_recent_prior_month(
     return max(priors, key=lambda m: _period_key(m.year, m.month))
 
 
-def _copy_lines(db: Session, *, source: BudgetMonth, target: BudgetMonth) -> None:
-    """Copy planned amounts only — never transactions."""
+def _copy_lines(
+    db: Session,
+    *,
+    source: BudgetMonth,
+    target: BudgetMonth,
+    copy_funding: bool = False,
+) -> None:
+    """Copy planned amounts only — never transactions.
+
+    Auto-seed copy-forward does not copy "paid from savings" links so a
+    one-off shop month is not repeated. Explicit copy-from and templates do.
+    """
     # Clear existing target lines
     for line in list(target.lines):
         db.delete(line)
@@ -105,11 +116,17 @@ def _copy_lines(db: Session, *, source: BudgetMonth, target: BudgetMonth) -> Non
         cat = db.get(Category, src.category_id)
         if cat is None or cat.archived:
             continue
+        funded_by = src.funded_by_category_id if copy_funding else None
+        if funded_by is not None:
+            fund = db.get(Category, funded_by)
+            if fund is None or fund.archived or fund.kind != "savings":
+                funded_by = None
         db.add(
             BudgetLine(
                 budget_month_id=target.id,
                 category_id=src.category_id,
                 planned_amount=src.planned_amount,
+                funded_by_category_id=funded_by,
             )
         )
     db.flush()
@@ -146,12 +163,30 @@ def upsert_month_lines(
         seen.add(item.category_id)
         if item.category_id in existing_by_cat:
             existing_by_cat[item.category_id].planned_amount = item.planned_amount
+            if "funded_by_category_id" in item.model_fields_set:
+                existing_by_cat[item.category_id].funded_by_category_id = (
+                    resolve_funded_by(
+                        db,
+                        user,
+                        line_category=cat,
+                        funded_by_category_id=item.funded_by_category_id,
+                    )
+                )
         else:
+            funded_by = None
+            if "funded_by_category_id" in item.model_fields_set:
+                funded_by = resolve_funded_by(
+                    db,
+                    user,
+                    line_category=cat,
+                    funded_by_category_id=item.funded_by_category_id,
+                )
             db.add(
                 BudgetLine(
                     budget_month_id=budget_month.id,
                     category_id=item.category_id,
                     planned_amount=item.planned_amount,
+                    funded_by_category_id=funded_by,
                 )
             )
 
@@ -163,7 +198,7 @@ def upsert_month_lines(
     db.commit()
     return db.scalar(
         select(BudgetMonth)
-        .options(joinedload(BudgetMonth.lines).joinedload(BudgetLine.category))
+        .options(*MONTH_LOAD_OPTIONS)
         .where(BudgetMonth.id == budget_month.id)
     )
 
@@ -195,11 +230,11 @@ def copy_from_month(
         .where(BudgetMonth.id == target.id)
     )
     assert target is not None
-    _copy_lines(db, source=source, target=target)
+    _copy_lines(db, source=source, target=target, copy_funding=True)
     db.commit()
     return db.scalar(
         select(BudgetMonth)
-        .options(joinedload(BudgetMonth.lines).joinedload(BudgetLine.category))
+        .options(*MONTH_LOAD_OPTIONS)
         .where(BudgetMonth.id == target.id)
     )
 
@@ -240,6 +275,7 @@ def save_as_template(
                 template_id=template.id,
                 category_id=src.category_id,
                 planned_amount=src.planned_amount,
+                funded_by_category_id=src.funded_by_category_id,
             )
         )
     db.commit()
@@ -277,11 +313,17 @@ def apply_template(
         cat = db.get(Category, src.category_id)
         if cat is None or cat.archived or cat.user_id != user.id:
             continue
+        funded_by = src.funded_by_category_id
+        if funded_by is not None:
+            fund = db.get(Category, funded_by)
+            if fund is None or fund.archived or fund.kind != "savings":
+                funded_by = None
         db.add(
             BudgetLine(
                 budget_month_id=target.id,
                 category_id=src.category_id,
                 planned_amount=src.planned_amount,
+                funded_by_category_id=funded_by,
             )
         )
     db.commit()
@@ -293,7 +335,7 @@ def get_annual_budget(db: Session, user: User, year: int) -> list[BudgetMonth]:
     months = (
         db.scalars(
             select(BudgetMonth)
-            .options(joinedload(BudgetMonth.lines).joinedload(BudgetLine.category))
+            .options(*MONTH_LOAD_OPTIONS)
             .where(BudgetMonth.user_id == user.id, BudgetMonth.year == year)
             .order_by(BudgetMonth.month)
         )
@@ -310,14 +352,24 @@ def upsert_annual_cell(
     month: int,
     category_id: UUID,
     planned_amount: Decimal,
+    funded_by_category_id: UUID | None = None,
+    *,
+    set_funded_by: bool = False,
 ) -> BudgetMonth:
     """Edit one annual-grid cell; creates/seeds the month if needed."""
+    payload = BudgetLineUpsert(category_id=category_id, planned_amount=planned_amount)
+    if set_funded_by:
+        payload = BudgetLineUpsert(
+            category_id=category_id,
+            planned_amount=planned_amount,
+            funded_by_category_id=funded_by_category_id,
+        )
     return upsert_month_lines(
         db,
         user,
         year,
         month,
-        [BudgetLineUpsert(category_id=category_id, planned_amount=planned_amount)],
+        [payload],
         replace_all=False,
         auto_seed=True,
     )

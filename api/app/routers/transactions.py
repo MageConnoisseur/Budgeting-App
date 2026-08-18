@@ -20,7 +20,14 @@ from app.schemas import (
     TransactionOut,
     TransactionUpdate,
 )
-from app.services.transactions import list_transactions, suggest_notes
+from app.services.transactions import (
+    create_transaction as create_ledger_transaction,
+    delete_transaction_and_pair,
+    list_transactions,
+    paired_sibling,
+    suggest_notes,
+    sync_pair_from,
+)
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
 
@@ -123,21 +130,15 @@ def create_transaction(
         raise HTTPException(status_code=400, detail="Cannot log against an archived category")
     _validate_amount_for_kind(cat.kind, body.amount)
 
-    tx = Transaction(
-        user_id=user.id,
-        category_id=body.category_id,
+    return create_ledger_transaction(
+        db,
+        user,
+        category=cat,
         amount=body.amount,
         date=body.date,
         note=body.note,
+        withdraw_from_category_id=body.withdraw_from_category_id,
     )
-    db.add(tx)
-    db.commit()
-    tx = db.scalar(
-        select(Transaction)
-        .options(joinedload(Transaction.category))
-        .where(Transaction.id == tx.id)
-    )
-    return tx
 
 
 @router.get("/{transaction_id}", response_model=TransactionOut)
@@ -182,6 +183,7 @@ def update_transaction(
     amount = updates.get("amount", tx.amount)
     _validate_amount_for_kind(cat.kind, amount)
 
+    original_category_id = tx.category_id
     tx.category_id = category_id
     tx.amount = amount
     if "date" in updates:
@@ -189,6 +191,14 @@ def update_transaction(
     if "note" in updates:
         tx.note = updates["note"]
     db.add(tx)
+    if "category_id" in updates and category_id != original_category_id:
+        sibling = paired_sibling(db, user, tx)
+        tx.pair_id = None
+        if sibling is not None:
+            sibling.pair_id = None
+            db.add(sibling)
+    else:
+        sync_pair_from(db, user, tx)
     db.commit()
     return db.scalar(
         select(Transaction)
@@ -210,6 +220,5 @@ def delete_transaction(
     )
     if tx is None:
         raise HTTPException(status_code=404, detail="Transaction not found")
-    db.delete(tx)
-    db.commit()
+    delete_transaction_and_pair(db, user, tx)
     return MessageOut(detail="Transaction deleted")

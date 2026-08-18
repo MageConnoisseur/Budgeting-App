@@ -50,6 +50,10 @@ export function SavingsBucketsGuide({
           <p>
             On the budget, enter how much you <strong>plan to contribute</strong>{' '}
             to each bucket this month. That planned amount is always positive.
+            Big bills you will pay from a bucket (a car shop visit, a new
+            monitor) stay on the expense line — set <strong>Pay from</strong> to
+            that bucket so the month’s leftover does not treat the bill as
+            this paycheck’s problem.
           </p>
         )}
 
@@ -69,11 +73,11 @@ export function SavingsBucketsGuide({
               </li>
             </ul>
             <p className="savings-guide-example">
-              Example: you contribute $200 to Vacation (<code>+200</code>). Later
-              you spend $150 of it on flights — log <code>-150</code> to Vacation
-              so the bucket balance drops to $50. If you also want that trip in
-              spending reports, log the $150 as an <strong>Expense</strong>{' '}
-              separately.
+              Example: you contribute $200 to a Car fund (<code>+200</code>).
+              In September you take the car in — plan $500 Car maintenance
+              paid from Car fund, then log the $500 expense and check{' '}
+              <strong>Also withdraw from Car fund</strong> so the bucket drops
+              to match.
             </p>
           </>
         )}
@@ -82,8 +86,9 @@ export function SavingsBucketsGuide({
           <p>
             The dashboard shows each bucket’s <strong>balance</strong> (all
             deposits minus withdrawals over time) and this period’s progress vs
-            your contribution plan. Soft warnings appear if you put in more than
-            planned — they never block logging.
+            your contribution plan. If expenses are marked paid from a bucket,
+            leftover ignores those bills. Soft warnings appear if you put in
+            more than planned — they never block logging.
           </p>
         )}
 

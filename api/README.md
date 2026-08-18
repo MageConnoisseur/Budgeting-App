@@ -48,6 +48,8 @@ the provider from **Account** so budget data stays on one user id.
 - Stored as `Numeric(14, 2)` / Decimal — never floats
 - **Income / expense** transaction amounts must be **> 0**
 - **Savings** amounts may be **positive** (contribution in) or **negative** (withdrawal out)
+- An expense budget line may be **paid from** a savings bucket (`funded_by_category_id`); planned contributions stay **≥ 0**
+- Paycheck leftover is **income − expenses paid from income − savings contributions** (funded expenses are visible but excluded)
 - Planned budget amounts are always **≥ 0**
 - Going over budget is **allowed**; dashboard sets `over_budget: true` as a soft warning only
 
