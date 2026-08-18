@@ -34,15 +34,21 @@ function annualCellKey(categoryId: string, month: number) {
 }
 
 function draftFromAnnual(cats: Category[], months: BudgetMonth[]) {
-  const map: Record<string, string> = {}
+  const amounts: Record<string, string> = {}
+  const funding: Record<string, string> = {}
   for (const c of cats) {
     for (let m = 1; m <= 12; m++) {
       const bm = months.find((x) => x.month === m)
       const line = bm?.lines.find((l) => l.category_id === c.id)
-      map[annualCellKey(c.id, m)] = line ? toMoneyString(line.planned_amount) : ''
+      amounts[annualCellKey(c.id, m)] = line
+        ? toMoneyString(line.planned_amount)
+        : ''
+      if (c.kind === 'expense') {
+        funding[annualCellKey(c.id, m)] = line?.funded_by_category_id ?? ''
+      }
     }
   }
-  return map
+  return { amounts, funding }
 }
 
 export function BudgetPage() {
@@ -59,6 +65,11 @@ export function BudgetPage() {
   const [annualDraft, setAnnualDraft] = useState<Record<string, string>>({})
   const [templates, setTemplates] = useState<BudgetTemplate[]>([])
   const [amounts, setAmounts] = useState<Record<string, string>>({})
+  /** Expense category id → savings bucket id (empty = paid from this month's income). */
+  const [funding, setFunding] = useState<Record<string, string>>({})
+  const [annualFunding, setAnnualFunding] = useState<Record<string, string>>(
+    {},
+  )
   /** Prior calendar month planned amounts for the "what changed" strip. */
   const [priorAmounts, setPriorAmounts] = useState<Record<string, string> | null>(
     null,
@@ -99,10 +110,15 @@ export function BudgetPage() {
         ])
         setBudget(bm)
         const map: Record<string, string> = {}
+        const fund: Record<string, string> = {}
         for (const line of bm.lines) {
           map[line.category_id] = toMoneyString(line.planned_amount)
+          if (line.funded_by_category_id) {
+            fund[line.category_id] = line.funded_by_category_id
+          }
         }
         setAmounts(map)
+        setFunding(fund)
 
         const priorMonth = priorAnnual.months.find((m) => m.month === prior.month)
         if (priorMonth && priorMonth.lines.length > 0) {
@@ -125,7 +141,9 @@ export function BudgetPage() {
       } else {
         const annual = await budgetsApi.getAnnualBudget(year)
         setAnnualMonths(annual.months)
-        setAnnualDraft(draftFromAnnual(cats, annual.months))
+        const draft = draftFromAnnual(cats, annual.months)
+        setAnnualDraft(draft.amounts)
+        setAnnualFunding(draft.funding)
         setPriorAmounts(null)
         setHasPriorPlan(false)
         setStatus(null)
@@ -162,16 +180,34 @@ export function BudgetPage() {
     return map
   }, [categories])
 
+  const plannedUseByBucket = useMemo(() => {
+    const map: Record<string, number> = {}
+    for (const c of grouped.expense) {
+      const bucketId = funding[c.id]
+      if (!bucketId) continue
+      const raw = amounts[c.id]
+      const n = raw ? Number(String(raw).replace(/[^0-9.-]/g, '')) : 0
+      if (!Number.isNaN(n) && n > 0) {
+        map[bucketId] = (map[bucketId] ?? 0) + n
+      }
+    }
+    return map
+  }, [grouped.expense, funding, amounts])
+
   /** Live monthly plan balance from draft inputs (updates as you type). */
   const monthlyBalance = useMemo(
     () =>
-      sumByKind(categories, (id) => {
-        const raw = amounts[id]
-        if (raw === undefined || raw === '') return 0
-        const n = Number(raw.replace(/[^0-9.-]/g, ''))
-        return Number.isNaN(n) ? 0 : n
-      }),
-    [categories, amounts],
+      sumByKind(
+        categories,
+        (id) => {
+          const raw = amounts[id]
+          if (raw === undefined || raw === '') return 0
+          const n = Number(raw.replace(/[^0-9.-]/g, ''))
+          return Number.isNaN(n) ? 0 : n
+        },
+        funding,
+      ),
+    [categories, amounts, funding],
   )
 
   /** Annual: year totals + per-month remainder from draft inputs (live as you type). */
@@ -182,16 +218,33 @@ export function BudgetPage() {
       const n = Number(raw.replace(/[^0-9.-]/g, ''))
       return Number.isNaN(n) ? 0 : n
     }
-    const yearTotals = sumByKind(categories, (id) => {
-      let total = 0
-      for (let m = 1; m <= 12; m++) total += amountFor(id, m)
-      return total
+    const byMonth = Array.from({ length: 12 }, (_, i) => {
+      const monthFunding: Record<string, string> = {}
+      for (const c of categories) {
+        if (c.kind !== 'expense') continue
+        const fid = annualFunding[annualCellKey(c.id, i + 1)]
+        if (fid) monthFunding[c.id] = fid
+      }
+      return sumByKind(categories, (id) => amountFor(id, i + 1), monthFunding)
     })
-    const byMonth = Array.from({ length: 12 }, (_, i) =>
-      sumByKind(categories, (id) => amountFor(id, i + 1)),
+    const yearFromMonths = byMonth.reduce(
+      (acc, t) => ({
+        income: acc.income + t.income,
+        expense: acc.expense + t.expense,
+        expenseFromSavings: acc.expenseFromSavings + t.expenseFromSavings,
+        savings: acc.savings + t.savings,
+        balance: acc.balance + t.balance,
+      }),
+      {
+        income: 0,
+        expense: 0,
+        expenseFromSavings: 0,
+        savings: 0,
+        balance: 0,
+      },
     )
-    return { yearTotals, byMonth }
-  }, [categories, annualDraft])
+    return { yearTotals: yearFromMonths, byMonth }
+  }, [categories, annualDraft, annualFunding])
 
   async function saveMonthly(e: FormEvent) {
     e.preventDefault()
@@ -201,12 +254,21 @@ export function BudgetPage() {
       const lines = categories.map((c) => ({
         category_id: c.id,
         planned_amount: parseMoneyInput(amounts[c.id] ?? '0') ?? '0.00',
+        funded_by_category_id:
+          c.kind === 'expense' ? funding[c.id] || null : null,
       }))
       const bm = await budgetsApi.upsertBudgetMonth(year, month, {
         lines,
         replace_all: true,
       })
       setBudget(bm)
+      const fund: Record<string, string> = {}
+      for (const line of bm.lines) {
+        if (line.funded_by_category_id) {
+          fund[line.category_id] = line.funded_by_category_id
+        }
+      }
+      setFunding(fund)
       setStatus('Saved')
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : 'Save failed')
@@ -222,11 +284,16 @@ export function BudgetPage() {
     try {
       const dirtyByMonth = new Map<
         number,
-        { category_id: string; planned_amount: string }[]
+        {
+          category_id: string
+          planned_amount: string
+          funded_by_category_id?: string | null
+        }[]
       >()
       for (const c of categories) {
         for (let m = 1; m <= 12; m++) {
-          const raw = annualDraft[annualCellKey(c.id, m)] ?? ''
+          const key = annualCellKey(c.id, m)
+          const raw = annualDraft[key] ?? ''
           const parsed = raw.trim() === '' ? '' : parseMoneyInput(raw)
           if (parsed === null) {
             setError(`Enter a valid amount for ${c.name} (${MONTH_SHORT[m - 1]})`)
@@ -235,11 +302,20 @@ export function BudgetPage() {
           const bm = annualMonths.find((x) => x.month === m)
           const line = bm?.lines.find((l) => l.category_id === c.id)
           const prev = line ? toMoneyString(line.planned_amount) : ''
-          if (parsed === prev) continue
+          const nextAmount = parsed === '' ? '0.00' : parsed
+          const prevFund = line?.funded_by_category_id ?? ''
+          const nextFund =
+            c.kind === 'expense' ? (annualFunding[key] ?? '') : ''
+          const amountChanged = (parsed === '' ? '' : nextAmount) !== prev
+          const fundChanged = c.kind === 'expense' && nextFund !== prevFund
+          if (!amountChanged && !fundChanged) continue
           const list = dirtyByMonth.get(m) ?? []
           list.push({
             category_id: c.id,
             planned_amount: parsed === '' ? '0.00' : parsed,
+            ...(c.kind === 'expense'
+              ? { funded_by_category_id: nextFund || null }
+              : {}),
           })
           dirtyByMonth.set(m, list)
         }
@@ -255,6 +331,9 @@ export function BudgetPage() {
             month: m,
             category_id: lines[0].category_id,
             planned_amount: lines[0].planned_amount,
+            ...(lines[0].funded_by_category_id !== undefined
+              ? { funded_by_category_id: lines[0].funded_by_category_id }
+              : {}),
           })
           if (lines.length > 1) {
             await budgetsApi.upsertBudgetMonth(year, m, {
@@ -265,7 +344,9 @@ export function BudgetPage() {
         }
         const annual = await budgetsApi.getAnnualBudget(year)
         setAnnualMonths(annual.months)
-        setAnnualDraft(draftFromAnnual(categories, annual.months))
+        const draft = draftFromAnnual(categories, annual.months)
+        setAnnualDraft(draft.amounts)
+        setAnnualFunding(draft.funding)
       }
       setStatus('Saved')
     } catch (err) {
@@ -287,10 +368,15 @@ export function BudgetPage() {
       )
       setBudget(bm)
       const map: Record<string, string> = {}
+      const fund: Record<string, string> = {}
       for (const line of bm.lines) {
         map[line.category_id] = toMoneyString(line.planned_amount)
+        if (line.funded_by_category_id) {
+          fund[line.category_id] = line.funded_by_category_id
+        }
       }
       setAmounts(map)
+      setFunding(fund)
       setStatus(`Copied from ${copyYear}-${String(copyMonth).padStart(2, '0')}`)
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : 'Copy failed')
@@ -327,10 +413,15 @@ export function BudgetPage() {
       )
       setBudget(bm)
       const map: Record<string, string> = {}
+      const fund: Record<string, string> = {}
       for (const line of bm.lines) {
         map[line.category_id] = toMoneyString(line.planned_amount)
+        if (line.funded_by_category_id) {
+          fund[line.category_id] = line.funded_by_category_id
+        }
       }
       setAmounts(map)
+      setFunding(fund)
       setStatus('Template applied')
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : 'Apply failed')
@@ -387,7 +478,7 @@ export function BudgetPage() {
           <BudgetBalancePanel
             totals={monthlyBalance}
             title="Month plan balance"
-            subtitle="Updates as you edit — income − expenses − savings"
+            subtitle="Updates as you edit — income − expenses paid from this month − savings"
           />
 
           <BudgetPlanDiffStrip
@@ -411,7 +502,7 @@ export function BudgetPage() {
                   )}
                   <div className="budget-lines">
                     {grouped[kind].map((c) => (
-                      <label key={c.id} className="budget-line">
+                      <div key={c.id} className="budget-line">
                         <span>{c.name}</span>
                         <input
                           inputMode="decimal"
@@ -423,8 +514,36 @@ export function BudgetPage() {
                             }))
                           }
                           placeholder="0.00"
+                          aria-label={`${c.name} planned amount`}
                         />
-                      </label>
+                        {kind === 'expense' && grouped.savings.length > 0 && (
+                          <select
+                            className="pay-from"
+                            aria-label={`Pay ${c.name} from`}
+                            value={funding[c.id] ?? ''}
+                            onChange={(e) =>
+                              setFunding((prev) => ({
+                                ...prev,
+                                [c.id]: e.target.value,
+                              }))
+                            }
+                          >
+                            <option value="">This month’s income</option>
+                            {grouped.savings.map((s) => (
+                              <option key={s.id} value={s.id}>
+                                {s.name}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                        {kind === 'savings' && (
+                          <span className="budget-line-note muted compact">
+                            {plannedUseByBucket[c.id]
+                              ? `This month’s expenses plan to use ${formatUsd(plannedUseByBucket[c.id])} from this bucket.`
+                              : 'Contribution this month'}
+                          </span>
+                        )}
+                      </div>
                     ))}
                   </div>
                 </section>
@@ -522,7 +641,7 @@ export function BudgetPage() {
           <BudgetBalancePanel
             totals={annualBalance.yearTotals}
             title="Year plan balance"
-            subtitle="Sum of all planned months — income − expenses − savings"
+            subtitle="Sum of monthly remainders — income − expenses paid from income − savings"
           />
 
           {grouped.savings.length > 0 && (
@@ -532,7 +651,8 @@ export function BudgetPage() {
           <div className="panel month-balance-strip">
             <h3 className="section-title">Monthly remainder</h3>
             <p className="muted compact">
-              Each month’s planned income − expenses − savings as you edit.
+              Each month’s planned income − expenses paid from that month −
+              savings as you edit.
               Save the year to keep changes.
             </p>
             <div className="month-balance-grid">
@@ -592,19 +712,64 @@ export function BudgetPage() {
                         </th>
                         {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
                           <td key={m} className="annual-month-col">
-                            <input
-                              className="cell-input"
-                              inputMode="decimal"
-                              value={annualDraft[annualCellKey(c.id, m)] ?? ''}
-                              onChange={(e) =>
-                                setAnnualDraft((prev) => ({
-                                  ...prev,
-                                  [annualCellKey(c.id, m)]: e.target.value,
-                                }))
-                              }
-                              placeholder="—"
-                              aria-label={`${c.name} ${MONTH_SHORT[m - 1]}`}
-                            />
+                            <div
+                              className={`annual-cell${
+                                c.kind === 'expense' &&
+                                annualFunding[annualCellKey(c.id, m)]
+                                  ? ' is-funded'
+                                  : ''
+                              }`}
+                            >
+                              <input
+                                className="cell-input"
+                                inputMode="decimal"
+                                value={annualDraft[annualCellKey(c.id, m)] ?? ''}
+                                onChange={(e) =>
+                                  setAnnualDraft((prev) => ({
+                                    ...prev,
+                                    [annualCellKey(c.id, m)]: e.target.value,
+                                  }))
+                                }
+                                placeholder="—"
+                                aria-label={`${c.name} ${MONTH_SHORT[m - 1]}`}
+                              />
+                              {c.kind === 'expense' &&
+                                grouped.savings.length > 0 && (
+                                  <select
+                                    className="cell-fund"
+                                    value={
+                                      annualFunding[annualCellKey(c.id, m)] ??
+                                      ''
+                                    }
+                                    onChange={(e) =>
+                                      setAnnualFunding((prev) => ({
+                                        ...prev,
+                                        [annualCellKey(c.id, m)]:
+                                          e.target.value,
+                                      }))
+                                    }
+                                    aria-label={`Pay ${c.name} ${MONTH_SHORT[m - 1]} from`}
+                                    title={
+                                      annualFunding[annualCellKey(c.id, m)]
+                                        ? grouped.savings.find(
+                                            (s) =>
+                                              s.id ===
+                                              annualFunding[
+                                                annualCellKey(c.id, m)
+                                              ],
+                                          )?.name
+                                        : 'This month’s income'
+                                    }
+                                  >
+                                    <option value="">Income</option>
+                                    {grouped.savings.map((s) => (
+                                      <option key={s.id} value={s.id}>
+                                        {s.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                )}
+                            </div>
                           </td>
                         ))}
                       </tr>

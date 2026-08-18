@@ -123,8 +123,14 @@ class Category(Base):
     )
 
     user: Mapped[User] = relationship(back_populates="categories")
-    budget_lines: Mapped[list[BudgetLine]] = relationship(back_populates="category")
-    template_lines: Mapped[list[BudgetTemplateLine]] = relationship(back_populates="category")
+    budget_lines: Mapped[list[BudgetLine]] = relationship(
+        back_populates="category",
+        foreign_keys="BudgetLine.category_id",
+    )
+    template_lines: Mapped[list[BudgetTemplateLine]] = relationship(
+        back_populates="category",
+        foreign_keys="BudgetTemplateLine.category_id",
+    )
     transactions: Mapped[list[Transaction]] = relationship(back_populates="category")
     recurring_schedules: Mapped[list[RecurringSchedule]] = relationship(
         back_populates="category"
@@ -181,6 +187,13 @@ class BudgetLine(Base):
         nullable=False,
     )
     planned_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False, default=0)
+    # Expense lines only: pay this planned amount from a savings bucket.
+    funded_by_category_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("categories.id", ondelete="SET NULL"),
+        index=True,
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -192,7 +205,13 @@ class BudgetLine(Base):
     )
 
     budget_month: Mapped[BudgetMonth] = relationship(back_populates="lines")
-    category: Mapped[Category] = relationship(back_populates="budget_lines")
+    category: Mapped[Category] = relationship(
+        back_populates="budget_lines",
+        foreign_keys=[category_id],
+    )
+    funded_by_category: Mapped[Optional[Category]] = relationship(
+        foreign_keys=[funded_by_category_id],
+    )
 
 
 class BudgetTemplate(Base):
@@ -244,9 +263,21 @@ class BudgetTemplateLine(Base):
         nullable=False,
     )
     planned_amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False, default=0)
+    funded_by_category_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("categories.id", ondelete="SET NULL"),
+        index=True,
+        nullable=True,
+    )
 
     template: Mapped[BudgetTemplate] = relationship(back_populates="lines")
-    category: Mapped[Category] = relationship(back_populates="template_lines")
+    category: Mapped[Category] = relationship(
+        back_populates="template_lines",
+        foreign_keys=[category_id],
+    )
+    funded_by_category: Mapped[Optional[Category]] = relationship(
+        foreign_keys=[funded_by_category_id],
+    )
 
 
 class Transaction(Base):
@@ -265,6 +296,11 @@ class Transaction(Base):
     amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
     date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Shared by an expense and its matching savings withdrawal when logging
+    # a bill that is paid from a bucket.
+    pair_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), index=True, nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

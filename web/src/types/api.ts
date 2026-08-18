@@ -41,6 +41,8 @@ export interface BudgetLine {
   id: string
   category_id: string
   planned_amount: string
+  funded_by_category_id?: string | null
+  funded_by_category?: Category | null
   category?: Category | null
 }
 
@@ -63,6 +65,7 @@ export interface BudgetTemplateLine {
   id: string
   category_id: string
   planned_amount: string
+  funded_by_category_id?: string | null
 }
 
 export interface BudgetTemplate {
@@ -79,6 +82,7 @@ export interface Transaction {
   amount: string
   date: string
   note: string | null
+  pair_id?: string | null
   created_at: string
   updated_at: string
   category?: Category | null
@@ -120,6 +124,8 @@ export interface CategoryProgress {
   actual: string
   remaining: string
   over_budget: boolean
+  funded_by_category_id?: string | null
+  funded_by_category_name?: string | null
 }
 
 export interface SavingsBucket {
@@ -134,6 +140,9 @@ export interface SavingsBucket {
   projected_hit_year: number | null
   projected_hit_month: number | null
   monthly_contribution: string
+  planned_use_this_period?: string
+  actual_use_this_period?: string
+  use_over_balance?: boolean
 }
 
 export interface SpendingPaceDay {
@@ -216,12 +225,28 @@ export interface BudgetCoach {
   tips: CoachTip[]
 }
 
+export interface PaycheckLeftover {
+  income: string
+  expense_from_income: string
+  expense_from_savings: string
+  savings_contributions: string
+  leftover: string
+}
+
+export interface ExpenseFunding {
+  category_id: string
+  funded_by_category_id: string | null
+  funded_by_category_name: string | null
+}
+
 export interface MonthlyDashboard {
   year: number
   month: number
   income: KindTotals
   expense: KindTotals
   savings: KindTotals
+  leftover_planned: PaycheckLeftover
+  leftover_actual: PaycheckLeftover
   categories: CategoryProgress[]
   savings_buckets: SavingsBucket[]
   spending_pace: SpendingPace
@@ -289,6 +314,8 @@ export interface AnnualDashboard {
   income: KindTotals
   expense: KindTotals
   savings: KindTotals
+  leftover_planned: PaycheckLeftover
+  leftover_actual: PaycheckLeftover
   savings_buckets: SavingsBucket[]
   spending_pace: SpendingPace
   coach: BudgetCoach

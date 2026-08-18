@@ -1,10 +1,10 @@
 import { formatUsd } from '../lib/format'
 import {
+  leftoverFromPaycheck,
   leftoverTone,
-  trueLeftoverFromKinds,
   type TrueLeftoverTotals,
 } from '../lib/trueLeftover'
-import type { KindTotals } from '../types/api'
+import type { PaycheckLeftover } from '../types/api'
 import { SoftWarning } from './SoftWarning'
 
 function leftoverLabel(tone: ReturnType<typeof leftoverTone>): string {
@@ -15,12 +15,12 @@ function leftoverLabel(tone: ReturnType<typeof leftoverTone>): string {
 
 function leftoverHint(tone: ReturnType<typeof leftoverTone>, scope: string): string {
   if (tone === 'balanced') {
-    return `Actual income covered expenses and savings contributions for ${scope}.`
+    return `Actual income covered expenses paid from income and savings contributions for ${scope}.`
   }
   if (tone === 'surplus') {
-    return `Cash left after expenses and savings — more honest than “remaining in a category.”`
+    return `Cash left after expenses paid from income and savings — bills paid from a bucket are set aside.`
   }
-  return `Expenses and savings outpaced actual income for ${scope}. Soft signal only.`
+  return `Unfunded expenses and savings outpaced actual income for ${scope}. Soft signal only.`
 }
 
 function Equation({ totals }: { totals: TrueLeftoverTotals }) {
@@ -35,7 +35,7 @@ function Equation({ totals }: { totals: TrueLeftoverTotals }) {
         −
       </span>
       <div className="eq-term expense">
-        <span>Expenses</span>
+        <span>From income</span>
         <strong>{formatUsd(totals.expense)}</strong>
       </div>
       <span className="eq-op" aria-hidden>
@@ -57,25 +57,23 @@ function Equation({ totals }: { totals: TrueLeftoverTotals }) {
 }
 
 /**
- * Actual income − expenses − savings contributions = discretionary cash.
- * Distinct from per-category “remaining” (planned − actual).
+ * Actual income − expenses paid from income − savings contributions.
+ * Expenses marked “paid from a bucket” are excluded from leftover.
  */
 export function TrueLeftoverWidget({
-  income,
-  expense,
-  savings,
+  leftoverPlanned,
+  leftoverActual,
   title,
   scopeLabel,
 }: {
-  income: KindTotals
-  expense: KindTotals
-  savings: KindTotals
+  leftoverPlanned: PaycheckLeftover
+  leftoverActual: PaycheckLeftover
   title?: string | null
   /** e.g. "this month" or "this year" */
   scopeLabel: string
 }) {
-  const actual = trueLeftoverFromKinds(income, expense, savings, 'actual')
-  const planned = trueLeftoverFromKinds(income, expense, savings, 'planned')
+  const actual = leftoverFromPaycheck(leftoverActual)
+  const planned = leftoverFromPaycheck(leftoverPlanned)
   const tone = leftoverTone(actual.leftover)
   const planTone = leftoverTone(planned.leftover)
 
@@ -88,7 +86,8 @@ export function TrueLeftoverWidget({
         )}
       </div>
       <p className="muted compact">
-        Actual income − expenses − savings contributions for {scopeLabel}.
+        Actual income − expenses paid from income − savings contributions for{' '}
+        {scopeLabel}.
       </p>
 
       <div className="true-leftover-hero">
@@ -107,6 +106,13 @@ export function TrueLeftoverWidget({
       </div>
 
       <Equation totals={actual} />
+
+      {actual.expenseFromSavings > 0.005 && (
+        <p className="muted compact">
+          {formatUsd(actual.expenseFromSavings)} of spending was paid from
+          savings and is not in leftover.
+        </p>
+      )}
 
       <p className="balance-hint">{leftoverHint(tone, scopeLabel)}</p>
     </div>

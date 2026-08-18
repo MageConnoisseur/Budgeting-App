@@ -1,4 +1,5 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
+import * as budgetsApi from '../api/budgets'
 import * as categoriesApi from '../api/categories'
 import { ApiError } from '../api/client'
 import * as txApi from '../api/transactions'
@@ -50,6 +51,11 @@ export function TrackerPage() {
   const [recurringPrompt, setRecurringPrompt] =
     useState<RecurringPromptDraft | null>(null)
   const [schedulesKey, setSchedulesKey] = useState(0)
+  const [planFunding, setPlanFunding] = useState<{
+    id: string
+    name: string
+  } | null>(null)
+  const [withdrawFromBucket, setWithdrawFromBucket] = useState(true)
 
   const filteredCats = useMemo(() => {
     const active = categories.filter((c) => c.kind === formKind && !c.archived)
@@ -102,6 +108,39 @@ export function TrackerPage() {
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    if (formKind !== 'expense' || !formCategory || !formDate) {
+      setPlanFunding(null)
+      return
+    }
+    const match = /^(\d{4})-(\d{2})/.exec(formDate)
+    if (!match) {
+      setPlanFunding(null)
+      return
+    }
+    let cancelled = false
+    void budgetsApi
+      .getExpenseFunding(Number(match[1]), Number(match[2]), formCategory)
+      .then((row) => {
+        if (cancelled) return
+        if (row.funded_by_category_id && row.funded_by_category_name) {
+          setPlanFunding({
+            id: row.funded_by_category_id,
+            name: row.funded_by_category_name,
+          })
+          setWithdrawFromBucket(true)
+        } else {
+          setPlanFunding(null)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setPlanFunding(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [formKind, formCategory, formDate])
 
   useEffect(() => {
     if (filteredCats.length && !filteredCats.some((c) => c.id === formCategory)) {
@@ -167,13 +206,19 @@ export function TrackerPage() {
     setSaving(true)
     setError(null)
     try {
+      const creating = !editingId
       const payload = {
         category_id: formCategory,
         amount: toMoneyString(formAmount),
         date: formDate,
         note: formNote.trim() || null,
+        ...(creating &&
+        withdrawFromBucket &&
+        planFunding &&
+        formKind === 'expense'
+          ? { withdraw_from_category_id: planFunding.id }
+          : {}),
       }
-      const wasCreate = !editingId
       const promptKind = formKind
       const promptCat = categories.find((c) => c.id === formCategory)
       if (editingId) {
@@ -185,7 +230,7 @@ export function TrackerPage() {
       setOffset(0)
       await load()
       if (
-        wasCreate &&
+        creating &&
         (promptKind === 'income' || promptKind === 'expense') &&
         promptCat
       ) {
@@ -346,6 +391,17 @@ export function TrackerPage() {
               </>
             )}
           </p>
+        )}
+        {formKind === 'expense' && planFunding && !editingId && (
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={withdrawFromBucket}
+              onChange={(e) => setWithdrawFromBucket(e.target.checked)}
+            />
+            Also withdraw {formAmount || 'this amount'} from {planFunding.name}.
+            This month’s plan pays this bill from that bucket.
+          </label>
         )}
         {formKind === 'savings' && (
           <div id="savings-amount-hint">
@@ -518,7 +574,12 @@ export function TrackerPage() {
                         '—'
                       )}
                     </td>
-                    <td>{tx.category?.name ?? '—'}</td>
+                    <td>
+                      {tx.category?.name ?? '—'}
+                      {tx.pair_id ? (
+                        <span className="muted compact"> · from savings</span>
+                      ) : null}
+                    </td>
                     <td className="num">{formatUsd(tx.amount)}</td>
                     <td className="note-cell">{tx.note || '—'}</td>
                     <td className="actions">

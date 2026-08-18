@@ -138,6 +138,8 @@ class BudgetLineOut(ORMModel):
     id: UUID
     category_id: UUID
     planned_amount: Decimal
+    funded_by_category_id: Optional[UUID] = None
+    funded_by_category: Optional[CategoryOut] = None
     category: Optional[CategoryOut] = None
 
 
@@ -154,6 +156,8 @@ class BudgetMonthOut(ORMModel):
 class BudgetLineUpsert(BaseModel):
     category_id: UUID
     planned_amount: Decimal = Field(..., max_digits=14, decimal_places=2)
+    # Omit to leave unchanged on merge; send null to pay from this month's income.
+    funded_by_category_id: Optional[UUID] = None
 
     @field_validator("planned_amount")
     @classmethod
@@ -175,6 +179,7 @@ class AnnualBudgetCell(BaseModel):
     month: int
     category_id: UUID
     planned_amount: Decimal = Field(..., max_digits=14, decimal_places=2)
+    funded_by_category_id: Optional[UUID] = None
 
     @field_validator("planned_amount")
     @classmethod
@@ -215,6 +220,7 @@ class BudgetTemplateLineOut(ORMModel):
     id: UUID
     category_id: UUID
     planned_amount: Decimal
+    funded_by_category_id: Optional[UUID] = None
 
 
 class BudgetTemplateOut(ORMModel):
@@ -233,6 +239,8 @@ class TransactionCreate(BaseModel):
     amount: Decimal = Field(..., max_digits=14, decimal_places=2)
     date: date
     note: Optional[str] = Field(default=None, max_length=2000)
+    # When set on an expense, also log a matching savings withdrawal.
+    withdraw_from_category_id: Optional[UUID] = None
 
     @field_validator("amount")
     @classmethod
@@ -267,6 +275,7 @@ class TransactionOut(ORMModel):
     amount: Decimal
     date: date
     note: Optional[str]
+    pair_id: Optional[UUID] = None
     created_at: datetime
     updated_at: datetime
     category: Optional[CategoryOut] = None
@@ -304,6 +313,8 @@ class CategoryProgress(BaseModel):
     actual: Decimal
     remaining: Decimal
     over_budget: bool  # soft warning flag only — never blocks logging
+    funded_by_category_id: Optional[UUID] = None
+    funded_by_category_name: Optional[str] = None
 
 
 class KindTotals(BaseModel):
@@ -331,6 +342,12 @@ class SavingsBucketOut(BaseModel):
     # Monthly contribution rate used for the projection (may differ from
     # planned_this_period on annual views where that field is a year total).
     monthly_contribution: Decimal = Decimal("0.00")
+    # Derived from expense lines marked "paid from" this bucket.
+    planned_use_this_period: Decimal = Decimal("0.00")
+    # Absolute value of negative (withdrawal) tracker amounts this period.
+    actual_use_this_period: Decimal = Decimal("0.00")
+    # Soft warning: planned use exceeds current bucket balance.
+    use_over_balance: bool = False
 
 
 class SpendingPaceDay(BaseModel):
@@ -401,6 +418,25 @@ class CoachTip(BaseModel):
     cta_label: Optional[str] = None
 
 
+class PaycheckLeftoverOut(BaseModel):
+    """Income vs unfunded expenses and savings contributions.
+
+    Expenses paid from a savings bucket are listed but not subtracted from leftover.
+    """
+
+    income: Decimal
+    expense_from_income: Decimal
+    expense_from_savings: Decimal
+    savings_contributions: Decimal
+    leftover: Decimal
+
+
+class ExpenseFundingOut(BaseModel):
+    category_id: UUID
+    funded_by_category_id: Optional[UUID] = None
+    funded_by_category_name: Optional[str] = None
+
+
 class BudgetCoachOut(BaseModel):
     """Deterministic leftover / plan-balance coach for a month or year."""
 
@@ -419,6 +455,8 @@ class MonthlyDashboardOut(BaseModel):
     income: KindTotals
     expense: KindTotals
     savings: KindTotals
+    leftover_planned: PaycheckLeftoverOut
+    leftover_actual: PaycheckLeftoverOut
     categories: list[CategoryProgress]
     savings_buckets: list[SavingsBucketOut]
     spending_pace: SpendingPaceOut
@@ -486,6 +524,8 @@ class AnnualDashboardOut(BaseModel):
     income: KindTotals
     expense: KindTotals
     savings: KindTotals
+    leftover_planned: PaycheckLeftoverOut
+    leftover_actual: PaycheckLeftoverOut
     savings_buckets: list[SavingsBucketOut]
     spending_pace: SpendingPaceOut
     coach: BudgetCoachOut

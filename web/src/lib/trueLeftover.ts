@@ -1,11 +1,12 @@
-import type { KindTotals } from '../types/api'
+import type { KindTotals, PaycheckLeftover } from '../types/api'
 
-/** Actual (or planned) discretionary cash: income − expenses − savings. */
+/** Actual (or planned) discretionary cash: income − unfunded expenses − savings. */
 export interface TrueLeftoverTotals {
   income: number
   expense: number
   savings: number
   leftover: number
+  expenseFromSavings: number
 }
 
 export function trueLeftoverFromKinds(
@@ -23,6 +24,17 @@ export function trueLeftoverFromKinds(
     expense: expenseN,
     savings: savingsN,
     leftover: incomeN - expenseN - savingsN,
+    expenseFromSavings: 0,
+  }
+}
+
+export function leftoverFromPaycheck(row: PaycheckLeftover): TrueLeftoverTotals {
+  return {
+    income: Number(row.income),
+    expense: Number(row.expense_from_income),
+    savings: Number(row.savings_contributions),
+    leftover: Number(row.leftover),
+    expenseFromSavings: Number(row.expense_from_savings),
   }
 }
 

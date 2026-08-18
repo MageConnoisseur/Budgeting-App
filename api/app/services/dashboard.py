@@ -12,6 +12,14 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.enums import CategoryKind
 from app.models import BudgetMonth, Category, RecurringSchedule, Transaction, User
+from app.services.funding import (
+    MONTH_LOAD_OPTIONS,
+    add_leftovers,
+    funding_by_expense,
+    paycheck_leftover,
+    planned_use_by_bucket,
+    savings_flows,
+)
 from app.schemas import (
     AnnualDashboardOut,
     CategoryProgress,
@@ -98,7 +106,7 @@ def _load_budget_month(
         return budget_month
     return db.scalar(
         select(BudgetMonth)
-        .options(joinedload(BudgetMonth.lines))
+        .options(*MONTH_LOAD_OPTIONS)
         .where(
             BudgetMonth.user_id == user.id,
             BudgetMonth.year == year,
@@ -201,10 +209,19 @@ def build_savings_bucket(
     monthly_contribution: Decimal,
     from_year: int,
     from_month: int,
+    planned_use_this_period: Decimal = ZERO,
+    actual_use_this_period: Decimal = ZERO,
+    actual_contributed_this_period: Decimal | None = None,
 ) -> SavingsBucketOut:
-    over = actual_this_period > planned_this_period and (
-        planned_this_period > ZERO or actual_this_period > ZERO
+    contributed = (
+        actual_contributed_this_period
+        if actual_contributed_this_period is not None
+        else actual_this_period
     )
+    over = contributed > planned_this_period and (
+        planned_this_period > ZERO or contributed > ZERO
+    )
+    use = _money(planned_use_this_period)
     reached, hit_year, hit_month = project_savings_hit(
         balance=balance,
         target=category.target_amount,
@@ -224,6 +241,9 @@ def build_savings_bucket(
         projected_hit_year=hit_year,
         projected_hit_month=hit_month,
         monthly_contribution=_money(monthly_contribution),
+        planned_use_this_period=use,
+        actual_use_this_period=_money(actual_use_this_period),
+        use_over_balance=use > _money(balance) and use > ZERO,
     )
 
 
@@ -600,6 +620,10 @@ def build_monthly_dashboard(
         .order_by(Category.kind, Category.sort_order, Category.name)
     ).all()
 
+    funding = funding_by_expense(budget_month)
+    use_by_bucket = planned_use_by_bucket(budget_month)
+    deposits, withdrawals = savings_flows(db, user.id, start, end)
+
     progress: list[CategoryProgress] = []
     for cat in categories:
         p = planned.get(cat.id, ZERO)
@@ -617,6 +641,7 @@ def build_monthly_dashboard(
             over_budget = due and a < p and p > ZERO
         else:
             over_budget = a > p and (p > ZERO or a > ZERO)
+        fund = funding.get(cat.id) if cat.kind == CategoryKind.expense.value else None
         progress.append(
             CategoryProgress(
                 category_id=cat.id,
@@ -626,6 +651,8 @@ def build_monthly_dashboard(
                 actual=a,
                 remaining=remaining,
                 over_budget=over_budget,
+                funded_by_category_id=fund.id if fund else None,
+                funded_by_category_name=fund.name if fund else None,
             )
         )
 
@@ -646,6 +673,9 @@ def build_monthly_dashboard(
             monthly_contribution=planned.get(c.id, ZERO),
             from_year=year,
             from_month=month,
+            planned_use_this_period=use_by_bucket.get(c.id, ZERO),
+            actual_use_this_period=withdrawals.get(c.id, ZERO),
+            actual_contributed_this_period=deposits.get(c.id, ZERO),
         )
         for c in savings_cats
     ]
@@ -663,14 +693,58 @@ def build_monthly_dashboard(
     # Income "over" means short of plan after paydays were due — not earned more.
     income_short = any(r.over_budget for r in by_kind[CategoryKind.income])
     income_totals = income_totals.model_copy(update={"over_budget": income_short})
+
+    funded_planned = sum(
+        (r.planned for r in by_kind[CategoryKind.expense] if r.funded_by_category_id),
+        ZERO,
+    )
+    funded_actual = sum(
+        (r.actual for r in by_kind[CategoryKind.expense] if r.funded_by_category_id),
+        ZERO,
+    )
+    leftover_planned = paycheck_leftover(
+        income=income_totals.planned,
+        expense_from_income=expense_totals.planned - funded_planned,
+        savings_contributions=savings_totals.planned,
+        expense_from_savings=funded_planned,
+    )
+    leftover_actual = paycheck_leftover(
+        income=income_totals.actual,
+        expense_from_income=expense_totals.actual - funded_actual,
+        savings_contributions=sum(deposits.values(), ZERO),
+        expense_from_savings=funded_actual,
+    )
+    expense_for_coach = expense_totals.model_copy(
+        update={
+            "planned": leftover_planned.expense_from_income,
+            "actual": leftover_actual.expense_from_income,
+            "remaining": leftover_planned.expense_from_income
+            - leftover_actual.expense_from_income,
+        }
+    )
+    savings_for_coach = savings_totals.model_copy(
+        update={
+            "planned": leftover_planned.savings_contributions,
+            "actual": leftover_actual.savings_contributions,
+            "remaining": leftover_planned.savings_contributions
+            - leftover_actual.savings_contributions,
+        }
+    )
     coach = build_budget_coach(
         year=year,
         month=month,
         income=income_totals,
-        expense=expense_totals,
-        savings=savings_totals,
+        expense=expense_for_coach,
+        savings=savings_for_coach,
         lines=[
-            CoachLine(c.category_id, c.category_name, c.kind, c.planned, c.actual)
+            CoachLine(
+                c.category_id,
+                c.category_name,
+                c.kind,
+                c.planned,
+                c.actual,
+                funded=c.funded_by_category_id is not None,
+            )
             for c in progress
         ],
         buckets=buckets,
@@ -685,6 +759,8 @@ def build_monthly_dashboard(
         income=income_totals,
         expense=expense_totals,
         savings=savings_totals,
+        leftover_planned=leftover_planned,
+        leftover_actual=leftover_actual,
         categories=progress,
         savings_buckets=buckets,
         spending_pace=spending_pace,
@@ -699,6 +775,14 @@ def build_annual_dashboard(
     months: list[MonthlyTrendPoint] = []
     category_accum: dict[UUID, dict] = {}
     clock = today or date.today()
+    leftover_planned = paycheck_leftover(
+        income=ZERO, expense_from_income=ZERO, savings_contributions=ZERO
+    )
+    leftover_actual = paycheck_leftover(
+        income=ZERO, expense_from_income=ZERO, savings_contributions=ZERO
+    )
+    use_by_bucket_year: dict[UUID, Decimal] = {}
+    actual_use_year: dict[UUID, Decimal] = {}
 
     for month in range(1, 13):
         md = build_monthly_dashboard(
@@ -710,6 +794,15 @@ def build_annual_dashboard(
             include_pace=False,
             today=clock,
         )
+        leftover_planned = add_leftovers(leftover_planned, md.leftover_planned)
+        leftover_actual = add_leftovers(leftover_actual, md.leftover_actual)
+        for b in md.savings_buckets:
+            use_by_bucket_year[b.category_id] = (
+                use_by_bucket_year.get(b.category_id, ZERO) + b.planned_use_this_period
+            )
+            actual_use_year[b.category_id] = (
+                actual_use_year.get(b.category_id, ZERO) + b.actual_use_this_period
+            )
         months.append(
             MonthlyTrendPoint(
                 year=year,
@@ -732,11 +825,14 @@ def build_annual_dashboard(
                     "under": 0,
                     "planned": ZERO,
                     "actual": ZERO,
+                    "funded_planned": ZERO,
                     "samples": [],
                 },
             )
             slot["planned"] += row.planned
             slot["actual"] += row.actual
+            if row.funded_by_category_id:
+                slot["funded_planned"] += row.planned
             over = bool(row.over_budget)
             if over:
                 slot["over"] += 1
@@ -808,6 +904,8 @@ def build_annual_dashboard(
                 monthly_contribution=monthly_rate,
                 from_year=as_of.year,
                 from_month=as_of.month,
+                planned_use_this_period=use_by_bucket_year.get(c.id, ZERO),
+                actual_use_this_period=actual_use_year.get(c.id, ZERO),
             )
         )
 
@@ -841,15 +939,36 @@ def build_annual_dashboard(
             t.category_name,
             t.kind,
             _money(t.total_planned / Decimal(plan_month_count)),
+            funded=(
+                category_accum.get(t.category_id, {}).get("funded_planned", ZERO)
+                >= t.total_planned
+                and t.total_planned > ZERO
+            ),
         )
         for t in trends
     ]
+    expense_for_coach = expense_totals.model_copy(
+        update={
+            "planned": leftover_planned.expense_from_income,
+            "actual": leftover_actual.expense_from_income,
+            "remaining": leftover_planned.expense_from_income
+            - leftover_actual.expense_from_income,
+        }
+    )
+    savings_for_coach = savings_totals.model_copy(
+        update={
+            "planned": leftover_planned.savings_contributions,
+            "actual": leftover_actual.savings_contributions,
+            "remaining": leftover_planned.savings_contributions
+            - leftover_actual.savings_contributions,
+        }
+    )
     coach = build_budget_coach(
         year=year,
         month=None,
         income=income_totals,
-        expense=expense_totals,
-        savings=savings_totals,
+        expense=expense_for_coach,
+        savings=savings_for_coach,
         lines=coach_lines,
         buckets=buckets,
         pace_overspending=bool(spending_pace.has_data and spending_pace.overspending),
@@ -868,6 +987,8 @@ def build_annual_dashboard(
         income=income_totals,
         expense=expense_totals,
         savings=savings_totals,
+        leftover_planned=leftover_planned,
+        leftover_actual=leftover_actual,
         savings_buckets=buckets,
         spending_pace=spending_pace,
         coach=coach,

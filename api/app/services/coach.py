@@ -84,6 +84,7 @@ class CoachLine:
     kind: CategoryKind
     planned: Decimal
     actual: Decimal = ZERO
+    funded: bool = False
 
 
 def _money(value: Decimal) -> Decimal:
@@ -223,6 +224,7 @@ def _pick_shortfall_line(
         if l.kind == CategoryKind.expense
         and l.planned >= MIN_MOVE
         and l.category_id not in under_planned_ids
+        and not l.funded
     ]
     if not expenses:
         return None

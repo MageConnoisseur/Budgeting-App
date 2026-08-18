@@ -104,11 +104,13 @@ Only **planned amounts** copy — never transactions.
 
 Savings categories are **buckets** that accumulate:
 
-- **Plan:** how much to contribute to the bucket this month
-- **Actual:** transfers in/out logged in the tracker
+- **Plan:** how much to contribute to the bucket this month (always ≥ 0)
+- **Paid from (expenses):** an expense line may be marked **paid from** a savings bucket for that month. That is the planned *use* of the bucket — not a negative contribution. Paycheck leftover is `income − expenses paid from this month’s income − savings contributions`. Funded expenses stay visible on the budget but do not make the month look overcommitted.
+- **Actual:** transfers in/out logged in the tracker. Logging an expense that is paid from a bucket should also withdraw from that bucket (paired entries).
 - **Balance:** running total allocated to that bucket over time
 - **Target (optional):** goal amount on the bucket; dashboard projects the **hit month** from balance + monthly contribution rate
-- **Dashboard:** show balance, contribution progress vs plan, target + projected hit month, and history
+- **Dashboard:** show balance, contribution progress vs plan, planned use, target + projected hit month, and history
+- **Copy-forward:** auto-seed copies contribution amounts only — not “paid from” links — so a one-off shop month is not repeated. Explicit **Copy from month** and templates do copy the links.
 
 ### 3.4 Transaction tracker (manual)
 
@@ -357,7 +359,7 @@ All user-owned rows must be scoped by authenticated user.
 | Current product bet | **Desktop web depth (v2 / Phase 1.x)** — robust desktop app before mobile or growth features |
 | Month model | Copy-forward auto-seed from latest planned month + copy/template tools |
 | Periods | Calendar months now; custom ranges later |
-| Savings | Buckets with allocated balances, optional target goals + projected hit month, and monthly contribution plans |
+| Savings | Buckets with allocated balances, optional target goals + projected hit month, and monthly contribution plans. Expense lines may be **paid from** a bucket for a given month (planned use). Auto-seed does not copy those links; copy-from and templates do. Paycheck leftover ignores funded expenses. |
 | Tracker | Manual transactions first; note memory autocomplete; CSV later with dedup concerns |
 | Over budget | Soft warnings; emphasize multi-month trends |
 | Plan coaching | After 3+ expense/savings overruns in a year: suggest raising the apply-month plan by the median overrun, or tip “looks seasonal” for a short contiguous cluster; one-click apply via annual budget cell; dismissals local-only |

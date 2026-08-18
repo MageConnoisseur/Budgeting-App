@@ -631,9 +631,8 @@ export function DashboardPage() {
       if (data) {
         return (
           <TrueLeftoverWidget
-            income={data.income}
-            expense={data.expense}
-            savings={data.savings}
+            leftoverPlanned={data.leftover_planned}
+            leftoverActual={data.leftover_actual}
             title={w.title}
             scopeLabel={view === 'monthly' ? 'this month' : 'this year'}
           />
@@ -679,6 +678,18 @@ export function DashboardPage() {
                       {b.over_budget ? ' · ' : ''}
                       {b.over_budget && <SoftWarning message="Over contribution plan" />}
                     </p>
+                    {Number(b.planned_use_this_period) > 0 && (
+                      <p className="muted compact">
+                        Planned use {formatUsd(b.planned_use_this_period)}
+                        {Number(b.actual_use_this_period) > 0
+                          ? ` · used ${formatUsd(b.actual_use_this_period)}`
+                          : ''}
+                        {b.use_over_balance ? ' · ' : ''}
+                        {b.use_over_balance && (
+                          <SoftWarning message="Plan uses more than the current balance" />
+                        )}
+                      </p>
+                    )}
                     <SavingsTargetLine bucket={b} />
                   </li>
                 ))}
@@ -767,6 +778,12 @@ export function DashboardPage() {
                           >
                             <td className="plan-cat-cell">
                               <span className="plan-cat-name">{c.category_name}</span>
+                              {c.funded_by_category_name ? (
+                                <span className="muted compact">
+                                  {' '}
+                                  paid from {c.funded_by_category_name}
+                                </span>
+                              ) : null}
                               <KindBadge kind={c.kind} />
                               {over && (
                                 <SoftWarning
@@ -996,6 +1013,12 @@ export function DashboardPage() {
                       {Number(b.monthly_contribution) > 0 && (
                         <p className="muted compact">
                           Monthly plan {formatUsd(b.monthly_contribution)}
+                        </p>
+                      )}
+                      {Number(b.planned_use_this_period) > 0 && (
+                        <p className="muted compact">
+                          Planned use this year{' '}
+                          {formatUsd(b.planned_use_this_period)}
                         </p>
                       )}
                       <SavingsTargetLine bucket={b} />

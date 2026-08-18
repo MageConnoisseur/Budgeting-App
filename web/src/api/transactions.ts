@@ -34,6 +34,7 @@ export function createTransaction(body: {
   amount: string
   date: string
   note?: string | null
+  withdraw_from_category_id?: string | null
 }) {
   return apiFetch<Transaction>('/transactions', {
     method: 'POST',
