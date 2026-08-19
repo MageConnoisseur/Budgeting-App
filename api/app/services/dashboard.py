@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from calendar import monthrange
+from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import Decimal, ROUND_CEILING, ROUND_HALF_UP
 from uuid import UUID
@@ -18,7 +19,6 @@ from app.services.funding import (
     funding_by_expense,
     paycheck_leftover,
     planned_use_by_bucket,
-    savings_flows,
 )
 from app.schemas import (
     AnnualDashboardOut,
@@ -112,6 +112,154 @@ def _load_budget_month(
             BudgetMonth.year == year,
             BudgetMonth.month == month,
         )
+    )
+
+
+@dataclass
+class UserLedger:
+    """In-memory copy of one user's plan + ledger for dashboard assembly.
+
+    Opening the dashboard used to hit Postgres once per month (and several
+    times per month) because the annual view called ``build_monthly_dashboard``
+    12 times. Each round trip to hosted Postgres dominates; row count does not.
+    Load this snapshot in a handful of queries, then slice it in Python.
+    """
+
+    categories: list[Category]
+    budget_months: dict[tuple[int, int], BudgetMonth]
+    transactions: list[Transaction]
+    recurring: list[RecurringSchedule]
+    _actuals_by_month: dict[tuple[int, int], dict[UUID, Decimal]] = field(init=False)
+    _savings_by_date: list[tuple[date, UUID, Decimal]] = field(init=False)
+
+    def __post_init__(self) -> None:
+        actuals: dict[tuple[int, int], dict[UUID, Decimal]] = {}
+        savings: list[tuple[date, UUID, Decimal]] = []
+        for tx in self.transactions:
+            key = (tx.date.year, tx.date.month)
+            bucket = actuals.setdefault(key, {})
+            bucket[tx.category_id] = bucket.get(tx.category_id, ZERO) + tx.amount
+            if tx.category.kind == CategoryKind.savings.value:
+                savings.append((tx.date, tx.category_id, tx.amount))
+        self._actuals_by_month = actuals
+        self._savings_by_date = savings
+
+    def actuals_between(self, start: date, end: date) -> dict[UUID, Decimal]:
+        last = monthrange(start.year, start.month)[1]
+        if (
+            start.day == 1
+            and start.year == end.year
+            and start.month == end.month
+            and end.day == last
+        ):
+            return dict(self._actuals_by_month.get((start.year, start.month), {}))
+        totals: dict[UUID, Decimal] = {}
+        for tx in self.transactions:
+            if start <= tx.date <= end:
+                totals[tx.category_id] = totals.get(tx.category_id, ZERO) + tx.amount
+        return totals
+
+    def savings_balances_as_of(self, as_of: date | None = None) -> dict[UUID, Decimal]:
+        totals: dict[UUID, Decimal] = {}
+        for tx_date, cid, amount in self._savings_by_date:
+            if as_of is not None and tx_date > as_of:
+                continue
+            totals[cid] = totals.get(cid, ZERO) + amount
+        return totals
+
+    def savings_flows_between(
+        self, start: date, end: date
+    ) -> tuple[dict[UUID, Decimal], dict[UUID, Decimal]]:
+        deposits: dict[UUID, Decimal] = {}
+        withdrawals: dict[UUID, Decimal] = {}
+        for tx_date, cid, amount in self._savings_by_date:
+            if tx_date < start or tx_date > end:
+                continue
+            if amount > ZERO:
+                deposits[cid] = deposits.get(cid, ZERO) + amount
+            elif amount < ZERO:
+                withdrawals[cid] = withdrawals.get(cid, ZERO) + (-amount)
+        return deposits, withdrawals
+
+    def income_paydays(self, year: int, month: int) -> dict[UUID, list[date]]:
+        out: dict[UUID, list[date]] = {}
+        for sched in self.recurring:
+            kind = sched.category.kind if sched.category is not None else None
+            if kind != CategoryKind.income.value:
+                continue
+            dates = occurrences_in_month(sched, year, month)
+            if dates:
+                out.setdefault(sched.category_id, []).extend(dates)
+        for cid, dates in out.items():
+            out[cid] = sorted(set(dates))
+        return out
+
+    def latest_contribution(
+        self, category_id: UUID, *, year: int, month: int
+    ) -> Decimal:
+        rows: list[tuple[int, int, Decimal]] = []
+        for (y, m), budget_month in self.budget_months.items():
+            for line in budget_month.lines:
+                if line.category_id == category_id:
+                    rows.append((y, m, line.planned_amount))
+        rows.sort(key=lambda row: (row[0], row[1]), reverse=True)
+        target_key = (year, month)
+        prior: Decimal | None = None
+        for y, m, amount in rows:
+            key = (y, m)
+            if key == target_key:
+                return _money(amount)
+            if key < target_key and prior is None:
+                prior = _money(amount)
+        return prior if prior is not None else ZERO
+
+    def first_tracking_date(self) -> date | None:
+        return self.transactions[0].date if self.transactions else None
+
+
+def load_user_ledger(db: Session, user: User) -> UserLedger:
+    """Load categories, plans, transactions, and schedules in four queries."""
+    categories = db.scalars(
+        select(Category)
+        .where(Category.user_id == user.id, Category.archived.is_(False))
+        .order_by(Category.kind, Category.sort_order, Category.name)
+    ).all()
+    months = (
+        db.scalars(
+            select(BudgetMonth)
+            .options(*MONTH_LOAD_OPTIONS)
+            .where(BudgetMonth.user_id == user.id)
+        )
+        .unique()
+        .all()
+    )
+    txs = (
+        db.scalars(
+            select(Transaction)
+            .options(joinedload(Transaction.category))
+            .where(Transaction.user_id == user.id)
+            .order_by(Transaction.date.asc(), Transaction.created_at.asc())
+        )
+        .unique()
+        .all()
+    )
+    recurring = (
+        db.scalars(
+            select(RecurringSchedule)
+            .options(joinedload(RecurringSchedule.category))
+            .where(
+                RecurringSchedule.user_id == user.id,
+                RecurringSchedule.active.is_(True),
+            )
+        )
+        .unique()
+        .all()
+    )
+    return UserLedger(
+        categories=list(categories),
+        budget_months={(m.year, m.month): m for m in months},
+        transactions=list(txs),
+        recurring=list(recurring),
     )
 
 
@@ -410,16 +558,13 @@ def _empty_spending_pace(as_of: date) -> SpendingPaceOut:
     )
 
 
-def build_spending_pace(db: Session, user: User, as_of: date) -> SpendingPaceOut:
-    """Rolling actual income/expense/savings vs average income capacity.
-
-    Uses the last ~30 days of actuals (clamped to the first tracking day so new
-    users are not compared against empty pre-history). Income capacity is the
-    average daily income since tracking began, looking back at most ~6 months.
-    Soft overspending when window outflow (expenses + net savings) exceeds that
-    expected income for the same number of days.
-    """
-    tracking_started = _first_tracking_date(db, user.id)
+def _assemble_spending_pace(
+    *,
+    as_of: date,
+    tracking_started: date | None,
+    txs: list[Transaction],
+) -> SpendingPaceOut:
+    """Build spending pace from already-loaded transactions."""
     if tracking_started is None or tracking_started > as_of:
         return _empty_spending_pace(as_of)
 
@@ -433,19 +578,6 @@ def build_spending_pace(db: Session, user: User, as_of: date) -> SpendingPaceOut
     income_lookback_end = as_of
     income_lookback_days = (income_lookback_end - income_lookback_start).days + 1
 
-    # Load every transaction needed for lookback income + the pace window.
-    load_start = min(income_lookback_start, window_start)
-    txs = db.scalars(
-        select(Transaction)
-        .options(joinedload(Transaction.category))
-        .where(
-            Transaction.user_id == user.id,
-            Transaction.date >= load_start,
-            Transaction.date <= as_of,
-        )
-        .order_by(Transaction.date.asc())
-    ).unique().all()
-
     income_lookback_total = ZERO
     daily: dict[date, dict[str, Decimal]] = {}
     cursor = window_start
@@ -454,6 +586,8 @@ def build_spending_pace(db: Session, user: User, as_of: date) -> SpendingPaceOut
         cursor += timedelta(days=1)
 
     for tx in txs:
+        if tx.date > as_of:
+            continue
         kind = tx.category.kind
         if kind == CategoryKind.income.value:
             amount = abs(tx.amount)
@@ -475,7 +609,6 @@ def build_spending_pace(db: Session, user: User, as_of: date) -> SpendingPaceOut
         else ZERO
     )
     avg_daily = _money(avg_daily_raw)
-    # Scale lookback income to the window length without intermediate drift.
     expected_income = (
         _money(
             income_lookback_total
@@ -551,6 +684,43 @@ def build_spending_pace(db: Session, user: User, as_of: date) -> SpendingPaceOut
     )
 
 
+def build_spending_pace(db: Session, user: User, as_of: date) -> SpendingPaceOut:
+    """Rolling actual income/expense/savings vs average income capacity.
+
+    Uses the last ~30 days of actuals (clamped to the first tracking day so new
+    users are not compared against empty pre-history). Income capacity is the
+    average daily income since tracking began, looking back at most ~6 months.
+    Soft overspending when window outflow (expenses + net savings) exceeds that
+    expected income for the same number of days.
+    """
+    tracking_started = _first_tracking_date(db, user.id)
+    if tracking_started is None or tracking_started > as_of:
+        return _empty_spending_pace(as_of)
+
+    lookback_floor = as_of - timedelta(days=INCOME_LOOKBACK_DAYS - 1)
+    income_lookback_start = max(tracking_started, lookback_floor)
+    raw_window_start = as_of - timedelta(days=PACE_WINDOW_DAYS - 1)
+    window_start = max(raw_window_start, tracking_started)
+    load_start = min(income_lookback_start, window_start)
+    txs = (
+        db.scalars(
+            select(Transaction)
+            .options(joinedload(Transaction.category))
+            .where(
+                Transaction.user_id == user.id,
+                Transaction.date >= load_start,
+                Transaction.date <= as_of,
+            )
+            .order_by(Transaction.date.asc())
+        )
+        .unique()
+        .all()
+    )
+    return _assemble_spending_pace(
+        as_of=as_of, tracking_started=tracking_started, txs=list(txs)
+    )
+
+
 def income_shortfall_is_due(
     *,
     month_start: date,
@@ -597,32 +767,26 @@ def _income_paydays_in_month(
     return out
 
 
-def build_monthly_dashboard(
-    db: Session,
-    user: User,
+def _monthly_from_ledger(
+    ledger: UserLedger,
     year: int,
     month: int,
     *,
-    ensure_month: bool = True,
-    include_pace: bool = True,
-    today: date | None = None,
+    include_pace: bool,
+    today: date,
 ) -> MonthlyDashboardOut:
-    budget_month = _load_budget_month(db, user, year, month, ensure=ensure_month)
+    """Assemble one month of dashboard insight from a preloaded ledger."""
+    budget_month = ledger.budget_months.get((year, month))
     start, end = _month_date_range(year, month)
     planned = _planned_by_category(budget_month)
-    actuals = _actuals_by_category(db, user.id, start, end)
-    as_of = today or date.today()
-    paydays = _income_paydays_in_month(db, user.id, year, month)
-
-    categories = db.scalars(
-        select(Category)
-        .where(Category.user_id == user.id, Category.archived.is_(False))
-        .order_by(Category.kind, Category.sort_order, Category.name)
-    ).all()
+    actuals = ledger.actuals_between(start, end)
+    paydays = ledger.income_paydays(year, month)
+    categories = ledger.categories
+    as_of = today
 
     funding = funding_by_expense(budget_month)
     use_by_bucket = planned_use_by_bucket(budget_month)
-    deposits, withdrawals = savings_flows(db, user.id, start, end)
+    deposits, withdrawals = ledger.savings_flows_between(start, end)
 
     progress: list[CategoryProgress] = []
     for cat in categories:
@@ -662,7 +826,7 @@ def build_monthly_dashboard(
         CategoryKind.savings: [r for r in progress if r.kind == CategoryKind.savings],
     }
 
-    balances = savings_balances(db, user.id, as_of=end)
+    balances = ledger.savings_balances_as_of(end)
     savings_cats = [c for c in categories if c.kind == CategoryKind.savings.value]
     buckets = [
         build_savings_bucket(
@@ -681,16 +845,17 @@ def build_monthly_dashboard(
     ]
 
     if include_pace:
-        # Pace is "current health" as of today, or the month end when browsing history.
-        pace_as_of = min(as_of, end)
-        spending_pace = build_spending_pace(db, user, pace_as_of)
+        spending_pace = _assemble_spending_pace(
+            as_of=min(as_of, end),
+            tracking_started=ledger.first_tracking_date(),
+            txs=ledger.transactions,
+        )
     else:
         spending_pace = _empty_spending_pace(min(as_of, end))
 
     income_totals = _kind_totals(by_kind[CategoryKind.income])
     expense_totals = _kind_totals(by_kind[CategoryKind.expense])
     savings_totals = _kind_totals(by_kind[CategoryKind.savings])
-    # Income "over" means short of plan after paydays were due — not earned more.
     income_short = any(r.over_budget for r in by_kind[CategoryKind.income])
     income_totals = income_totals.model_copy(update={"over_budget": income_short})
 
@@ -768,6 +933,25 @@ def build_monthly_dashboard(
     )
 
 
+def build_monthly_dashboard(
+    db: Session,
+    user: User,
+    year: int,
+    month: int,
+    *,
+    ensure_month: bool = True,
+    include_pace: bool = True,
+    today: date | None = None,
+) -> MonthlyDashboardOut:
+    as_of = today or date.today()
+    if ensure_month:
+        _load_budget_month(db, user, year, month, ensure=True)
+    ledger = load_user_ledger(db, user)
+    return _monthly_from_ledger(
+        ledger, year, month, include_pace=include_pace, today=as_of
+    )
+
+
 def build_annual_dashboard(
     db: Session, user: User, year: int, *, today: date | None = None
 ) -> AnnualDashboardOut:
@@ -783,16 +967,11 @@ def build_annual_dashboard(
     )
     use_by_bucket_year: dict[UUID, Decimal] = {}
     actual_use_year: dict[UUID, Decimal] = {}
+    ledger = load_user_ledger(db, user)
 
     for month in range(1, 13):
-        md = build_monthly_dashboard(
-            db,
-            user,
-            year,
-            month,
-            ensure_month=False,
-            include_pace=False,
-            today=clock,
+        md = _monthly_from_ledger(
+            ledger, year, month, include_pace=False, today=clock
         )
         leftover_planned = add_leftovers(leftover_planned, md.leftover_planned)
         leftover_actual = add_leftovers(leftover_actual, md.leftover_actual)
@@ -874,14 +1053,10 @@ def build_annual_dashboard(
         )
 
     year_end = date(year, 12, 31)
-    balances = savings_balances(db, user.id, as_of=year_end)
-    savings_cats = db.scalars(
-        select(Category).where(
-            Category.user_id == user.id,
-            Category.kind == CategoryKind.savings.value,
-            Category.archived.is_(False),
-        )
-    ).all()
+    balances = ledger.savings_balances_as_of(year_end)
+    savings_cats = [
+        c for c in ledger.categories if c.kind == CategoryKind.savings.value
+    ]
     # Projection reference: today when browsing the current/future year, else Dec.
     as_of = min(clock, date(year, 12, 31))
     buckets = []
@@ -892,8 +1067,8 @@ def build_annual_dashboard(
             data = category_accum[c.id]
             planned_year = data["planned"]
             actual_year = data["actual"]
-        monthly_rate = latest_monthly_contribution(
-            db, user.id, c.id, year=as_of.year, month=as_of.month
+        monthly_rate = ledger.latest_contribution(
+            c.id, year=as_of.year, month=as_of.month
         )
         buckets.append(
             build_savings_bucket(
@@ -909,7 +1084,11 @@ def build_annual_dashboard(
             )
         )
 
-    spending_pace = build_spending_pace(db, user, as_of)
+    spending_pace = _assemble_spending_pace(
+        as_of=as_of,
+        tracking_started=ledger.first_tracking_date(),
+        txs=ledger.transactions,
+    )
 
     plan_month_count = max(
         sum(

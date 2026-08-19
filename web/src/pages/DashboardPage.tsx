@@ -444,19 +444,25 @@ export function DashboardPage() {
     setLoading(true)
     setError(null)
     try {
-      const layout = await dashboardApi.getDashboardLayout(view)
-      setWidgets([...layout.widgets].sort((a, b) => a.order - b.order))
-
       if (view === 'monthly') {
-        const [md, yd] = await Promise.all([
+        // Layout is independent of the insight payloads; fetch it in parallel
+        // so a round trip does not delay monthly + annual data.
+        const [layout, md, yd] = await Promise.all([
+          dashboardApi.getDashboardLayout(view),
           dashboardApi.getMonthlyDashboard(year, month),
           dashboardApi.getAnnualDashboard(year),
         ])
+        setWidgets([...layout.widgets].sort((a, b) => a.order - b.order))
         setMonthly(md)
         setTrendYear(yd)
         setAnnual(null)
       } else {
-        setAnnual(await dashboardApi.getAnnualDashboard(year))
+        const [layout, ad] = await Promise.all([
+          dashboardApi.getDashboardLayout(view),
+          dashboardApi.getAnnualDashboard(year),
+        ])
+        setWidgets([...layout.widgets].sort((a, b) => a.order - b.order))
+        setAnnual(ad)
         setMonthly(null)
         setTrendYear(null)
       }
