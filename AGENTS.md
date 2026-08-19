@@ -9,6 +9,7 @@ That file is the source of truth for:
 - Savings buckets, tracker search/sort, soft over-budget rules
 - Stack and hosting (React/Vercel, FastAPI/Render, Postgres/Neon)
 - **Current focus: robust desktop web (Phase 1.x / v2)** — Phase 1 MVP is done; mobile and growth features are deferred
+- Deferred CSV/bank import design (`instructions.md` §12) — inbox, rounding-aware dedup, merchant rules, aggregator cost; do not build unless asked
 - Coding-agent rules and decision log
 
 Do not invent conflicting product or architecture choices. If something is unclear, prefer the guidance in `instructions.md`.
