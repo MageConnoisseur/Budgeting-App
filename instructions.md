@@ -15,7 +15,7 @@ Pass this file to new coding agents so they share the same product, architecture
 | **Phase 1** | MVP (web + API) | **Done** |
 | **Phase 1.x / v2** | **Desktop web depth** | **Active — prefer this scope** |
 | **Phase 2** | Mobile (Expo) | **Deferred** until desktop web feels robust |
-| **Phase 3+** | Growth (CSV, households, multi-currency, …) | Do not build until explicitly asked |
+| **Phase 3+** | Growth (CSV, households, multi-currency, …) | Do not build until explicitly asked. CSV/bank import **design** is in §12 |
 
 **Do not start Expo / `mobile/` or Phase 3+ work unless the task explicitly asks.** When uncertain, invest in desktop Budget, Tracker, Dashboard, Categories, and auth/account reliability.
 
@@ -31,7 +31,7 @@ A full-stack **personal budgeting app** with:
 
 **Clients:** The **desktop web app is the product right now** (planning + analysis + full tracking). A phone app may come later for on-the-go logging. All clients use the **same API and database**.
 
-**Not in scope until asked:** bank sync, household sharing, multi-currency, hard spending locks, native mobile, CSV/bank import.
+**Not in scope until asked:** bank sync, household sharing, multi-currency, hard spending locks, native mobile, CSV/bank import. Intended import design (inbox, dedup, categorization, cost) is in **§12** — do not build it unless explicitly asked.
 
 ---
 
@@ -136,7 +136,7 @@ Required:
 - Clear empty states when nothing matches; easy reset of search/filters
 - Performance-minded list UX as history grows (pagination or virtualized list is fine)
 
-**CSV / bank import:** Phase 3+. When designed, account for **duplicate detection** (manual entry then CSV of the same transactions).
+**CSV / bank import:** Phase 3+. Do not write imports straight into the tracker. Intended design (review inbox, fingerprints, rounding-aware fuzzy match, merchant rules, bank sync as a later feed) is in **§12**. Until then, tracker search/sort is the mitigation for “did I already log this?”
 
 ### 3.5 Dashboard (high priority, customizable)
 
@@ -284,7 +284,8 @@ Only after desktop web feels robust:
 ### Phase 3+ — Growth (do not build until asked)
 
 - Email verification (beyond reset/recovery if still needed)
-- CSV import with duplicate safeguards
+- CSV import with duplicate safeguards (see **§12**; inbox first, not silent insert)
+- Bank / card sync as a later feed into that same inbox (see **§12**; ask before adding an aggregator)
 - Multi-currency
 - Custom budget periods (non-calendar)
 - Households / shared budgets
@@ -329,6 +330,7 @@ Stay close to these concepts (implemented under `api/` with Alembic):
   (amount sign/convention documented in `api/README.md`)
 - **DashboardLayout** — per-user widget order / layout for monthly vs annual
 - **SavingsBalance** — derived from transactions (prefer compute from ledger; materialize only if needed for performance)
+- **Import (Phase 3+, not built):** staging candidates, fingerprints, merchant rules, optional account/transfer rows — see **§12**. Do not add these tables unless that work is explicitly requested.
 
 All user-owned rows must be scoped by authenticated user.
 
@@ -347,7 +349,7 @@ All user-owned rows must be scoped by authenticated user.
 9. **USD-only** until multi-currency is explicitly requested — still keep amounts as proper decimal/money types, not floats.
 10. **No secrets in git.** Use env vars for Neon, Render, and Vercel config.
 11. **Migrate the database** deliberately with Alembic; do not add a parallel SQL-apply schema track.
-12. **Ask before large product pivots** (e.g. switching to YNAB-style rollover, dropping FastAPI, adding bank sync, or starting mobile).
+12. **Ask before large product pivots** (e.g. switching to YNAB-style rollover, dropping FastAPI, adding bank sync, or starting mobile). If import/bank sync is explicitly requested, follow **§12** rather than inventing a parallel design.
 13. When uncertain, choose the option that keeps **desktop web planning strong**, **logging simple**, and **dashboard insightful**.
 
 ---
@@ -360,7 +362,8 @@ All user-owned rows must be scoped by authenticated user.
 | Month model | Copy-forward auto-seed from latest planned month + copy/template tools |
 | Periods | Calendar months now; custom ranges later |
 | Savings | Buckets with allocated balances, optional target goals + projected hit month, and monthly contribution plans. Expense lines may be **paid from** a bucket for a given month (planned use). Auto-seed does not copy those links; copy-from and templates do. Paycheck leftover ignores funded expenses. |
-| Tracker | Manual transactions first; note memory autocomplete; CSV later with dedup concerns |
+| Tracker | Manual transactions first; note memory autocomplete; CSV/bank import later per **§12** (inbox, fingerprints, rounding-aware fuzzy match, merchant rules) |
+| CSV / bank import | **Phase 3+, not built.** Staging inbox (not silent ledger insert); fingerprints; rounding-aware fuzzy match (±$1 default); merge keeps category / note / paid-from and replaces rounded amount with posted; merchant rules from history; bank sync is a later feed into the same inbox; hosted aggregator billing is per institution login — see **§12** |
 | Over budget | Soft warnings; emphasize multi-month trends |
 | Plan coaching | After 3+ expense/savings overruns in a year: suggest raising the apply-month plan by the median overrun, or tip “looks seasonal” for a short contiguous cluster; one-click apply via annual budget cell; dismissals local-only |
 | Budget coach | Deterministic leftover coach (Phase 1.x): unassigned plan leftover → fund a savings bucket (prefer unmet targets); plan shortfall → optional trim of **flexible** spend (skip rent/mortgage/dominant housing-sized lines); income under-plan is only flagged after paydays or the month are due; plus existing raise/seasonal tips and spending-pace warnings. Dedicated **Coach** page + compact Dashboard widget. Apply is optional; dismissals local-only. |
@@ -387,5 +390,124 @@ All user-owned rows must be scoped by authenticated user.
 - Whether plan-suggestion and coach-tip dismissals stay local-only or move server-side
 - Whether a future LLM layer is used only for copy, or also for ranking which deterministic tips to show
 - Monorepo tooling (pnpm/npm workspaces, uv, etc.) — optional; not required to keep shipping
+- Import aggregator and billing (when §12 is built): Plaid vs Teller vs SimpleFIN (user-pays token); whether Hearth hosts connections or users bring their own; whether a subscription is required before offering hosted bank sync to anyone beyond the owner/family
 
 If an agent needs a choice among reasonable options for an open item, pick a conventional secure default, document it briefly in code/README, and continue.
+
+---
+
+## 12. Deferred: CSV / bank import (Phase 3+ — do not build yet)
+
+Design intent if/when import is explicitly requested. **Do not implement this section during desktop-depth work.** CSV and bank sync share one pipeline. Mixing manual entry with import is allowed; **silent insert is not.**
+
+### 12.1 Why this exists
+
+Users may log during the month (often rounding to the nearest dollar) and later upload a CSV of the same spend, or connect a bank/card so charges appear as they post. Blind import would double-count actuals, inflate the dashboard, and break savings “paid from” pairing. Bank feeds also emit **pending then posted** rows, a second duplicate class.
+
+Until this ships, tracker search/sort is the way to check whether something was already logged.
+
+### 12.2 Pipeline (CSV and bank sync share it)
+
+```text
+Bank / CSV
+    → fingerprint + store as an import candidate (staging, not the ledger)
+    → match against existing tracker rows
+    → suggest a category (merchant rules + note/category history)
+    → Inbox: accept / merge / skip
+    → only then does it become a real Transaction
+```
+
+Dashboard, budget vs actual, and savings balances count **accepted tracker rows only**. Uncategorized imports must not become fake budget lines.
+
+**Staging, not nullable categories.** Tracker `category_id` is required today. Import candidates live in a separate table (or equivalent) until the user accepts them with a real category. Do not add an “Uncategorized” category that pollutes plan vs actual.
+
+Product rule for mixed sources: **once an account is connected, do not also CSV that account.** Manual entry stays for cash, unlinked accounts, and corrections.
+
+### 12.3 Fingerprints (exact re-import)
+
+Every imported row needs a stable identity:
+
+- Bank sync: the provider’s transaction id
+- CSV: a unique id column if the bank includes one, otherwise a hash of account + posted date + amount + raw description
+
+Same fingerprint twice → skip. Re-uploading last month’s CSV should be a no-op. Pending → posted should update the same candidate when the provider id (or a pending/posted link) matches, not create a second row.
+
+### 12.4 Fuzzy match (manual entry + import of the same spend)
+
+Fingerprints cannot catch “I typed it, then imported it.” Score candidates against existing rows; do not require an exact amount.
+
+Users often **round manual amounts to the nearest dollar** (e.g. posted `$42.18` logged as `$42`). Exact-amount matching would miss those. Nearest-dollar rounding is at most **$0.50** off; use an amount **window**.
+
+| Signal | Tight (high confidence) | Loose (needs extra confirmation) |
+|--------|-------------------------|----------------------------------|
+| Amount | within **$1** (covers nearest-dollar rounding) | within **$5** or ~2% (e.g. typed `$40` or `$1000`) |
+| Date | ±2–3 days (purchase vs posted) | ±5 days |
+| Merchant / note | `Costco` vs `COSTCO WHSE #123` | weaker overlap |
+
+Do **not** auto-merge on amount + date alone. Two real $12 coffees on the same day must remain distinguishable. Loose matches go to a “possible duplicate” pile.
+
+Inbox actions:
+
+| Action | When |
+|--------|------|
+| **Merge** | Same spend. Keep the user’s category, note, and “paid from” bucket; attach the import identity so it will not import again. **Replace the rounded manual amount with the posted amount** so category totals match the bank. |
+| **Keep both** | Two real purchases that happen to look similar |
+| **Skip** | Already logged; do not keep the import row |
+
+### 12.5 Categorization
+
+Banks will not know Hearth’s user-defined categories. MCC codes are too coarse. Use a ladder:
+
+1. **Payee / merchant rules** — e.g. `COSTCO` → Groceries. User confirms once; later imports apply automatically.
+2. **Learn from note memory / history** — if `STARBUCKS` was Dining eight times, suggest Dining the ninth. Rules can be seeded from that history.
+3. **First-time merchants go to the inbox** — never silently guess a new payee into a budget category.
+4. **Savings “paid from” is never fully automatic** — the bank does not know a repair should withdraw from a bucket. Suggest it if that merchant was funded that way before; confirm at least the first time.
+5. **Splits stay manual** — import the total (e.g. Costco), then the user splits groceries vs household.
+6. **Recurring schedules** can pre-fill category for a known payee; the inbox is still “accept this paycheck,” not auto-create without review.
+
+### 12.6 Bank / card connections (later than CSV)
+
+CSV inbox + fingerprints + rules first. Bank/card connect is **another source into the same inbox**, not a separate importer.
+
+Typical US aggregators: **Plaid** (widest coverage; opaque pricing), **Teller** (public Transactions price), **SimpleFIN Bridge** (user-pays token; weaker freshness). MX/Finicity are enterprise-shaped and a poor fit for a small app.
+
+What bank sync is **not**: instant at the register (often hours or next day); free; a replacement for cash/Venmo/unlinked cards; enough without inbox, fingerprints, and rules.
+
+**Billing (plan before offering this to anyone else):**
+
+- Aggregators bill the **app operator** per connected **institution login** (“Item” / enrollment), monthly, while the connection exists — not per purchase and not per Hearth user.
+- One Discover login = 1 Item. Five cards at five banks = 5 Items. Several cards under one bank login = still 1 Item.
+- Broken connections still bill until disconnected; mid-month connect/disconnect is typically **not prorated**.
+- Plaid does not publish a rate card (shown after Production access). **Trial:** 10 Production Items free (US/Canada, new teams as of the 2026 Trial plan). **Pay-as-you-go** industry reports are often ~$0.30–$1.50 per Item / month. **Growth/Custom** add monthly minimums aimed at businesses, not hobby use.
+- **Teller (public):** Transactions **$0.30 per enrollment / month**; developer tier includes 100 live connections free.
+- **SimpleFIN:** each **user** pays ~$15/year (or $1.50/month) for up to 25 institutions and pastes a token into the app — Hearth’s aggregator COGS can be $0.
+
+Implications:
+
+| Audience | Practical approach |
+|----------|-------------------|
+| Owner only (e.g. one Discover card) | Plaid Trial or Teller free cap can be $0 |
+| Closed family | Teller-like cost is small (5 institutions ≈ $1.50/month per person on Teller’s public Transactions price) |
+| Anyone on the internet | Hosted Plaid/Teller is a **paid product** (operator invoice scales with users × institutions). Charge a subscription, cap connections, or use user-pays SimpleFIN. CSV stays free. |
+
+**Do not start hosted bank sync for the public without an explicit billing decision.** CSV remains the zero-COGS import path.
+
+### 12.7 Accounts and transfers (only when multiple accounts can import)
+
+One CSV of one card does not require a full account model. Connecting **checking + a card** does: a card payment is −$500 checking and +$500 on the card — a **transfer**, not an expense. Logging both as spend double-counts.
+
+Sequence when this is built:
+
+1. CSV of one account + inbox + dedup + merchant rules
+2. Bank/card sync as another source into that inbox
+3. **Accounts + transfers** only when more than one account can import
+
+### 12.8 Lifestyles this should support
+
+| Style | How | Duplicate risk |
+|-------|-----|----------------|
+| Manual during the month | Current product; best for noticing spend | Low |
+| CSV at month end | Catch-up via inbox; merge rounded manual rows | Safe if inbox exists; a mess if not |
+| Connected accounts + daily inbox | New charges as they post; short confirm pass | Safe if that account is not also typed/CSV’d |
+
+Mixing manual + CSV is OK because of merge. Do not mix CSV and live sync for the **same** account. End-of-month-only is optional, not required, once the inbox exists.
