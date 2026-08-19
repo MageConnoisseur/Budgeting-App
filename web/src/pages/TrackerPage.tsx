@@ -4,8 +4,8 @@ import * as categoriesApi from '../api/categories'
 import { ApiError } from '../api/client'
 import * as txApi from '../api/transactions'
 import { IncomeEstimatePanel } from '../components/IncomeEstimatePanel'
-import { KindBadge } from '../components/KindBadge'
 import { NoteAutocomplete } from '../components/NoteAutocomplete'
+import { VirtualizedTransactionList } from '../components/VirtualizedTransactionList'
 import {
   RecurringPrompt,
   type RecurringPromptDraft,
@@ -22,7 +22,7 @@ import type {
   TransactionSortBy,
 } from '../types/api'
 
-const PAGE_SIZE = 50
+const PAGE_SIZE = 100
 
 export function TrackerPage() {
   const [categories, setCategories] = useState<Category[]>([])
@@ -513,122 +513,20 @@ export function TrackerPage() {
           No transactions match. Try clearing search or filters.
         </p>
       ) : (
-        <>
-          <div className="table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>
-                    <button
-                      type="button"
-                      className="th-btn"
-                      onClick={() => toggleSort('date')}
-                    >
-                      Date {sortBy === 'date' ? (sortDir === 'asc' ? '↑' : '↓') : ''}
-                    </button>
-                  </th>
-                  <th>
-                    <button
-                      type="button"
-                      className="th-btn"
-                      onClick={() => toggleSort('kind')}
-                    >
-                      Kind {sortBy === 'kind' ? (sortDir === 'asc' ? '↑' : '↓') : ''}
-                    </button>
-                  </th>
-                  <th>
-                    <button
-                      type="button"
-                      className="th-btn"
-                      onClick={() => toggleSort('category')}
-                    >
-                      Category{' '}
-                      {sortBy === 'category' ? (sortDir === 'asc' ? '↑' : '↓') : ''}
-                    </button>
-                  </th>
-                  <th>
-                    <button
-                      type="button"
-                      className="th-btn"
-                      onClick={() => toggleSort('amount')}
-                    >
-                      Amount{' '}
-                      {sortBy === 'amount' ? (sortDir === 'asc' ? '↑' : '↓') : ''}
-                    </button>
-                  </th>
-                  <th>Note</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((tx) => (
-                  <tr
-                    key={tx.id}
-                    className={editingId === tx.id ? 'row-editing' : undefined}
-                  >
-                    <td>{tx.date}</td>
-                    <td>
-                      {tx.category ? (
-                        <KindBadge kind={tx.category.kind} />
-                      ) : (
-                        '—'
-                      )}
-                    </td>
-                    <td>
-                      {tx.category?.name ?? '—'}
-                      {tx.pair_id ? (
-                        <span className="muted compact"> · from savings</span>
-                      ) : null}
-                    </td>
-                    <td className="num">{formatUsd(tx.amount)}</td>
-                    <td className="note-cell">{tx.note || '—'}</td>
-                    <td className="actions">
-                      <button
-                        type="button"
-                        className="btn ghost"
-                        onClick={() => startEdit(tx)}
-                        disabled={editingId === tx.id}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        className="btn ghost"
-                        onClick={() => void onDelete(tx.id)}
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="toolbar">
-            <p className="muted">
-              Showing {offset + 1}–{Math.min(offset + PAGE_SIZE, total)} of{' '}
-              {total}
-            </p>
-            <div className="row-gap">
-              <button
-                type="button"
-                className="btn ghost"
-                disabled={offset === 0}
-                onClick={() => setOffset((o) => Math.max(0, o - PAGE_SIZE))}
-              >
-                Previous
-              </button>
-              <button
-                type="button"
-                className="btn ghost"
-                disabled={offset + PAGE_SIZE >= total}
-                onClick={() => setOffset((o) => o + PAGE_SIZE)}
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        </>
+        <VirtualizedTransactionList
+          items={items}
+          total={total}
+          offset={offset}
+          pageSize={PAGE_SIZE}
+          sortBy={sortBy}
+          sortDir={sortDir}
+          editingId={editingId}
+          onToggleSort={toggleSort}
+          onEdit={startEdit}
+          onDelete={(id) => void onDelete(id)}
+          onPrev={() => setOffset((o) => Math.max(0, o - PAGE_SIZE))}
+          onNext={() => setOffset((o) => o + PAGE_SIZE)}
+        />
       )}
     </div>
   )

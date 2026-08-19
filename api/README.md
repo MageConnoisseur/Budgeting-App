@@ -102,6 +102,16 @@ alembic revision --autogenerate -m "describe change"
 alembic upgrade head
 ```
 
+Deploy (`python -m app.migrate`) is meant to be **boring** on real data:
+
+- Empty database → `alembic upgrade head`
+- Versioned compatible schema → `upgrade head` (never a hardcoded revision)
+- Compatible schema missing `alembic_version` → stamp the revision the live tables actually match, **then** upgrade. It does not stamp `head` blindly (that skipped later additive migrations).
+- Legacy `database/tables.sql` leftovers (BIGSERIAL `users.id`, no preference columns) are rebuilt **only** when the `users` table is empty, or when `ALLOW_LEGACY_SCHEMA_REBUILD=true`. Populated production databases are refused with a clear error instead of being dropped.
+- Optional `DATABASE_URL_DIRECT` (non-pooled Neon URL) is used for DDL when set.
+
+`GET /health/ready` should return `{"status":"ok"}`. `schema_mismatch` means the live `users` table is not UUID-based.
+
 ## Tests
 
 ```bash
@@ -118,5 +128,5 @@ pytest -q
 - Set `DATABASE_URL`, `SECRET_KEY`, `CORS_ORIGINS` (your Vercel URL), `FRONTEND_URL`, and `API_PUBLIC_URL` in the Render dashboard
 - To enable social login, also set Google and/or Facebook OAuth credentials; redirect URIs must use `API_PUBLIC_URL`
 - Prefer `python -m uvicorn` so Render’s PATH always finds the package
-- `python -m app.migrate` upgrades Alembic, stamps compatible existing schemas, or **rebuilds** if it detects the legacy `database/tables.sql` schema (BIGSERIAL ids) that breaks registration
+- `python -m app.migrate` upgrades Alembic. It stamps a missing version row to the revision the live schema actually matches (not blindly to `head`), and it will **not** drop a populated production database. Legacy `database/tables.sql` rebuilds require an empty `users` table or `ALLOW_LEGACY_SCHEMA_REBUILD=true`.
 - Check `GET /health/ready` — should return `{"status":"ok"}`. `schema_mismatch` means migrate did not repair yet.

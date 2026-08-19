@@ -24,8 +24,21 @@ Dev server: http://localhost:5173
 - **Auth** — register / login, JWT in `localStorage`, preferences for Monthly/Annual views
 - **Categories** — create, list, archive/restore (income / expense / savings)
 - **Budget** — monthly editor with copy-forward seed, copy/template actions; editable annual grid
-- **Tracker** — cascaded kind → category logging; search, sort, filters, pagination
+- **Tracker** — cascaded kind → category logging; search, sort, filters, virtualized list
 - **Dashboard** — monthly/annual insights, soft over-budget warnings, rearrangeable widgets
+
+## Tests
+
+```bash
+cd web
+npm install
+npx playwright install chromium
+npm run test:e2e
+```
+
+Playwright starts a local Vite app plus an in-memory mock API and walks
+**auth → categories → budget → tracker → dashboard**. The mock keeps this
+suite off the shared FastAPI/Postgres files other agents may be editing.
 
 ## Deploy (Vercel)
 

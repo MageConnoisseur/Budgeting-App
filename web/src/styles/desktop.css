@@ -1,0 +1,163 @@
+/* Dense desktop polish for Hearth Budgeting.
+ *
+ * Additive on top of index.css so parallel page work does not fight a
+ * wholesale visual rewrite. Tokens stay the existing pine / moss / paper set.
+ */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Keyboard-first desktop focus — keep the pine ring, skip mouse-only outlines. */
+:where(a, button, input, select, textarea):focus-visible {
+  outline: 2px solid rgba(31, 75, 58, 0.45);
+  outline-offset: 2px;
+}
+
+:where(a, button, input, select, textarea):focus:not(:focus-visible) {
+  outline: none;
+}
+
+.virtual-table-wrap {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-solid);
+  box-shadow: var(--shadow);
+}
+
+.virtual-table {
+  width: 100%;
+  font-size: 0.92rem;
+}
+
+.virtual-table-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--paper-2);
+}
+
+.virtual-table-row {
+  display: grid;
+  grid-template-columns:
+    7.5rem 6.5rem minmax(8rem, 1.2fr) 7rem minmax(8rem, 1.4fr) auto;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 0.85rem;
+  border-bottom: 1px solid var(--line);
+  box-sizing: border-box;
+}
+
+.virtual-table-row.head {
+  min-height: 2.6rem;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.virtual-table-body {
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.virtual-table-spacer {
+  position: relative;
+  width: 100%;
+}
+
+.virtual-table-window {
+  will-change: transform;
+}
+
+.virtual-table-row .num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.virtual-table-row .actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+
+.virtual-table-row .note-cell {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (min-width: 1100px) {
+  .shell {
+    max-width: min(100%, 88rem);
+    padding: 1rem 1.5rem 2.5rem;
+  }
+
+  .topbar {
+    padding: 0.65rem 0.85rem;
+    margin-bottom: 1.15rem;
+    gap: 0.75rem 1.15rem;
+  }
+
+  .page {
+    gap: 0.85rem;
+  }
+
+  .page-header h1 {
+    font-size: clamp(1.55rem, 1.8vw, 1.9rem);
+  }
+
+  .panel {
+    padding: 0.95rem 1.05rem;
+  }
+
+  .data-table th,
+  .data-table td,
+  .virtual-table-row {
+    padding-top: 0.45rem;
+    padding-bottom: 0.45rem;
+  }
+
+  .data-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--paper-2);
+    box-shadow: 0 1px 0 var(--line);
+  }
+
+  .budget-line {
+    gap: 0.55rem 0.75rem;
+  }
+
+  .annual-grid input {
+    min-height: 2.1rem;
+    padding: 0.3rem 0.4rem;
+  }
+
+  .widget {
+    padding: 0.9rem 1rem;
+  }
+
+  .dashboard-layout {
+    gap: 0.85rem;
+  }
+}
+
+@media (min-width: 1440px) {
+  .shell:has(.page-budget-annual) {
+    max-width: min(100%, 110rem);
+  }
+}
