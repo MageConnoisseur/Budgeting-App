@@ -134,26 +134,30 @@ pytest -q
 
 Forgot password is the only mail this API sends. Sign-up does **not** send a verification email — the form asks people to type the address twice.
 
-**1. Resend dashboard**
+You do **not** need to buy a domain for this yet. A `*.vercel.app` URL is fine for the *website and reset links*. It cannot be used as the *From* address (you cannot add SPF/DKIM on Vercel’s domain).
 
-1. Open [resend.com/domains](https://resend.com/domains). Add the domain you already use for ondeck (or a new one) and finish DNS (SPF, DKIM, optionally DMARC).
-2. Add a from-address on that domain, e.g. `Hearth Budgeting <noreply@yourdomain.com>`. Reusing the ondeck domain with a different local-part is fine.
-3. Open [resend.com/api-keys](https://resend.com/api-keys) and create a **Sending access** key. Copy it once (`re_…`).
-4. Optional smoke test: Resend’s `onboarding@resend.dev` from-address can only send to *your* Resend account email. Production users need the verified domain.
+**No custom domain (you + your own inbox)**
 
-**2. Render (API service)**
+Resend lets you send from `onboarding@resend.dev` to **only the email address on your Resend account**. That is enough while Hearth is just for you.
 
-Environment → Add:
+1. Open [resend.com/api-keys](https://resend.com/api-keys) and create a **Sending access** key. Copy it once (`re_…`). Skip [Domains](https://resend.com/domains) for now.
+2. In Hearth **Account**, set the recovery email to the **same address you use to log into Resend** (otherwise Resend will refuse the send with a 403).
+3. On the Render API service, set:
 
 | Key | Value |
 |-----|--------|
 | `RESEND_API_KEY` | the `re_…` key |
-| `RESEND_FROM` | `Hearth Budgeting <noreply@yourdomain.com>` (must match the verified domain) |
-| `FRONTEND_URL` | the live Vercel origin, e.g. `https://your-app.vercel.app` (no trailing slash) |
+| `RESEND_FROM` | `Hearth Budgeting <onboarding@resend.dev>` |
+| `FRONTEND_URL` | your live Vercel URL, e.g. `https://your-app.vercel.app` (no trailing slash) |
 
-Save and wait for the service to redeploy. Then `GET https://<render-host>/health` should show `"email": "resend"`.
+4. Redeploy, then open `https://<render-host>/health` — you want `"email": "resend"`.
+5. Use Forgot password on that same inbox. Check Resend → Emails, then the inbox. The link should open your Vercel app.
 
-**3. Confirm it works**
+When you later buy a domain, verify it in Resend, then change `RESEND_FROM` to something like `Hearth Budgeting <noreply@yourdomain.com>`. Reset mail can then reach any user, not only your Resend login.
 
-Request a password reset for your own account. The message should appear in Resend → Emails, then in the inbox. The link host must be your Vercel URL, not `localhost`.
+**After you have a domain**
+
+1. Open [resend.com/domains](https://resend.com/domains), add the domain, and finish DNS (SPF, DKIM). If the domain’s DNS lives in Vercel, Resend’s Auto Configure can add the records.
+2. Set `RESEND_FROM` to an address on that domain.
+3. `FRONTEND_URL` can stay on `*.vercel.app` until you point a custom domain at the web app.
 
