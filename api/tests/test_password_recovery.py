@@ -1,4 +1,4 @@
-"""Password reset, change/set password, and recovery email confirmation."""
+"""Password reset, change/set password, and Resend delivery."""
 
 from __future__ import annotations
 
@@ -18,7 +18,13 @@ TOKEN_RE = re.compile(r"token=([A-Za-z0-9_\-]+)")
 
 
 @pytest.fixture(autouse=True)
-def _clear_mail_outbox() -> None:
+def _clear_mail_outbox():
+    from app.config import get_settings
+
+    get_settings.cache_clear()
+    mailer.clear_outbox()
+    yield
+    get_settings.cache_clear()
     mailer.clear_outbox()
 
 
@@ -194,30 +200,19 @@ def test_change_password_requires_current() -> None:
     assert login.status_code == 200, login.text
 
 
-def test_confirm_email_from_account() -> None:
-    headers, _, email, _ = _register()
-    send = client.post("/api/auth/me/confirm-email", headers=headers)
-    assert send.status_code == 200, send.text
+def test_changing_email_clears_verified_flag() -> None:
+    headers, username, email, _ = _register()
+    client.post("/api/auth/forgot-password", json={"identifier": email})
     token = _token_from_latest_email()
-    assert email in str(mailer.outbox[-1]["to"])
-
-    check = client.get("/api/auth/confirm-email", params={"token": token})
-    assert check.json()["valid"] is True
-    confirm = client.post("/api/auth/confirm-email", json={"token": token})
-    assert confirm.status_code == 200, confirm.text
-    me = client.get("/api/auth/me", headers=headers)
-    assert me.json()["email_verified"] is True
-
-    again = client.post("/api/auth/me/confirm-email", headers=headers)
-    assert again.status_code == 200
-    assert "already confirmed" in again.json()["message"].lower()
-
-
-def test_changing_email_clears_verification() -> None:
-    headers, _, _, _ = _register()
-    client.post("/api/auth/me/confirm-email", headers=headers)
-    token = _token_from_latest_email()
-    client.post("/api/auth/confirm-email", json={"token": token})
+    client.post(
+        "/api/auth/reset-password",
+        json={"token": token, "password": "resetpass1"},
+    )
+    login = client.post(
+        "/api/auth/login",
+        json={"username": username, "password": "resetpass1"},
+    )
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
     assert client.get("/api/auth/me", headers=headers).json()["email_verified"] is True
 
     new_email = f"moved_{uuid.uuid4().hex[:8]}@example.com"
@@ -278,3 +273,44 @@ def test_oauth_without_email_cannot_set_password() -> None:
     )
     assert forgot.status_code == 200
     assert mailer.outbox == []
+
+
+def test_health_reports_log_only_email_without_resend() -> None:
+    r = client.get("/health")
+    assert r.status_code == 200
+    assert r.json()["status"] == "ok"
+    assert r.json()["email"] == "log_only"
+
+
+def test_resend_posts_when_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.config import get_settings
+
+    monkeypatch.setenv("RESEND_API_KEY", "re_test_key")
+    monkeypatch.setenv("RESEND_FROM", "Hearth Budgeting <noreply@example.com>")
+    get_settings.cache_clear()
+    calls: list[dict] = []
+
+    class _Resp:
+        status_code = 200
+        text = '{"id":"email_1"}'
+
+    def fake_post(url: str, **kwargs: object):
+        calls.append({"url": url, **kwargs})
+        return _Resp()
+
+    monkeypatch.setattr(mailer.httpx, "post", fake_post)
+    mailer.send_email(
+        to="pat@example.com",
+        subject="Reset your Hearth Budgeting password",
+        body="plain",
+        html="<p>html</p>",
+    )
+    assert len(calls) == 1
+    assert calls[0]["url"] == "https://api.resend.com/emails"
+    headers = calls[0]["headers"]
+    assert headers["Authorization"] == "Bearer re_test_key"
+    payload = calls[0]["json"]
+    assert payload["from"] == "Hearth Budgeting <noreply@example.com>"
+    assert payload["to"] == ["pat@example.com"]
+    assert payload["text"] == "plain"
+    assert payload["html"] == "<p>html</p>"

@@ -15,7 +15,6 @@ from app.database import get_db
 from app.deps import get_current_user
 from app.models import User
 from app.schemas import (
-    ConfirmEmailRequest,
     ForgotPasswordRequest,
     LoginRequest,
     MessageResponse,
@@ -159,32 +158,6 @@ def change_password(
     return _user_out(loaded)
 
 
-@router.post("/me/confirm-email", response_model=MessageResponse)
-def send_my_email_confirmation(
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-) -> MessageResponse:
-    loaded = _load_user(db, user.id)
-    assert loaded is not None
-    if not loaded.email:
-        raise HTTPException(
-            status_code=400,
-            detail="Add a recovery email before we can send a confirmation link.",
-        )
-    if recovery_svc.email_verified(loaded):
-        return MessageResponse(message="This email is already confirmed.")
-    try:
-        recovery_svc.send_email_confirmation(db, loaded)
-    except recovery_svc.RecoveryError as exc:
-        raise _recovery_http(exc) from exc
-    except MailError as exc:
-        raise HTTPException(
-            status_code=503,
-            detail="Could not send email. Try again later.",
-        ) from exc
-    return MessageResponse(message=recovery_svc.CONFIRM_EMAIL_SENT_MESSAGE)
-
-
 @router.post("/forgot-password", response_model=MessageResponse)
 def forgot_password(
     body: ForgotPasswordRequest, db: Session = Depends(get_db)
@@ -219,26 +192,6 @@ def reset_password(
     return MessageResponse(
         message="Password updated. You can sign in with your new password."
     )
-
-
-@router.get("/confirm-email", response_model=RecoveryTokenStatus)
-def confirm_email_status(
-    token: str = Query(min_length=8, max_length=256),
-    db: Session = Depends(get_db),
-) -> RecoveryTokenStatus:
-    found = recovery_svc.lookup_recovery_token(db, token, "email_confirm")
-    return RecoveryTokenStatus(valid=found is not None)
-
-
-@router.post("/confirm-email", response_model=MessageResponse)
-def confirm_email(
-    body: ConfirmEmailRequest, db: Session = Depends(get_db)
-) -> MessageResponse:
-    try:
-        recovery_svc.confirm_email(db, body.token)
-    except recovery_svc.RecoveryError as exc:
-        raise _recovery_http(exc) from exc
-    return MessageResponse(message="Email confirmed. You can use it to recover this account.")
 
 
 @router.get("/oauth/providers", response_model=list[OAuthProviderInfo])

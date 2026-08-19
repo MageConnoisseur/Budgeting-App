@@ -13,21 +13,14 @@ const PROVIDER_LABELS: Record<string, string> = {
 }
 
 export function AccountPage() {
-  const {
-    user,
-    updateEmail,
-    unlinkProvider,
-    refreshUser,
-    changePassword,
-    sendEmailConfirmation,
-  } = useAuth()
+  const { user, updateEmail, unlinkProvider, refreshUser, changePassword } =
+    useAuth()
   const [searchParams] = useSearchParams()
   const [email, setEmail] = useState(user?.email ?? '')
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [savingPassword, setSavingPassword] = useState(false)
-  const [sendingConfirm, setSendingConfirm] = useState(false)
   const [providers, setProviders] = useState<OAuthProviderInfo[]>([])
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -65,30 +58,12 @@ export function AccountPage() {
     try {
       await updateEmail(email.trim())
       setMessage(
-        'Email saved. Confirm it below so we know you can receive recovery mail.',
+        'Email saved. Password reset mail will go here — double-check it is an inbox you can open.',
       )
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : 'Could not update email')
     } finally {
       setSaving(false)
-    }
-  }
-
-  async function onSendConfirmation() {
-    setSendingConfirm(true)
-    setError(null)
-    setMessage(null)
-    try {
-      const result = await sendEmailConfirmation()
-      setMessage(result.message)
-    } catch (err) {
-      setError(
-        err instanceof ApiError
-          ? err.detail
-          : 'Could not send confirmation email',
-      )
-    } finally {
-      setSendingConfirm(false)
     }
   }
 
@@ -137,7 +112,6 @@ export function AccountPage() {
   const linked = new Set(user?.oauth_providers ?? [])
   const linkable = providers.filter((p) => !linked.has(p.id))
   const hasEmail = Boolean(user?.email)
-  const emailVerified = Boolean(user?.email_verified)
   const canSetPassword = hasEmail || Boolean(user?.has_password)
 
   return (
@@ -163,32 +137,12 @@ export function AccountPage() {
             </p>
           </div>
         )}
-        {hasEmail && !emailVerified && (
-          <div className="callout warn" role="status">
-            <strong>Email not confirmed</strong>
-            <p>
-              We have <code>{user?.email}</code> on file, but we have not
-              confirmed you can receive mail there. Reset and confirmation
-              emails will still be sent to this address — if it is wrong, you
-              will not get them. Sign-in is not blocked.
-            </p>
-            <button
-              type="button"
-              className="btn tiny"
-              onClick={() => void onSendConfirmation()}
-              disabled={sendingConfirm}
-            >
-              {sendingConfirm ? 'Sending…' : 'Send confirmation link'}
-            </button>
-          </div>
-        )}
-        {hasEmail && emailVerified && (
+        {hasEmail && (
           <div className="callout ok" role="status">
-            <strong>Recovery email confirmed</strong>
+            <strong>Recovery email on file</strong>
             <p>
-              Password reset emails go to <code>{user?.email}</code>. You can
-              change your password below or use Forgot password on the sign-in
-              page.
+              Forgot-password mail goes to <code>{user?.email}</code>. Keep this
+              accurate — we do not send a separate confirmation email.
             </p>
           </div>
         )}
@@ -213,9 +167,8 @@ export function AccountPage() {
             />
           </label>
           <p className="muted tiny">
-            Changing this address marks it unconfirmed until you click the
-            confirmation link (or finish a password reset). OAuth provider
-            emails are treated as confirmed.
+            This is the inbox used for password reset. There is no verification
+            step — a typo means a forgotten password cannot be recovered.
           </p>
           <button className="btn primary" type="submit" disabled={saving}>
             {saving ? 'Saving…' : 'Save email'}

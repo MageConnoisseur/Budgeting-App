@@ -60,10 +60,6 @@ class ResetPasswordRequest(BaseModel):
     password: str = Field(min_length=8, max_length=128)
 
 
-class ConfirmEmailRequest(BaseModel):
-    token: str = Field(min_length=8, max_length=256)
-
-
 class PasswordChangeRequest(BaseModel):
     """Change password (current required) or set one for OAuth-only accounts."""
 

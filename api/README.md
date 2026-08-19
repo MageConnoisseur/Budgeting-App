@@ -30,8 +30,8 @@ Hosts on **Render**; database is **PostgreSQL on Neon**. Web (Vite/React on Verc
 | Password accounts | Username + **email** + password (email required on signup) |
 | Social login | Google and Facebook OAuth (optional env credentials) |
 | Account linking | Explicit link from Account settings — never auto-merge on email alone |
-| Password recovery | Forgot-password email with a one-hour one-time link; Account can change or set a password |
-| Recovery email | Confirmed via OAuth provider email, a confirmation link, or a completed password reset. Sign-in does not require confirmation. |
+| Password recovery | Forgot-password email via **Resend** (one-hour one-time link); Account can change or set a password |
+| Recovery email | Required for password signup. No verification email — sign-up asks people to type it twice. Sign-in is not gated on confirming the address. |
 | Password hash | bcrypt (passlib) |
 | Session | Stateless JWT (`Authorization: Bearer <token>`) |
 | Token lifetime | 7 days (override with `ACCESS_TOKEN_EXPIRE_MINUTES`) |
@@ -83,21 +83,18 @@ OpenAPI docs: http://localhost:8000/docs
 | `FACEBOOK_APP_ID` / `FACEBOOK_APP_SECRET` | no | Enable Facebook sign-in |
 | `OAUTH_DEV_MODE` | no | Expose local `dev` OAuth provider for tests (default false) |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | no | JWT lifetime (default 10080) |
-| `PASSWORD_RESET_EXPIRE_MINUTES` | no | Reset / confirm link lifetime (default 60) |
-| `SMTP_HOST` | no | SMTP host for recovery emails. Unset = log only (dev/tests) |
-| `SMTP_PORT` | no | SMTP port (default 587) |
-| `SMTP_USERNAME` / `SMTP_PASSWORD` | no | SMTP auth |
-| `SMTP_FROM` | no | From header (default `Hearth Budgeting <noreply@hearthbudgeting.local>`) |
-| `SMTP_USE_TLS` | no | STARTTLS (default true) |
+| `PASSWORD_RESET_EXPIRE_MINUTES` | no | Reset link lifetime (default 60) |
+| `RESEND_API_KEY` | prod (for reset mail) | Resend API key. Unset = log-only (dev/tests) |
+| `RESEND_FROM` | with the API key | From header, e.g. `Hearth Budgeting <noreply@yourdomain.com>` |
 
 ## Main routes
 
-All data routes are under `/api` and require auth except `/api/auth/register`, `/api/auth/login`, `/api/auth/forgot-password`, `/api/auth/reset-password`, `/api/auth/confirm-email`, and OAuth start/callback routes.
+All data routes are under `/api` and require auth except `/api/auth/register`, `/api/auth/login`, `/api/auth/forgot-password`, `/api/auth/reset-password`, and OAuth start/callback routes.
 
 | Area | Endpoints |
 |------|-----------|
-| Auth | `POST /auth/register`, `POST /auth/login`, `GET /auth/me`, `PATCH /auth/me/preferences`, `PATCH /auth/me/profile`, `PATCH /auth/me/password`, `POST /auth/me/confirm-email` |
-| Recovery | `POST /auth/forgot-password`, `GET/POST /auth/reset-password`, `GET/POST /auth/confirm-email` |
+| Auth | `POST /auth/register`, `POST /auth/login`, `GET /auth/me`, `PATCH /auth/me/preferences`, `PATCH /auth/me/profile`, `PATCH /auth/me/password` |
+| Recovery | `POST /auth/forgot-password`, `GET/POST /auth/reset-password` |
 | OAuth | `GET /auth/oauth/providers`, `GET /auth/oauth/{provider}/start`, `GET /auth/oauth/{provider}/callback`, `DELETE /auth/oauth/{provider}` |
 | Categories | `GET/POST /categories`, `GET/PATCH/DELETE /categories/{id}` |
 | Budgets | `GET/PUT /budgets/months/{year}/{month}`, `GET /budgets/annual/{year}`, `PUT /budgets/annual/cell`, copy/template actions |
@@ -127,7 +124,36 @@ pytest -q
 - Start command: `python -m app.migrate && python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT`
 - Set `DATABASE_URL`, `SECRET_KEY`, `CORS_ORIGINS` (your Vercel URL), `FRONTEND_URL`, and `API_PUBLIC_URL` in the Render dashboard
 - To enable social login, also set Google and/or Facebook OAuth credentials; redirect URIs must use `API_PUBLIC_URL`
-- To send password-reset emails, set `SMTP_HOST` (and related SMTP vars). `FRONTEND_URL` is used in reset/confirm links
+- To send password-reset emails, set `RESEND_API_KEY` and `RESEND_FROM` (see below). `FRONTEND_URL` is used in reset links — it must be the live Vercel origin, not localhost
 - Prefer `python -m uvicorn` so Render’s PATH always finds the package
 - `python -m app.migrate` upgrades Alembic, stamps compatible existing schemas, or **rebuilds** if it detects the legacy `database/tables.sql` schema (BIGSERIAL ids) that breaks registration
 - Check `GET /health/ready` — should return `{"status":"ok"}`. `schema_mismatch` means migrate did not repair yet.
+- `GET /health` includes `"email": "resend"` when Resend is configured, or `"log_only"` when it is not
+
+### Password reset email (Resend)
+
+Forgot password is the only mail this API sends. Sign-up does **not** send a verification email — the form asks people to type the address twice.
+
+**1. Resend dashboard**
+
+1. Open [resend.com/domains](https://resend.com/domains). Add the domain you already use for ondeck (or a new one) and finish DNS (SPF, DKIM, optionally DMARC).
+2. Add a from-address on that domain, e.g. `Hearth Budgeting <noreply@yourdomain.com>`. Reusing the ondeck domain with a different local-part is fine.
+3. Open [resend.com/api-keys](https://resend.com/api-keys) and create a **Sending access** key. Copy it once (`re_…`).
+4. Optional smoke test: Resend’s `onboarding@resend.dev` from-address can only send to *your* Resend account email. Production users need the verified domain.
+
+**2. Render (API service)**
+
+Environment → Add:
+
+| Key | Value |
+|-----|--------|
+| `RESEND_API_KEY` | the `re_…` key |
+| `RESEND_FROM` | `Hearth Budgeting <noreply@yourdomain.com>` (must match the verified domain) |
+| `FRONTEND_URL` | the live Vercel origin, e.g. `https://your-app.vercel.app` (no trailing slash) |
+
+Save and wait for the service to redeploy. Then `GET https://<render-host>/health` should show `"email": "resend"`.
+
+**3. Confirm it works**
+
+Request a password reset for your own account. The message should appear in Resend → Emails, then in the inbox. The link host must be your Vercel URL, not `localhost`.
+
