@@ -21,7 +21,7 @@ from sqlalchemy.engine import Engine
 
 from app.config import get_settings
 
-REVISION = "d4e5f6a7b8c9"
+REVISION = "e5f6a7b8c9d0"
 
 # Drop order does not matter with CASCADE; listed for clarity.
 APP_TABLES = (
@@ -34,6 +34,7 @@ APP_TABLES = (
     "budget_months",
     "categories",
     "oauth_accounts",
+    "recovery_tokens",
     "users",
     "alembic_version",
 )

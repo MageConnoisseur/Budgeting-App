@@ -3,11 +3,13 @@
 Auth strategy:
 - Username/email + password registration/login
 - Optional Google / Facebook (and local `dev`) OAuth with explicit account linking
+- Password reset / recovery via emailed one-time tokens
 - Passwords hashed with bcrypt via passlib
 - Stateless JWT Bearer tokens (Authorization: Bearer <token>)
 - Token payload includes `sub` = user id (string)
 """
 
+import hashlib
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -25,6 +27,11 @@ def hash_password(password: str) -> str:
 
 def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
+
+
+def hash_recovery_token(raw: str) -> str:
+    """SHA-256 hex digest for one-time reset/confirm tokens (high entropy)."""
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 def create_access_token(subject: str, extra: dict[str, Any] | None = None) -> str:

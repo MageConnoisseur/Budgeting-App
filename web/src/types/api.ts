@@ -8,6 +8,14 @@ export interface TokenResponse {
   token_type: string
 }
 
+export interface MessageResponse {
+  message: string
+}
+
+export interface RecoveryTokenStatus {
+  valid: boolean
+}
+
 export interface OAuthProviderInfo {
   id: string
   name: string
@@ -18,6 +26,7 @@ export interface User {
   id: string
   username: string
   email: string | null
+  email_verified: boolean
   has_password: boolean
   oauth_providers: string[]
   preferred_budget_view: ViewMode

@@ -173,9 +173,9 @@ Over-budget behavior: **soft warnings only**. Emphasize patterns across months s
 | Audience | Individual accounts first; design data so **households/shared budgets** could be added later |
 | Auth | Username + **email** + password, plus optional **Google / Facebook** OAuth |
 | Account linking | Users can attach email and link social providers to an **existing** account so budget data is never split |
-| Email verification | Not required yet (users should still enter a recoverable address) |
+| Email verification | Not required to sign in. Account shows whether a recovery email is missing or unconfirmed; confirmation is optional and used for password reset reliability |
 | Session | JWT Bearer + bcrypt; details in `api/README.md` |
-| Desktop depth | Password **reset / recovery** and other account reliability work are welcome in the active desktop phase when asked — do not wait for “mobile” |
+| Desktop depth | Password **reset / recovery** (forgot-password email, change/set password) is in scope for the active desktop phase |
 
 Do not build multi-user sharing yet, but avoid hard-coding assumptions that make “one budget, many members” impossible later (e.g. prefer `user_id` / future `workspace_id` ownership patterns).
 
@@ -264,7 +264,7 @@ Prioritize (order is guidance, not a rigid checklist):
 1. **Desktop UX polish** — Budget monthly + annual editing fluency, Tracker findability/speed, Dashboard clarity and customization depth
 2. **Categories & planning power** — sort order UI, archive/restore clarity, template/copy flows on both monthly and annual where useful
 3. **Dashboard customization** — hide/show widgets, stronger layout controls, better annual vs monthly widget behavior
-4. **Account reliability** — password reset/recovery, OAuth/prod auth hardening, safer migrations (no sharp legacy rebuild surprises on real data)
+4. **Account reliability** — password reset/recovery (**shipped**: forgot/reset, change/set password, recovery email confirmation), OAuth/prod auth hardening, safer migrations (no sharp legacy rebuild surprises on real data)
 5. **Quality bar** — API tests kept green; add web smoke/E2E coverage for core flows; performance as data grows
 6. **Visual coherence** — coherent desktop visual system under the **Hearth Budgeting** brand
 
@@ -320,7 +320,7 @@ Only after desktop web feels robust:
 
 Stay close to these concepts (implemented under `api/` with Alembic):
 
-- **User** — username, email (required for password signup), password hash (nullable for OAuth-only), OAuth provider links, view preferences, timestamps
+- **User** — username, email (required for password signup), password hash (nullable for OAuth-only), OAuth provider links, view preferences, optional `email_verified_at`, timestamps
 - **Category** — user_id, kind (`income` | `expense` | `savings`), name, archived flag, sort order
 - **BudgetMonth** — user_id, year, month (unique per user)
 - **BudgetLine** — budget_month_id, category_id, planned_amount
@@ -370,7 +370,7 @@ All user-owned rows must be scoped by authenticated user.
 | Budget / Dashboard views | Monthly and Annual modes; easy swap; annual budget editing allowed; preferences stored on the user |
 | Tracker findability | Search, sort, and filters required |
 | Auth now | Username + email + password; Google/Facebook OAuth with explicit account linking; JWT Bearer + bcrypt |
-| Auth later / desktop depth | Password reset/recovery welcome in active phase when requested; email verification still later |
+| Auth later / desktop depth | Password reset/recovery **shipped** (forgot-password email, change/set password, confirmation messaging). Email verification is still not required to sign in |
 | Users | Individual accounts; households later |
 | Currency | USD now; multi-currency later |
 | Mobile | **Deferred** Expo Android until desktop web is robust; shared API/DB |

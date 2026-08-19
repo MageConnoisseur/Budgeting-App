@@ -8,6 +8,7 @@ Hosts on **Render**; database is **PostgreSQL on Neon**. Web (Vite/React on Verc
 ## Features
 
 - Username + password auth with **JWT Bearer** tokens
+- Password **reset / recovery** (email link) plus change/set password on Account
 - Category CRUD (`income` / `expense` / `savings`)
 - Monthly budget plans with **copy-forward** auto-seed
 - Explicit **copy from month**, **save as template**, **apply template**
@@ -29,6 +30,8 @@ Hosts on **Render**; database is **PostgreSQL on Neon**. Web (Vite/React on Verc
 | Password accounts | Username + **email** + password (email required on signup) |
 | Social login | Google and Facebook OAuth (optional env credentials) |
 | Account linking | Explicit link from Account settings — never auto-merge on email alone |
+| Password recovery | Forgot-password email with a one-hour one-time link; Account can change or set a password |
+| Recovery email | Confirmed via OAuth provider email, a confirmation link, or a completed password reset. Sign-in does not require confirmation. |
 | Password hash | bcrypt (passlib) |
 | Session | Stateless JWT (`Authorization: Bearer <token>`) |
 | Token lifetime | 7 days (override with `ACCESS_TOKEN_EXPIRE_MINUTES`) |
@@ -80,14 +83,21 @@ OpenAPI docs: http://localhost:8000/docs
 | `FACEBOOK_APP_ID` / `FACEBOOK_APP_SECRET` | no | Enable Facebook sign-in |
 | `OAUTH_DEV_MODE` | no | Expose local `dev` OAuth provider for tests (default false) |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | no | JWT lifetime (default 10080) |
+| `PASSWORD_RESET_EXPIRE_MINUTES` | no | Reset / confirm link lifetime (default 60) |
+| `SMTP_HOST` | no | SMTP host for recovery emails. Unset = log only (dev/tests) |
+| `SMTP_PORT` | no | SMTP port (default 587) |
+| `SMTP_USERNAME` / `SMTP_PASSWORD` | no | SMTP auth |
+| `SMTP_FROM` | no | From header (default `Hearth Budgeting <noreply@hearthbudgeting.local>`) |
+| `SMTP_USE_TLS` | no | STARTTLS (default true) |
 
 ## Main routes
 
-All data routes are under `/api` and require auth except `/api/auth/register`, `/api/auth/login`, and OAuth start/callback routes.
+All data routes are under `/api` and require auth except `/api/auth/register`, `/api/auth/login`, `/api/auth/forgot-password`, `/api/auth/reset-password`, `/api/auth/confirm-email`, and OAuth start/callback routes.
 
 | Area | Endpoints |
 |------|-----------|
-| Auth | `POST /auth/register`, `POST /auth/login`, `GET /auth/me`, `PATCH /auth/me/preferences`, `PATCH /auth/me/profile` |
+| Auth | `POST /auth/register`, `POST /auth/login`, `GET /auth/me`, `PATCH /auth/me/preferences`, `PATCH /auth/me/profile`, `PATCH /auth/me/password`, `POST /auth/me/confirm-email` |
+| Recovery | `POST /auth/forgot-password`, `GET/POST /auth/reset-password`, `GET/POST /auth/confirm-email` |
 | OAuth | `GET /auth/oauth/providers`, `GET /auth/oauth/{provider}/start`, `GET /auth/oauth/{provider}/callback`, `DELETE /auth/oauth/{provider}` |
 | Categories | `GET/POST /categories`, `GET/PATCH/DELETE /categories/{id}` |
 | Budgets | `GET/PUT /budgets/months/{year}/{month}`, `GET /budgets/annual/{year}`, `PUT /budgets/annual/cell`, copy/template actions |
@@ -117,6 +127,7 @@ pytest -q
 - Start command: `python -m app.migrate && python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT`
 - Set `DATABASE_URL`, `SECRET_KEY`, `CORS_ORIGINS` (your Vercel URL), `FRONTEND_URL`, and `API_PUBLIC_URL` in the Render dashboard
 - To enable social login, also set Google and/or Facebook OAuth credentials; redirect URIs must use `API_PUBLIC_URL`
+- To send password-reset emails, set `SMTP_HOST` (and related SMTP vars). `FRONTEND_URL` is used in reset/confirm links
 - Prefer `python -m uvicorn` so Render’s PATH always finds the package
 - `python -m app.migrate` upgrades Alembic, stamps compatible existing schemas, or **rebuilds** if it detects the legacy `database/tables.sql` schema (BIGSERIAL ids) that breaks registration
 - Check `GET /health/ready` — should return `{"status":"ok"}`. `schema_mismatch` means migrate did not repair yet.

@@ -104,6 +104,7 @@ def test_register_login_and_me(auth_headers: dict[str, str]) -> None:
     assert body["preferred_budget_view"] == "monthly"
     assert "username" in body
     assert body["email"]
+    assert body["email_verified"] is False
     assert body["has_password"] is True
     assert body["oauth_providers"] == []
 
@@ -936,6 +937,7 @@ def test_oauth_dev_login_creates_account_without_password() -> None:
     assert me.status_code == 200, me.text
     body = me.json()
     assert body["email"] == email
+    assert body["email_verified"] is True
     assert body["has_password"] is False
     assert "dev" in body["oauth_providers"]
 
@@ -999,6 +1001,7 @@ def test_profile_email_update_and_unlink(auth_headers: dict[str, str]) -> None:
     )
     assert upd.status_code == 200, upd.text
     assert upd.json()["email"] == new_email
+    assert upd.json()["email_verified"] is False
 
     unlink = client.delete("/api/auth/oauth/dev", headers=headers)
     assert unlink.status_code == 200, unlink.text

@@ -51,8 +51,8 @@ export function RegisterPage() {
         <h1>Create account</h1>
         <p className="muted">
           Use Google or Facebook, or sign up with a username, email, and
-          password. Email is required for password accounts so you can recover
-          access later.
+          password. Email is required for password accounts. Confirm it later
+          from Account so a forgotten password can be reset.
         </p>
         <OAuthButtons
           providers={providers}

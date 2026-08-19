@@ -49,6 +49,36 @@ class UserProfileUpdate(BaseModel):
     email: EmailStr
 
 
+class ForgotPasswordRequest(BaseModel):
+    """Username or email. Response is always a generic success message."""
+
+    identifier: str = Field(min_length=1, max_length=320)
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str = Field(min_length=8, max_length=256)
+    password: str = Field(min_length=8, max_length=128)
+
+
+class ConfirmEmailRequest(BaseModel):
+    token: str = Field(min_length=8, max_length=256)
+
+
+class PasswordChangeRequest(BaseModel):
+    """Change password (current required) or set one for OAuth-only accounts."""
+
+    current_password: Optional[str] = None
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class MessageResponse(BaseModel):
+    message: str
+
+
+class RecoveryTokenStatus(BaseModel):
+    valid: bool
+
+
 class OAuthProviderInfo(BaseModel):
     id: str
     name: str
@@ -59,6 +89,7 @@ class UserOut(ORMModel):
     id: UUID
     username: str
     email: Optional[str] = None
+    email_verified: bool = False
     has_password: bool = False
     oauth_providers: list[str] = []
     preferred_budget_view: ViewMode

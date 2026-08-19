@@ -328,6 +328,7 @@ def serialize_user(user: User) -> dict[str, Any]:
         "id": user.id,
         "username": user.username,
         "email": user.email,
+        "email_verified": bool(user.email and user.email_verified_at is not None),
         "has_password": has_password,
         "oauth_providers": providers,
         "preferred_budget_view": user.preferred_budget_view,
@@ -381,6 +382,14 @@ def link_oauth_account(
         conflict = find_user_by_email(db, profile.email)
         if conflict is None or conflict.id == user.id:
             user.email = profile.email
+            user.email_verified_at = datetime.now(UTC)
+    elif (
+        user.email
+        and profile.email
+        and user.email.strip().lower() == profile.email.strip().lower()
+        and user.email_verified_at is None
+    ):
+        user.email_verified_at = datetime.now(UTC)
 
     db.add(user)
     db.commit()
@@ -403,7 +412,15 @@ def resolve_oauth_login(db: Session, profile: ProviderProfile) -> User:
         if profile.email and linked.provider_email != profile.email:
             linked.provider_email = profile.email
             db.add(linked)
-            db.commit()
+        if (
+            user.email
+            and profile.email
+            and user.email.strip().lower() == profile.email.strip().lower()
+            and user.email_verified_at is None
+        ):
+            user.email_verified_at = datetime.now(UTC)
+            db.add(user)
+        db.commit()
         return user
 
     if profile.email:
@@ -426,6 +443,7 @@ def resolve_oauth_login(db: Session, profile: ProviderProfile) -> User:
         username=username,
         email=profile.email,
         password_hash=None,
+        email_verified_at=datetime.now(UTC) if profile.email else None,
     )
     db.add(user)
     db.flush()

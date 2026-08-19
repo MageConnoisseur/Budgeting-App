@@ -37,6 +37,11 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
     # Required for password signup; optional for legacy rows and OAuth-only users until set.
     email: Mapped[Optional[str]] = mapped_column(String(320), unique=True, index=True, nullable=True)
+    # Set when we know the user can receive mail here (OAuth provider email,
+    # clicked a confirmation link, or completed a password reset).
+    email_verified_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
     # Nullable so OAuth-only accounts can exist without a password.
     password_hash: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     # Remember Budget / Dashboard Monthly ↔ Annual preference server-side.
@@ -57,6 +62,9 @@ class User(Base):
     )
 
     oauth_accounts: Mapped[list[OAuthAccount]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    recovery_tokens: Mapped[list[RecoveryToken]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
     categories: Mapped[list[Category]] = relationship(back_populates="user")
@@ -92,6 +100,29 @@ class OAuthAccount(Base):
     )
 
     user: Mapped[User] = relationship(back_populates="oauth_accounts")
+
+
+class RecoveryToken(Base):
+    """One-time password-reset or email-confirm token (hashed at rest)."""
+
+    __tablename__ = "recovery_tokens"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    # password_reset | email_confirm
+    purpose: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+    # Address the token was issued for; consume fails if the user email changed.
+    email: Mapped[str] = mapped_column(String(320), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped[User] = relationship(back_populates="recovery_tokens")
 
 
 class Category(Base):

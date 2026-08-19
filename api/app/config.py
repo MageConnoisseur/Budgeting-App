@@ -31,6 +31,18 @@ class Settings(BaseSettings):
     # When true, expose a local "dev" OAuth provider for tests / local demos.
     oauth_dev_mode: bool = False
 
+    # Password reset / email confirmation link lifetime.
+    password_reset_expire_minutes: int = 60
+
+    # Optional SMTP for recovery emails. When smtp_host is empty, messages are
+    # logged (and kept in an in-memory outbox for tests) instead of sent.
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from: str = "Hearth Budgeting <noreply@hearthbudgeting.local>"
+    smtp_use_tls: bool = True
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
