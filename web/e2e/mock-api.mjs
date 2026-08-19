@@ -20,6 +20,8 @@ const categories = new Map()
 /** @type {Map<string, Month>} key = userId:year:month */
 const months = new Map()
 const transactions = new Map()
+/** @type {Map<string, { widgets: object[], presets: object[], active_preset_id: string | null }>} */
+const layouts = new Map()
 
 function nowIso() {
   return new Date().toISOString()
@@ -266,6 +268,8 @@ function defaultLayout(viewMode) {
   return {
     view_mode: viewMode,
     widgets: viewMode === 'annual' ? annual : monthly,
+    presets: [],
+    active_preset_id: null,
   }
 }
 
@@ -508,12 +512,35 @@ async function handle(req, res) {
 
   const layoutMatch = /^\/api\/dashboard\/layout\/(monthly|annual)$/.exec(path)
   if (layoutMatch && method === 'GET') {
-    json(res, 200, defaultLayout(layoutMatch[1]))
+    const stored = layouts.get(`${user.id}:${layoutMatch[1]}`)
+    json(
+      res,
+      200,
+      stored
+        ? {
+            view_mode: layoutMatch[1],
+            widgets: stored.widgets,
+            presets: stored.presets,
+            active_preset_id: stored.active_preset_id,
+          }
+        : defaultLayout(layoutMatch[1]),
+    )
     return
   }
   if (layoutMatch && method === 'PUT') {
     const body = await readBody(req)
-    json(res, 200, { view_mode: layoutMatch[1], widgets: body.widgets || [] })
+    const saved = {
+      widgets: body.widgets || [],
+      presets: body.presets || [],
+      active_preset_id: body.active_preset_id || null,
+    }
+    layouts.set(`${user.id}:${layoutMatch[1]}`, saved)
+    json(res, 200, {
+      view_mode: layoutMatch[1],
+      widgets: saved.widgets,
+      presets: saved.presets,
+      active_preset_id: saved.active_preset_id,
+    })
     return
   }
 

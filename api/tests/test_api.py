@@ -1103,3 +1103,59 @@ def test_profile_email_update_and_unlink(auth_headers: dict[str, str]) -> None:
     assert unlink.status_code == 200, unlink.text
     assert "dev" not in unlink.json()["oauth_providers"]
     assert unlink.json()["has_password"] is True
+
+
+def test_dashboard_layout_hidden_widgets_and_named_views(
+    auth_headers: dict[str, str],
+) -> None:
+    """Hidden widgets stay hidden on GET-merge; named views round-trip."""
+    h = auth_headers
+    hidden_expense = {
+        "id": "expense-progress",
+        "type": "kind_progress",
+        "title": "Expenses",
+        "order": 0,
+        "config": {"kind": "expense", "hidden": True, "x": 0, "y": 0, "w": 4, "h": 4},
+    }
+    visible_income = {
+        "id": "income-progress",
+        "type": "kind_progress",
+        "title": "Income",
+        "order": 1,
+        "config": {"kind": "income", "x": 4, "y": 0, "w": 4, "h": 4},
+    }
+    overview = {
+        "id": "overview",
+        "name": "Overview",
+        "widgets": [visible_income, hidden_expense],
+    }
+    lean = {
+        "id": "lean",
+        "name": "Lean",
+        "widgets": [visible_income],
+    }
+    saved = client.put(
+        "/api/dashboard/layout/monthly",
+        headers=h,
+        json={
+            "widgets": [visible_income, hidden_expense],
+            "presets": [overview, lean],
+            "active_preset_id": "overview",
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    body = saved.json()
+    assert body["active_preset_id"] == "overview"
+    assert [p["name"] for p in body["presets"]] == ["Overview", "Lean"]
+
+    got = client.get("/api/dashboard/layout/monthly", headers=h)
+    assert got.status_code == 200, got.text
+    payload = got.json()
+    by_id = {w["id"]: w for w in payload["widgets"]}
+    assert by_id["expense-progress"]["config"].get("hidden") is True
+    assert by_id["income-progress"]["config"].get("hidden") is not True
+    # Future default widgets still merge in (extensibility).
+    assert "spending-pace" in by_id
+    assert payload["active_preset_id"] == "overview"
+    assert len(payload["presets"]) == 2
+

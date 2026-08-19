@@ -345,13 +345,26 @@ export interface DashboardWidget {
   id: string
   type: string
   title?: string | null
+  /**
+   * Widget-specific options plus layout:
+   * `x`, `y`, `w`, `h` (12-col grid), `hidden` (kept in the list so new
+   * defaults can still merge without re-showing a removed widget).
+   */
   config: Record<string, unknown>
   order: number
+}
+
+export interface DashboardLayoutPreset {
+  id: string
+  name: string
+  widgets: DashboardWidget[]
 }
 
 export interface DashboardLayout {
   view_mode: ViewMode
   widgets: DashboardWidget[]
+  presets?: DashboardLayoutPreset[]
+  active_preset_id?: string | null
 }
 
 export type TransactionSortBy = 'date' | 'amount' | 'category' | 'kind' | 'created_at'

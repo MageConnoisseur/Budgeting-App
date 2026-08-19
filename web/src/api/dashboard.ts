@@ -2,6 +2,7 @@ import { apiFetch } from './client'
 import type {
   AnnualDashboard,
   DashboardLayout,
+  DashboardLayoutPreset,
   DashboardWidget,
   MonthlyDashboard,
   SavingsBucket,
@@ -27,9 +28,17 @@ export function getDashboardLayout(viewMode: ViewMode) {
 export function putDashboardLayout(
   viewMode: ViewMode,
   widgets: DashboardWidget[],
+  extras?: {
+    presets?: DashboardLayoutPreset[]
+    active_preset_id?: string | null
+  },
 ) {
   return apiFetch<DashboardLayout>(`/dashboard/layout/${viewMode}`, {
     method: 'PUT',
-    body: JSON.stringify({ widgets }),
+    body: JSON.stringify({
+      widgets,
+      presets: extras?.presets,
+      active_preset_id: extras?.active_preset_id ?? null,
+    }),
   })
 }
