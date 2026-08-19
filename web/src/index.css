@@ -778,6 +778,41 @@ a.btn {
   font-weight: 600;
 }
 
+.callout {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.45rem;
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+}
+
+.callout strong {
+  font-size: 0.95rem;
+}
+
+.callout p {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.callout code {
+  font-size: 0.88em;
+}
+
+.callout.warn {
+  background: var(--warn-bg);
+  border-color: rgba(154, 75, 31, 0.28);
+  color: var(--pine-deep);
+}
+
+.callout.ok {
+  background: rgba(61, 122, 95, 0.1);
+  border-color: rgba(31, 75, 58, 0.18);
+  color: var(--pine-deep);
+}
+
 .link-list {
   list-style: none;
   margin: 0;

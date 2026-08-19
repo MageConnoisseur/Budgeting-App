@@ -13,13 +13,25 @@ const PROVIDER_LABELS: Record<string, string> = {
 }
 
 export function AccountPage() {
-  const { user, updateEmail, unlinkProvider, refreshUser } = useAuth()
+  const {
+    user,
+    updateEmail,
+    unlinkProvider,
+    refreshUser,
+    changePassword,
+    sendEmailConfirmation,
+  } = useAuth()
   const [searchParams] = useSearchParams()
   const [email, setEmail] = useState(user?.email ?? '')
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [savingPassword, setSavingPassword] = useState(false)
+  const [sendingConfirm, setSendingConfirm] = useState(false)
   const [providers, setProviders] = useState<OAuthProviderInfo[]>([])
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
 
   useEffect(() => {
     setEmail(user?.email ?? '')
@@ -52,11 +64,62 @@ export function AccountPage() {
     setMessage(null)
     try {
       await updateEmail(email.trim())
-      setMessage('Email saved. Use a real address you can access for recovery.')
+      setMessage(
+        'Email saved. Confirm it below so we know you can receive recovery mail.',
+      )
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : 'Could not update email')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function onSendConfirmation() {
+    setSendingConfirm(true)
+    setError(null)
+    setMessage(null)
+    try {
+      const result = await sendEmailConfirmation()
+      setMessage(result.message)
+    } catch (err) {
+      setError(
+        err instanceof ApiError
+          ? err.detail
+          : 'Could not send confirmation email',
+      )
+    } finally {
+      setSendingConfirm(false)
+    }
+  }
+
+  async function onSavePassword(e: FormEvent) {
+    e.preventDefault()
+    if (newPassword !== confirmPassword) {
+      setError('New passwords do not match')
+      return
+    }
+    setSavingPassword(true)
+    setError(null)
+    setMessage(null)
+    try {
+      await changePassword(
+        newPassword,
+        user?.has_password ? currentPassword : undefined,
+      )
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+      setMessage(
+        user?.has_password
+          ? 'Password updated.'
+          : 'Password set. You can sign in with username or email and this password.',
+      )
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.detail : 'Could not update password',
+      )
+    } finally {
+      setSavingPassword(false)
     }
   }
 
@@ -73,6 +136,9 @@ export function AccountPage() {
 
   const linked = new Set(user?.oauth_providers ?? [])
   const linkable = providers.filter((p) => !linked.has(p.id))
+  const hasEmail = Boolean(user?.email)
+  const emailVerified = Boolean(user?.email_verified)
+  const canSetPassword = hasEmail || Boolean(user?.has_password)
 
   return (
     <div className="page">
@@ -80,11 +146,53 @@ export function AccountPage() {
         <div>
           <h1>Account</h1>
           <p className="muted">
-            Attach an email and link Google or Facebook so you never lose budget
-            data when switching sign-in methods.
+            Keep a recovery email and a password (or linked Google / Facebook)
+            so you never lose access to this budget.
           </p>
         </div>
       </header>
+
+      <section className="panel stack">
+        <h2>Account recovery</h2>
+        {!hasEmail && (
+          <div className="callout warn" role="status">
+            <strong>No recovery email</strong>
+            <p>
+              Password reset cannot reach you until you add an address you can
+              access. Social sign-in still works if it is linked below.
+            </p>
+          </div>
+        )}
+        {hasEmail && !emailVerified && (
+          <div className="callout warn" role="status">
+            <strong>Email not confirmed</strong>
+            <p>
+              We have <code>{user?.email}</code> on file, but we have not
+              confirmed you can receive mail there. Reset and confirmation
+              emails will still be sent to this address — if it is wrong, you
+              will not get them. Sign-in is not blocked.
+            </p>
+            <button
+              type="button"
+              className="btn tiny"
+              onClick={() => void onSendConfirmation()}
+              disabled={sendingConfirm}
+            >
+              {sendingConfirm ? 'Sending…' : 'Send confirmation link'}
+            </button>
+          </div>
+        )}
+        {hasEmail && emailVerified && (
+          <div className="callout ok" role="status">
+            <strong>Recovery email confirmed</strong>
+            <p>
+              Password reset emails go to <code>{user?.email}</code>. You can
+              change your password below or use Forgot password on the sign-in
+              page.
+            </p>
+          </div>
+        )}
+      </section>
 
       <section className="panel stack">
         <h2>Profile</h2>
@@ -95,7 +203,7 @@ export function AccountPage() {
         </p>
         <form className="stack" onSubmit={onSaveEmail}>
           <label>
-            Email
+            Recovery email
             <input
               type="email"
               value={email}
@@ -105,11 +213,85 @@ export function AccountPage() {
             />
           </label>
           <p className="muted tiny">
-            Email verification is not required yet — double-check the address so
-            you can recover this account later.
+            Changing this address marks it unconfirmed until you click the
+            confirmation link (or finish a password reset). OAuth provider
+            emails are treated as confirmed.
           </p>
           <button className="btn primary" type="submit" disabled={saving}>
             {saving ? 'Saving…' : 'Save email'}
+          </button>
+        </form>
+      </section>
+
+      <section className="panel stack">
+        <h2>{user?.has_password ? 'Change password' : 'Set a password'}</h2>
+        {user?.has_password ? (
+          <p className="muted">
+            Use a new password for username / email sign-in. This does not
+            unlink Google or Facebook.
+          </p>
+        ) : (
+          <p className="muted">
+            This account is social-only. Set a password if you want a backup
+            sign-in method. You will need a recovery email first.
+          </p>
+        )}
+        {!canSetPassword && (
+          <p className="callout warn">
+            Add a recovery email above before setting a password so a forgotten
+            password can be reset.
+          </p>
+        )}
+        <form className="stack" onSubmit={onSavePassword}>
+          {user?.has_password && (
+            <label>
+              Current password
+              <input
+                type="password"
+                autoComplete="current-password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                required
+                minLength={8}
+              />
+            </label>
+          )}
+          <label>
+            {user?.has_password ? 'New password' : 'Password'}
+            <input
+              type="password"
+              autoComplete="new-password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              required
+              minLength={8}
+              maxLength={128}
+              disabled={!canSetPassword}
+            />
+          </label>
+          <label>
+            Confirm password
+            <input
+              type="password"
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              required
+              minLength={8}
+              maxLength={128}
+              disabled={!canSetPassword}
+            />
+          </label>
+          <button
+            className="btn primary"
+            type="submit"
+            disabled={savingPassword || !canSetPassword}
+          >
+            {savingPassword
+              ? 'Saving…'
+              : user?.has_password
+                ? 'Update password'
+                : 'Set password'}
           </button>
         </form>
       </section>

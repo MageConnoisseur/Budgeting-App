@@ -7,9 +7,12 @@ import { AuthCallbackPage } from './pages/AuthCallbackPage'
 import { BudgetPage } from './pages/BudgetPage'
 import { CategoriesPage } from './pages/CategoriesPage'
 import { CoachPage } from './pages/CoachPage'
+import { ConfirmEmailPage } from './pages/ConfirmEmailPage'
 import { DashboardPage } from './pages/DashboardPage'
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { LoginPage } from './pages/LoginPage'
 import { RegisterPage } from './pages/RegisterPage'
+import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { TrackerPage } from './pages/TrackerPage'
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -30,6 +33,9 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/confirm-email" element={<ConfirmEmailPage />} />
       <Route path="/auth/callback" element={<AuthCallbackPage />} />
       <Route
         element={

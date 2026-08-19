@@ -22,6 +22,7 @@ Dev server: http://localhost:5173
 ## Features wired to the API
 
 - **Auth** — register / login, JWT in `localStorage`, preferences for Monthly/Annual views
+- **Account** — recovery email, password reset/change/set, OAuth linking
 - **Categories** — create, list, archive/restore (income / expense / savings)
 - **Budget** — monthly editor with copy-forward seed, copy/template actions; editable annual grid
 - **Tracker** — cascaded kind → category logging; search, sort, filters, pagination

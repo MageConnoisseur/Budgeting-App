@@ -1,5 +1,12 @@
 import { apiBaseUrl, apiFetch, getToken } from './client'
-import type { OAuthProviderInfo, TokenResponse, User, ViewMode } from '../types/api'
+import type {
+  MessageResponse,
+  OAuthProviderInfo,
+  RecoveryTokenStatus,
+  TokenResponse,
+  User,
+  ViewMode,
+} from '../types/api'
 
 export function register(username: string, email: string, password: string) {
   return apiFetch<TokenResponse>('/auth/register', {
@@ -12,6 +19,55 @@ export function login(username: string, password: string) {
   return apiFetch<TokenResponse>('/auth/login', {
     method: 'POST',
     body: JSON.stringify({ username, password }),
+  })
+}
+
+export function forgotPassword(identifier: string) {
+  return apiFetch<MessageResponse>('/auth/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify({ identifier }),
+  })
+}
+
+export function getResetPasswordStatus(token: string) {
+  return apiFetch<RecoveryTokenStatus>(
+    `/auth/reset-password?token=${encodeURIComponent(token)}`,
+  )
+}
+
+export function resetPassword(token: string, password: string) {
+  return apiFetch<MessageResponse>('/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ token, password }),
+  })
+}
+
+export function getConfirmEmailStatus(token: string) {
+  return apiFetch<RecoveryTokenStatus>(
+    `/auth/confirm-email?token=${encodeURIComponent(token)}`,
+  )
+}
+
+export function confirmEmail(token: string) {
+  return apiFetch<MessageResponse>('/auth/confirm-email', {
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  })
+}
+
+export function sendEmailConfirmation() {
+  return apiFetch<MessageResponse>('/auth/me/confirm-email', {
+    method: 'POST',
+  })
+}
+
+export function changePassword(newPassword: string, currentPassword?: string) {
+  return apiFetch<User>('/auth/me/password', {
+    method: 'PATCH',
+    body: JSON.stringify({
+      new_password: newPassword,
+      current_password: currentPassword || undefined,
+    }),
   })
 }
 
