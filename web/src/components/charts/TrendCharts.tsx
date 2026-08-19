@@ -13,17 +13,41 @@ export interface NamedValue {
   color?: string
 }
 
-function niceMax(values: number[]): number {
-  const peak = Math.max(0, ...values)
-  if (peak === 0) return 100
+function niceAbsCeiling(value: number): number {
+  const peak = Math.abs(value)
+  if (peak === 0) return 0
   const magnitude = 10 ** Math.floor(Math.log10(peak))
   const normalized = peak / magnitude
   const step = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10
   return step * magnitude
 }
 
+function niceMax(values: number[]): number {
+  const peak = Math.max(0, ...values)
+  if (peak === 0) return 100
+  return niceAbsCeiling(peak)
+}
+
+/** Inclusive domain that grows with the data and always includes 0. */
+function niceExtent(values: number[]): { min: number; max: number } {
+  if (values.length === 0) return { min: 0, max: 100 }
+  const dataMin = Math.min(...values)
+  const dataMax = Math.max(...values)
+  const min = dataMin < 0 ? -niceAbsCeiling(dataMin) : 0
+  const max = dataMax > 0 ? niceAbsCeiling(dataMax) : 0
+  if (min === 0 && max === 0) return { min: 0, max: 100 }
+  return { min, max }
+}
+
+function axisTicks(min: number, max: number): number[] {
+  if (min < 0 && max > 0) return [min, 0, max]
+  if (min < 0) return [min, min / 2, 0]
+  return [0, max / 2, max]
+}
+
 function formatAxis(n: number): string {
-  if (Math.abs(n) >= 1000) {
+  if (n < 0) return `-${formatAxis(-n)}`
+  if (n >= 1000) {
     return `$${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k`
   }
   return `$${Math.round(n)}`
@@ -40,15 +64,22 @@ export function LineTrendChart({
   height?: number
 }) {
   const width = 640
-  const pad = { top: 16, right: 16, bottom: 36, left: 48 }
+  const allValues = series.flatMap((s) => s.values)
+  const { min: minY, max: maxY } = niceExtent(allValues)
+  const spanY = maxY - minY || 1
+  const pad = {
+    top: 16,
+    right: 16,
+    bottom: 36,
+    left: minY < 0 ? 56 : 48,
+  }
   const innerW = width - pad.left - pad.right
   const innerH = height - pad.top - pad.bottom
-  const allValues = series.flatMap((s) => s.values)
-  const maxY = niceMax(allValues)
   const n = Math.max(labels.length, 1)
   const xAt = (i: number) =>
     pad.left + (n === 1 ? innerW / 2 : (i / (n - 1)) * innerW)
-  const yAt = (v: number) => pad.top + innerH - (v / maxY) * innerH
+  const yAt = (v: number) => pad.top + innerH - ((v - minY) / spanY) * innerH
+  const ticks = axisTicks(minY, maxY)
 
   return (
     <div className="chart-block">
@@ -58,19 +89,20 @@ export function LineTrendChart({
         role="img"
         aria-label="Trend line chart"
       >
-        {[0, 0.5, 1].map((t) => {
-          const y = pad.top + innerH * (1 - t)
+        {ticks.map((tick) => {
+          const y = yAt(tick)
+          const isZero = tick === 0 && minY < 0
           return (
-            <g key={t}>
+            <g key={tick}>
               <line
                 x1={pad.left}
                 x2={width - pad.right}
                 y1={y}
                 y2={y}
-                className="chart-grid"
+                className={isZero ? 'chart-zero' : 'chart-grid'}
               />
               <text x={pad.left - 8} y={y + 4} className="chart-axis" textAnchor="end">
-                {formatAxis(maxY * t)}
+                {formatAxis(tick)}
               </text>
             </g>
           )
