@@ -132,13 +132,11 @@ test.describe('dashboard grid layout', () => {
     await expect(page.getByRole('heading', { name: 'Expenses', exact: true })).toBeVisible()
 
     await page.getByRole('button', { name: 'Customize layout' }).click()
-    await page.getByRole('button', { name: /Widgets \(/ }).click()
     await page.getByRole('checkbox', { name: /Expenses/ }).uncheck()
     await expect(
       page.getByRole('heading', { name: 'Expenses', exact: true }),
     ).toHaveCount(0)
 
-    await page.getByRole('button', { name: /^Views/ }).click()
     await page.getByRole('button', { name: 'Save as view' }).click()
     await page.getByPlaceholder('Spending focus').fill('Lean month')
     await page.getByRole('button', { name: 'Save' }).click()

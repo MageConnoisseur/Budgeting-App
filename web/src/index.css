@@ -966,9 +966,34 @@ a.btn {
 
 .dashboard-customize {
   display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.65rem;
+  flex: 1;
+  min-width: 16rem;
+}
+
+.dashboard-customize-controls {
+  display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.45rem 0.75rem;
+}
+
+.dashboard-customize-panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+  background: var(--panel-solid);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.dashboard-customize-section h2 {
+  font-size: 0.95rem;
+  margin: 0 0 0.25rem;
 }
 
 .dashboard-customize-hint,
@@ -976,21 +1001,8 @@ a.btn {
   margin: 0;
 }
 
-.dashboard-menu {
-  position: relative;
-}
-
-.dashboard-menu-panel {
-  position: absolute;
-  top: calc(100% + 0.4rem);
-  right: 0;
-  z-index: 8;
-  width: min(22rem, 80vw);
-  padding: 0.85rem 0.95rem;
-  background: var(--panel-solid);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
+.dashboard-customize-hint {
+  grid-column: 1 / -1;
 }
 
 .dashboard-widget-list,
@@ -1015,23 +1027,13 @@ a.btn {
   display: block;
 }
 
-.dashboard-view-item {
-  width: 100%;
+.dashboard-view-select {
   display: flex;
-  justify-content: space-between;
-  gap: 0.75rem;
-  text-align: left;
-  border: 0;
-  background: transparent;
-  padding: 0.45rem 0.35rem;
-  border-radius: 8px;
-  font: inherit;
-  cursor: pointer;
-}
-
-.dashboard-view-item:hover,
-.dashboard-view-item.active {
-  background: var(--paper-2);
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin: 0.5rem 0 0.75rem;
 }
 
 .dashboard-view-actions,

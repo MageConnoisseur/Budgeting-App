@@ -445,6 +445,24 @@ async function handle(req, res) {
     return
   }
 
+  const actualsMatch = /^\/api\/budgets\/actuals\/(\d+)$/.exec(path)
+  if (actualsMatch && method === 'GET') {
+    const year = Number(actualsMatch[1])
+    const buckets = Array.from({ length: 12 }, (_, i) => ({
+      month: i + 1,
+      actuals: /** @type {Record<string, string>} */ ({}),
+    }))
+    for (const t of transactions.values()) {
+      if (t.userId !== user.id || !t.date) continue
+      const [y, m] = String(t.date).split('-').map(Number)
+      if (y !== year || !m || m < 1 || m > 12) continue
+      const prev = Number(buckets[m - 1].actuals[t.category_id] || 0)
+      buckets[m - 1].actuals[t.category_id] = money(prev + Number(t.amount))
+    }
+    json(res, 200, { year, months: buckets })
+    return
+  }
+
   if (path === '/api/budgets/templates' && method === 'GET') {
     json(res, 200, [])
     return
