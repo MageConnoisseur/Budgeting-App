@@ -11,6 +11,7 @@ export function RegisterPage() {
   const navigate = useNavigate()
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
+  const [emailConfirm, setEmailConfirm] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -26,6 +27,10 @@ export function RegisterPage() {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
+    if (email.trim().toLowerCase() !== emailConfirm.trim().toLowerCase()) {
+      setError('Email addresses do not match. Check both fields.')
+      return
+    }
     setSubmitting(true)
     setError(null)
     try {
@@ -51,8 +56,8 @@ export function RegisterPage() {
         <h1>Create account</h1>
         <p className="muted">
           Use Google or Facebook, or sign up with a username, email, and
-          password. Email is required for password accounts. Confirm it later
-          from Account so a forgotten password can be reset.
+          password. Type the email carefully — it is how we send a password
+          reset if you get locked out. We do not send a confirmation email.
         </p>
         <OAuthButtons
           providers={providers}
@@ -79,6 +84,20 @@ export function RegisterPage() {
               autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </label>
+          <p className="muted tiny">
+            Use an inbox you can open. A mistyped address cannot receive a
+            password reset.
+          </p>
+          <label>
+            Confirm email
+            <input
+              type="email"
+              autoComplete="email"
+              value={emailConfirm}
+              onChange={(e) => setEmailConfirm(e.target.value)}
               required
             />
           </label>

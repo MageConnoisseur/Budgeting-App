@@ -62,7 +62,12 @@ async def sqlalchemy_exception_handler(
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok"}
+    from app.services.mailer import mail_configured
+
+    return {
+        "status": "ok",
+        "email": "resend" if mail_configured() else "log_only",
+    }
 
 
 @app.get("/health/ready")

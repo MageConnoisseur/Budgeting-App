@@ -1,7 +1,8 @@
-"""Password reset, email confirmation, and password change helpers."""
+"""Password reset and password change helpers."""
 
 from __future__ import annotations
 
+import html
 import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Literal
@@ -20,9 +21,6 @@ Purpose = Literal["password_reset", "email_confirm"]
 
 FORGOT_PASSWORD_MESSAGE = (
     "If an account exists for that username or email, we sent reset instructions."
-)
-CONFIRM_EMAIL_SENT_MESSAGE = (
-    "Check your inbox for a confirmation link. It expires in one hour."
 )
 
 
@@ -148,36 +146,31 @@ def send_password_reset_email(db: Session, user: User) -> None:
     raw = issue_recovery_token(db, user, "password_reset")
     url = _frontend_url("/reset-password", raw)
     minutes = get_settings().password_reset_expire_minutes
+    safe_name = html.escape(user.username)
+    safe_url = html.escape(url)
+    text = (
+        f"Hi {user.username},\n\n"
+        "We received a request to reset the password for your Hearth "
+        "Budgeting account.\n\n"
+        f"Choose a new password (this link expires in {minutes} minutes):\n"
+        f"{url}\n\n"
+        "If you did not request this, you can ignore this email. Your "
+        "password will stay the same.\n"
+    )
+    html_body = (
+        f"<p>Hi {safe_name},</p>"
+        "<p>We received a request to reset the password for your "
+        "Hearth Budgeting account.</p>"
+        f"<p><a href=\"{safe_url}\">Choose a new password</a> "
+        f"(this link expires in {minutes} minutes).</p>"
+        "<p>If you did not request this, you can ignore this email. "
+        "Your password will stay the same.</p>"
+    )
     mailer.send_email(
         to=user.email or "",
         subject="Reset your Hearth Budgeting password",
-        body=(
-            f"Hi {user.username},\n\n"
-            "We received a request to reset the password for your Hearth "
-            "Budgeting account.\n\n"
-            f"Choose a new password (this link expires in {minutes} minutes):\n"
-            f"{url}\n\n"
-            "If you did not request this, you can ignore this email. Your "
-            "password will stay the same.\n"
-        ),
-    )
-
-
-def send_email_confirmation(db: Session, user: User) -> None:
-    raw = issue_recovery_token(db, user, "email_confirm")
-    url = _frontend_url("/confirm-email", raw)
-    minutes = get_settings().password_reset_expire_minutes
-    mailer.send_email(
-        to=user.email or "",
-        subject="Confirm your Hearth Budgeting recovery email",
-        body=(
-            f"Hi {user.username},\n\n"
-            "Confirm that you can receive mail at this address so you can "
-            "recover your Hearth Budgeting account if you forget your password.\n\n"
-            f"Confirm this email (this link expires in {minutes} minutes):\n"
-            f"{url}\n\n"
-            "If you did not add this address, you can ignore this email.\n"
-        ),
+        body=text,
+        html=html_body,
     )
 
 
@@ -198,20 +191,6 @@ def reset_password(db: Session, raw_token: str, new_password: str) -> User:
         raise RecoveryError("invalid_token", "This reset link is invalid or has expired.")
     user = consume_recovery_token(db, token)
     user.password_hash = hash_password(new_password)
-    mark_email_verified(user)
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    return user
-
-
-def confirm_email(db: Session, raw_token: str) -> User:
-    token = lookup_recovery_token(db, raw_token, "email_confirm")
-    if token is None:
-        raise RecoveryError(
-            "invalid_token", "This confirmation link is invalid or has expired."
-        )
-    user = consume_recovery_token(db, token)
     mark_email_verified(user)
     db.add(user)
     db.commit()

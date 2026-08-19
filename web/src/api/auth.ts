@@ -42,25 +42,6 @@ export function resetPassword(token: string, password: string) {
   })
 }
 
-export function getConfirmEmailStatus(token: string) {
-  return apiFetch<RecoveryTokenStatus>(
-    `/auth/confirm-email?token=${encodeURIComponent(token)}`,
-  )
-}
-
-export function confirmEmail(token: string) {
-  return apiFetch<MessageResponse>('/auth/confirm-email', {
-    method: 'POST',
-    body: JSON.stringify({ token }),
-  })
-}
-
-export function sendEmailConfirmation() {
-  return apiFetch<MessageResponse>('/auth/me/confirm-email', {
-    method: 'POST',
-  })
-}
-
 export function changePassword(newPassword: string, currentPassword?: string) {
   return apiFetch<User>('/auth/me/password', {
     method: 'PATCH',
