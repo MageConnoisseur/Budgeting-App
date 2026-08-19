@@ -75,7 +75,7 @@ test.describe('core smoke: auth → categories → budget → tracker → dashbo
 
     await page.getByRole('link', { name: 'Dashboard' }).click()
     await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Expenses' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Expenses', exact: true })).toBeVisible()
     await expect(page.getByText('$400.00').first()).toBeVisible()
     await expect(page.getByText('$12.50').first()).toBeVisible()
     await expect(page.getByText('Groceries').first()).toBeVisible()
