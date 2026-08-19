@@ -13,6 +13,7 @@ Hosts on **Render**; database is **PostgreSQL on Neon**. Web (Vite/React on Verc
 - Monthly budget plans with **copy-forward** auto-seed
 - Explicit **copy from month**, **save as template**, **apply template**
 - **Annual** budget surface (`GET /api/budgets/annual/{year}`, `PUT /api/budgets/annual/cell`)
+- Compact yearly actuals for budget-cell fills (`GET /api/budgets/actuals/{year}`)
 - Transactions with **search, sort, filters**, and pagination
 - **Recurring schedules** for payday / regular expense tracking reminders (manual log/skip)
 - **Income estimate** for a month from tracker patterns + schedules

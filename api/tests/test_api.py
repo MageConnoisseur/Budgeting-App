@@ -219,6 +219,102 @@ def test_category_crud_and_budget_copy_forward(auth_headers: dict[str, str]) -> 
     assert len(applied.json()["lines"]) == 3
 
 
+def test_budget_year_actuals_for_cell_fills(auth_headers: dict[str, str]) -> None:
+    """Budget page fills use compact yearly actuals, not the full dashboard."""
+    h = auth_headers
+    groceries = client.post(
+        "/api/categories",
+        headers=h,
+        json={"kind": "expense", "name": "Groceries"},
+    ).json()
+    paycheck = client.post(
+        "/api/categories",
+        headers=h,
+        json={"kind": "income", "name": "Paycheck"},
+    ).json()
+    vacation = client.post(
+        "/api/categories",
+        headers=h,
+        json={"kind": "savings", "name": "Vacation"},
+    ).json()
+
+    assert (
+        client.post(
+            "/api/transactions",
+            headers=h,
+            json={
+                "category_id": groceries["id"],
+                "amount": "40.00",
+                "date": "2026-01-10",
+            },
+        ).status_code
+        == 201
+    )
+    assert (
+        client.post(
+            "/api/transactions",
+            headers=h,
+            json={
+                "category_id": groceries["id"],
+                "amount": "12.50",
+                "date": "2026-01-22",
+            },
+        ).status_code
+        == 201
+    )
+    assert (
+        client.post(
+            "/api/transactions",
+            headers=h,
+            json={
+                "category_id": paycheck["id"],
+                "amount": "3000.00",
+                "date": "2026-02-01",
+            },
+        ).status_code
+        == 201
+    )
+    assert (
+        client.post(
+            "/api/transactions",
+            headers=h,
+            json={
+                "category_id": vacation["id"],
+                "amount": "150.00",
+                "date": "2026-02-05",
+            },
+        ).status_code
+        == 201
+    )
+    # Withdrawals must not count as savings-plan progress.
+    assert (
+        client.post(
+            "/api/transactions",
+            headers=h,
+            json={
+                "category_id": vacation["id"],
+                "amount": "-50.00",
+                "date": "2026-02-20",
+            },
+        ).status_code
+        == 201
+    )
+
+    r = client.get("/api/budgets/actuals/2026", headers=h)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["year"] == 2026
+    assert len(body["months"]) == 12
+    jan = next(m for m in body["months"] if m["month"] == 1)
+    feb = next(m for m in body["months"] if m["month"] == 2)
+    mar = next(m for m in body["months"] if m["month"] == 3)
+    assert Decimal(jan["actuals"][groceries["id"]]) == Decimal("52.50")
+    assert paycheck["id"] not in jan["actuals"]
+    assert Decimal(feb["actuals"][paycheck["id"]]) == Decimal("3000.00")
+    assert Decimal(feb["actuals"][vacation["id"]]) == Decimal("150.00")
+    assert mar["actuals"] == {}
+
+
 def test_transactions_search_sort_filter_and_dashboard(
     auth_headers: dict[str, str],
 ) -> None:

@@ -1,5 +1,5 @@
 import { apiFetch } from './client'
-import type { AnnualBudget, BudgetMonth, BudgetTemplate } from '../types/api'
+import type { AnnualBudget, BudgetMonth, BudgetTemplate, YearActuals } from '../types/api'
 
 export function getBudgetMonth(year: number, month: number, seed = true) {
   return apiFetch<BudgetMonth>(
@@ -27,6 +27,10 @@ export function upsertBudgetMonth(
 
 export function getAnnualBudget(year: number) {
   return apiFetch<AnnualBudget>(`/budgets/annual/${year}`)
+}
+
+export function getYearActuals(year: number) {
+  return apiFetch<YearActuals>(`/budgets/actuals/${year}`)
 }
 
 export function upsertAnnualCell(body: {

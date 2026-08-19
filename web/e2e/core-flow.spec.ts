@@ -74,6 +74,14 @@ test.describe('core smoke: auth → categories → budget → tracker → dashbo
     await expect(page.getByText('$12.50').first()).toBeVisible()
     await page.getByRole('button', { name: 'Not now' }).click()
 
+    await page.getByRole('link', { name: 'Budget' }).click()
+    await expect(page.getByRole('heading', { name: 'Budget' })).toBeVisible()
+    const groceryFill = page.locator('.budget-fill').filter({
+      has: page.getByLabel(/Groceries planned amount/),
+    })
+    await expect(groceryFill).toHaveAttribute('data-fill-pct', '3')
+    await expect(groceryFill).toHaveAttribute('data-fill-over', 'false')
+
     await page.getByRole('link', { name: 'Dashboard' }).click()
     await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Expenses', exact: true })).toBeVisible()

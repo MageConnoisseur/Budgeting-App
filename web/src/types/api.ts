@@ -70,6 +70,17 @@ export interface AnnualBudget {
   months: BudgetMonth[]
 }
 
+export interface MonthActuals {
+  month: number
+  /** category_id → actual amount logged that month */
+  actuals: Record<string, string>
+}
+
+export interface YearActuals {
+  year: number
+  months: MonthActuals[]
+}
+
 export interface BudgetTemplateLine {
   id: string
   category_id: string

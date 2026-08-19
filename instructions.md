@@ -84,6 +84,7 @@ Requirements:
 - Remember the user’s last preferred view (stored on the user record today).
 - **Annual view is editable**, not read-only summary — changing a month/category cell updates that month’s planned amount.
 - Annual layout should stay usable on **large desktop** screens (grid/table of categories × months is the expected pattern). Improving scanability, keyboard editing, and bulk mental planning is in-scope for desktop depth.
+- Planned-amount cells show a **kind-colored actuals fill** (income green, expense pink/red, savings blue) so the grid itself shows how close logged actuals are to the plan — especially useful in annual view when setting next month from last month’s spend. Hover for the dollars; do not add extra numbers on the page.
 - Underlying data stays **per-month budget lines**; annual view is a projection/editing surface over those months.
 - Creating/editing cells in annual view for months that do not yet exist should create/seed those months using copy-forward rules where appropriate.
 
