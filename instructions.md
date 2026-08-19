@@ -1,4 +1,4 @@
-# Hearth Budgeting — Agent Instructions
+# Setaside — Agent Instructions
 
 Pass this file to new coding agents so they share the same product, architecture, and delivery context.
 
@@ -6,7 +6,7 @@ Pass this file to new coding agents so they share the same product, architecture
 
 ## 0. Current focus (read this first)
 
-**Status:** Phase 1 MVP is **shipped** on `main` (web + API). Product name: **Hearth Budgeting**.
+**Status:** Phase 1 MVP is **shipped** on `main` (web + API). Product name: **Setaside**.
 
 **What we are trying to accomplish now:** build a **very robust desktop web application** — the primary planning, tracking, and analysis surface. Depth and polish on `web/` + supporting `api/` work beat new clients or growth features.
 
@@ -266,7 +266,7 @@ Prioritize (order is guidance, not a rigid checklist):
 3. **Dashboard customization** — hide/show widgets, stronger layout controls, better annual vs monthly widget behavior
 4. **Account reliability** — password reset/recovery (**shipped**: forgot/reset via Resend, change/set password, signup recovery-email reminder), OAuth/prod auth hardening, safer migrations (no sharp legacy rebuild surprises on real data)
 5. **Quality bar** — API tests kept green; add web smoke/E2E coverage for core flows; performance as data grows
-6. **Visual coherence** — coherent desktop visual system under the **Hearth Budgeting** brand
+6. **Visual coherence** — coherent desktop visual system under the **Setaside** brand
 
 Coach depth that stays **rule-based** (clearer copy, more apply actions, dismissal persistence) is in-scope. A conversational LLM coach is **not** the active goal.
 
@@ -311,7 +311,7 @@ Only after desktop web feels robust:
 
 ### Design
 
-- Product name: **Hearth Budgeting** — use it in UI chrome, page titles, and user-facing copy.
+- Product name: **Setaside** — use it in UI chrome, page titles, and user-facing copy. Public site: setasideplan.com.
 - Prefer a coherent visual system; avoid generic “AI slop” aesthetics when polishing UI.
 - Do not redesign the product as mobile-first while desktop depth is the active phase.
 
@@ -380,7 +380,7 @@ All user-owned rows must be scoped by authenticated user.
 | Schema | Alembic under `api/` is source of truth (not a separate `database/` SQL apply tree) |
 | Hosting | Neon (DB) + Render (API) + Vercel (web) |
 | Stack | React (Vite) web, FastAPI, PostgreSQL |
-| Product name | **Hearth Budgeting** |
+| Product name | **Setaside** (setasideplan.com) |
 
 ---
 
@@ -390,7 +390,7 @@ All user-owned rows must be scoped by authenticated user.
 - Whether plan-suggestion and coach-tip dismissals stay local-only or move server-side
 - Whether a future LLM layer is used only for copy, or also for ranking which deterministic tips to show
 - Monorepo tooling (pnpm/npm workspaces, uv, etc.) — optional; not required to keep shipping
-- Import aggregator and billing (when §12 is built): Plaid vs Teller vs SimpleFIN (user-pays token); whether Hearth hosts connections or users bring their own; whether a subscription is required before offering hosted bank sync to anyone beyond the owner/family
+- Import aggregator and billing (when §12 is built): Plaid vs Teller vs SimpleFIN (user-pays token); whether Setaside hosts connections or users bring their own; whether a subscription is required before offering hosted bank sync to anyone beyond the owner/family
 
 If an agent needs a choice among reasonable options for an open item, pick a conventional secure default, document it briefly in code/README, and continue.
 
@@ -456,7 +456,7 @@ Inbox actions:
 
 ### 12.5 Categorization
 
-Banks will not know Hearth’s user-defined categories. MCC codes are too coarse. Use a ladder:
+Banks will not know Setaside’s user-defined categories. MCC codes are too coarse. Use a ladder:
 
 1. **Payee / merchant rules** — e.g. `COSTCO` → Groceries. User confirms once; later imports apply automatically.
 2. **Learn from note memory / history** — if `STARBUCKS` was Dining eight times, suggest Dining the ninth. Rules can be seeded from that history.
@@ -475,12 +475,12 @@ What bank sync is **not**: instant at the register (often hours or next day); fr
 
 **Billing (plan before offering this to anyone else):**
 
-- Aggregators bill the **app operator** per connected **institution login** (“Item” / enrollment), monthly, while the connection exists — not per purchase and not per Hearth user.
+- Aggregators bill the **app operator** per connected **institution login** (“Item” / enrollment), monthly, while the connection exists — not per purchase and not per Setaside user.
 - One Discover login = 1 Item. Five cards at five banks = 5 Items. Several cards under one bank login = still 1 Item.
 - Broken connections still bill until disconnected; mid-month connect/disconnect is typically **not prorated**.
 - Plaid does not publish a rate card (shown after Production access). **Trial:** 10 Production Items free (US/Canada, new teams as of the 2026 Trial plan). **Pay-as-you-go** industry reports are often ~$0.30–$1.50 per Item / month. **Growth/Custom** add monthly minimums aimed at businesses, not hobby use.
 - **Teller (public):** Transactions **$0.30 per enrollment / month**; developer tier includes 100 live connections free.
-- **SimpleFIN:** each **user** pays ~$15/year (or $1.50/month) for up to 25 institutions and pastes a token into the app — Hearth’s aggregator COGS can be $0.
+- **SimpleFIN:** each **user** pays ~$15/year (or $1.50/month) for up to 25 institutions and pastes a token into the app — Setaside’s aggregator COGS can be $0.
 
 Implications:
 

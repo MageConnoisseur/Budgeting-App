@@ -1,7 +1,7 @@
 """
-# Hearth Budgeting API
+# Setaside API
 
-FastAPI backend for Hearth Budgeting (desktop web + shared API).
+FastAPI backend for Setaside (desktop web + shared API).
 
 Hosts on **Render**; database is **PostgreSQL on Neon**. Web (Vite/React on Vercel) and future mobile clients share this API.
 
@@ -85,7 +85,7 @@ OpenAPI docs: http://localhost:8000/docs
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | no | JWT lifetime (default 10080) |
 | `PASSWORD_RESET_EXPIRE_MINUTES` | no | Reset link lifetime (default 60) |
 | `RESEND_API_KEY` | prod (for reset mail) | Resend API key. Unset = log-only (dev/tests) |
-| `RESEND_FROM` | with the API key | From header, e.g. `Hearth Budgeting <noreply@yourdomain.com>` |
+| `RESEND_FROM` | with the API key | From header, e.g. `Setaside <noreply@setasideplan.com>` |
 
 ## Main routes
 
@@ -147,7 +147,7 @@ Forgot password is the only mail this API sends. Sign-up does **not** send a ver
 **1. Resend dashboard**
 
 1. Open [resend.com/domains](https://resend.com/domains). Add the domain you already use for ondeck (or a new one) and finish DNS (SPF, DKIM, optionally DMARC).
-2. Add a from-address on that domain, e.g. `Hearth Budgeting <noreply@yourdomain.com>`. Reusing the ondeck domain with a different local-part is fine.
+2. Add a from-address on that domain, e.g. `Setaside <noreply@setasideplan.com>`. Reusing the ondeck domain with a different local-part is fine.
 3. Open [resend.com/api-keys](https://resend.com/api-keys) and create a **Sending access** key. Copy it once (`re_…`).
 4. Optional smoke test: Resend’s `onboarding@resend.dev` from-address can only send to *your* Resend account email. Production users need the verified domain.
 
@@ -158,7 +158,7 @@ Environment → Add:
 | Key | Value |
 |-----|--------|
 | `RESEND_API_KEY` | the `re_…` key |
-| `RESEND_FROM` | `Hearth Budgeting <noreply@yourdomain.com>` (must match the verified domain) |
+| `RESEND_FROM` | `Setaside <noreply@setasideplan.com>` (must match the verified domain) |
 | `FRONTEND_URL` | the live Vercel origin, e.g. `https://your-app.vercel.app` (no trailing slash) |
 
 Save and wait for the service to redeploy. Then `GET https://<render-host>/health` should show `"email": "resend"`.

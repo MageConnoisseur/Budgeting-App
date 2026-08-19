@@ -111,7 +111,7 @@ export function CoachPage() {
         <div>
           <h1>Coach</h1>
           <p className="muted">
-            A financial planning coach for Hearth — it recommends how to give
+            A financial planning coach for Setaside — it recommends how to give
             leftover dollars a job, close a plan shortfall, and fund savings
             targets. Suggestions stay optional.
           </p>

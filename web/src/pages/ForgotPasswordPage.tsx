@@ -31,7 +31,7 @@ export function ForgotPasswordPage() {
   return (
     <div className="auth-page">
       <div className="auth-panel">
-        <p className="brand-name auth-brand">Hearth Budgeting</p>
+        <p className="brand-name auth-brand">Setaside</p>
         <h1>Reset password</h1>
         <p className="muted">
           Enter the username or email on your account. If we have a recovery

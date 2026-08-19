@@ -353,7 +353,7 @@ def link_oauth_account(
     if existing and existing.user_id != user.id:
         raise OAuthError(
             "provider_linked_elsewhere",
-            "That social account is already linked to a different Hearth Budgeting user",
+            "That social account is already linked to a different Setaside user",
         )
     if existing is None:
         same_provider = db.scalar(

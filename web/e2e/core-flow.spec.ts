@@ -5,8 +5,8 @@ function uniqueUser() {
   const stamp = Date.now().toString(36)
   return {
     username: `e2e_${stamp}`,
-    email: `e2e_${stamp}@hearth.test`,
-    password: 'hearthpass123',
+    email: `e2e_${stamp}@setaside.test`,
+    password: 'setasidepass123',
   }
 }
 
@@ -20,7 +20,7 @@ async function register(page: Page) {
   await page.getByLabel('Password').fill(user.password)
   await page.getByRole('button', { name: 'Create account' }).click()
   await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
-  await expect(page.getByText('Hearth Budgeting').first()).toBeVisible()
+  await expect(page.getByText('Setaside').first()).toBeVisible()
   return user
 }
 

@@ -1,4 +1,4 @@
-# Hearth Budgeting — Web
+# Setaside — Web
 
 Vite + React SPA for the Phase 1 budgeting MVP. Talks to the FastAPI backend via JWT Bearer auth.
 
