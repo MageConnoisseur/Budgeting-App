@@ -286,7 +286,7 @@ def test_resend_posts_when_configured(monkeypatch: pytest.MonkeyPatch) -> None:
     from app.config import get_settings
 
     monkeypatch.setenv("RESEND_API_KEY", "re_test_key")
-    monkeypatch.setenv("RESEND_FROM", "Hearth Budgeting <noreply@example.com>")
+    monkeypatch.setenv("RESEND_FROM", "Setaside <noreply@example.com>")
     get_settings.cache_clear()
     calls: list[dict] = []
 
@@ -301,7 +301,7 @@ def test_resend_posts_when_configured(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(mailer.httpx, "post", fake_post)
     mailer.send_email(
         to="pat@example.com",
-        subject="Reset your Hearth Budgeting password",
+        subject="Reset your Setaside password",
         body="plain",
         html="<p>html</p>",
     )
@@ -310,7 +310,7 @@ def test_resend_posts_when_configured(monkeypatch: pytest.MonkeyPatch) -> None:
     headers = calls[0]["headers"]
     assert headers["Authorization"] == "Bearer re_test_key"
     payload = calls[0]["json"]
-    assert payload["from"] == "Hearth Budgeting <noreply@example.com>"
+    assert payload["from"] == "Setaside <noreply@example.com>"
     assert payload["to"] == ["pat@example.com"]
     assert payload["text"] == "plain"
     assert payload["html"] == "<p>html</p>"

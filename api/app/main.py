@@ -13,7 +13,7 @@ from app.routers import auth, budgets, categories, dashboard, recurring_schedule
 settings = get_settings()
 
 app = FastAPI(
-    title="Hearth Budgeting API",
+    title="Setaside API",
     description=(
         "Phase 1 REST API for personal budgeting: categories, monthly/annual plans, "
         "transactions (search/sort/filter), and dashboard insights. "

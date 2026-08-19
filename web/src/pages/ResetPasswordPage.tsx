@@ -62,7 +62,7 @@ export function ResetPasswordPage() {
   return (
     <div className="auth-page">
       <div className="auth-panel">
-        <p className="brand-name auth-brand">Hearth Budgeting</p>
+        <p className="brand-name auth-brand">Setaside</p>
         <h1>Choose a new password</h1>
         {checking ? (
           <p className="muted">Checking this reset link…</p>

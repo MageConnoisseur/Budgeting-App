@@ -1,4 +1,4 @@
-# Hearth Budgeting
+# Setaside
 
 Full-stack personal budgeting app (desktop web first; mobile later) for monthly income, expenses, and savings planning, transaction tracking, and analysis.
 

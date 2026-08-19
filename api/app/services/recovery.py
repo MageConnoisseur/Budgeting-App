@@ -150,8 +150,8 @@ def send_password_reset_email(db: Session, user: User) -> None:
     safe_url = html.escape(url)
     text = (
         f"Hi {user.username},\n\n"
-        "We received a request to reset the password for your Hearth "
-        "Budgeting account.\n\n"
+        "We received a request to reset the password for your Setaside "
+        "account.\n\n"
         f"Choose a new password (this link expires in {minutes} minutes):\n"
         f"{url}\n\n"
         "If you did not request this, you can ignore this email. Your "
@@ -160,7 +160,7 @@ def send_password_reset_email(db: Session, user: User) -> None:
     html_body = (
         f"<p>Hi {safe_name},</p>"
         "<p>We received a request to reset the password for your "
-        "Hearth Budgeting account.</p>"
+        "Setaside account.</p>"
         f"<p><a href=\"{safe_url}\">Choose a new password</a> "
         f"(this link expires in {minutes} minutes).</p>"
         "<p>If you did not request this, you can ignore this email. "
@@ -168,7 +168,7 @@ def send_password_reset_email(db: Session, user: User) -> None:
     )
     mailer.send_email(
         to=user.email or "",
-        subject="Reset your Hearth Budgeting password",
+        subject="Reset your Setaside password",
         body=text,
         html=html_body,
     )
