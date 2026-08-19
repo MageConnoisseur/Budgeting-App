@@ -63,6 +63,7 @@ function publicUser(user) {
     email: user.email,
     has_password: true,
     oauth_providers: [],
+    email_verified: false,
     preferred_budget_view: user.preferred_budget_view,
     preferred_dashboard_view: user.preferred_dashboard_view,
     created_at: user.created_at,

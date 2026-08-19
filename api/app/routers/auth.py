@@ -1,4 +1,4 @@
-"""Auth routes: register, login, OAuth, profile, preferences."""
+"""Auth routes: register, login, OAuth, profile, password recovery."""
 
 from __future__ import annotations
 
@@ -15,9 +15,14 @@ from app.database import get_db
 from app.deps import get_current_user
 from app.models import User
 from app.schemas import (
+    ForgotPasswordRequest,
     LoginRequest,
+    MessageResponse,
     OAuthProviderInfo,
+    PasswordChangeRequest,
+    RecoveryTokenStatus,
     RegisterRequest,
+    ResetPasswordRequest,
     TokenResponse,
     UserOut,
     UserPreferencesUpdate,
@@ -25,6 +30,8 @@ from app.schemas import (
 )
 from app.security import create_access_token, hash_password, verify_password
 from app.services import oauth as oauth_svc
+from app.services import recovery as recovery_svc
+from app.services.mailer import MailError
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 optional_bearer = HTTPBearer(auto_error=False)
@@ -40,6 +47,10 @@ def _load_user(db: Session, user_id: UUID) -> User | None:
 
 def _user_out(user: User) -> UserOut:
     return UserOut.model_validate(oauth_svc.serialize_user(user))
+
+
+def _recovery_http(exc: recovery_svc.RecoveryError) -> HTTPException:
+    return HTTPException(status_code=400, detail=exc.message)
 
 
 def _issue_token(user: User) -> TokenResponse:
@@ -109,18 +120,78 @@ def update_profile(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> UserOut:
+    loaded = _load_user(db, user.id)
+    assert loaded is not None
     email = str(body.email).strip().lower()
     conflict = db.scalar(
-        select(User).where(func.lower(User.email) == email, User.id != user.id)
+        select(User).where(func.lower(User.email) == email, User.id != loaded.id)
     )
     if conflict:
         raise HTTPException(status_code=400, detail="Email already registered")
-    user.email = email
-    db.add(user)
+    recovery_svc.apply_email_change(loaded, email)
+    db.add(loaded)
     db.commit()
-    loaded = _load_user(db, user.id)
+    loaded = _load_user(db, loaded.id)
     assert loaded is not None
     return _user_out(loaded)
+
+
+@router.patch("/me/password", response_model=UserOut)
+def change_password(
+    body: PasswordChangeRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> UserOut:
+    loaded = _load_user(db, user.id)
+    assert loaded is not None
+    try:
+        recovery_svc.change_or_set_password(
+            db,
+            loaded,
+            body.new_password,
+            body.current_password,
+        )
+    except recovery_svc.RecoveryError as exc:
+        raise _recovery_http(exc) from exc
+    loaded = _load_user(db, loaded.id)
+    assert loaded is not None
+    return _user_out(loaded)
+
+
+@router.post("/forgot-password", response_model=MessageResponse)
+def forgot_password(
+    body: ForgotPasswordRequest, db: Session = Depends(get_db)
+) -> MessageResponse:
+    try:
+        recovery_svc.request_password_reset(db, body.identifier)
+    except MailError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Could not send email. Try again later.",
+        ) from exc
+    return MessageResponse(message=recovery_svc.FORGOT_PASSWORD_MESSAGE)
+
+
+@router.get("/reset-password", response_model=RecoveryTokenStatus)
+def reset_password_status(
+    token: str = Query(min_length=8, max_length=256),
+    db: Session = Depends(get_db),
+) -> RecoveryTokenStatus:
+    found = recovery_svc.lookup_recovery_token(db, token, "password_reset")
+    return RecoveryTokenStatus(valid=found is not None)
+
+
+@router.post("/reset-password", response_model=MessageResponse)
+def reset_password(
+    body: ResetPasswordRequest, db: Session = Depends(get_db)
+) -> MessageResponse:
+    try:
+        recovery_svc.reset_password(db, body.token, body.password)
+    except recovery_svc.RecoveryError as exc:
+        raise _recovery_http(exc) from exc
+    return MessageResponse(
+        message="Password updated. You can sign in with your new password."
+    )
 
 
 @router.get("/oauth/providers", response_model=list[OAuthProviderInfo])

@@ -25,6 +25,7 @@ interface AuthState {
     mode: ViewMode,
   ) => Promise<void>
   updateEmail: (email: string) => Promise<void>
+  changePassword: (newPassword: string, currentPassword?: string) => Promise<void>
   unlinkProvider: (provider: string) => Promise<void>
 }
 
@@ -108,6 +109,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(updated)
   }, [])
 
+  const changePassword = useCallback(
+    async (newPassword: string, currentPassword?: string) => {
+      const updated = await authApi.changePassword(newPassword, currentPassword)
+      setUser(updated)
+    },
+    [],
+  )
+
   const unlinkProvider = useCallback(async (provider: string) => {
     const updated = await authApi.unlinkOAuthProvider(provider)
     setUser(updated)
@@ -125,6 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       refreshUser,
       setPreferredView,
       updateEmail,
+      changePassword,
       unlinkProvider,
     }),
     [
@@ -138,6 +148,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       refreshUser,
       setPreferredView,
       updateEmail,
+      changePassword,
       unlinkProvider,
     ],
   )

@@ -31,6 +31,14 @@ class Settings(BaseSettings):
     # When true, expose a local "dev" OAuth provider for tests / local demos.
     oauth_dev_mode: bool = False
 
+    # Password reset link lifetime.
+    password_reset_expire_minutes: int = 60
+
+    # Resend (https://resend.com) for password-reset email. Both must be set
+    # for Forgot password to reach a real inbox. Unset = log only (dev/tests).
+    resend_api_key: str = ""
+    resend_from: str = ""
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

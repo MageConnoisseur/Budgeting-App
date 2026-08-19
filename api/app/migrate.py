@@ -42,6 +42,7 @@ APP_TABLES = (
     "budget_months",
     "categories",
     "oauth_accounts",
+    "recovery_tokens",
     "users",
     "alembic_version",
 )
@@ -56,6 +57,7 @@ SCHEMA_FINGERPRINTS: tuple[tuple[str, str, str], ...] = (
     ("b2c3d4e5f6a7", "categories", "target_amount"),
     ("c3d4e5f6a7b8", "recurring_schedules", "next_occurrence"),
     ("d4e5f6a7b8c9", "budget_lines", "funded_by_category_id"),
+    ("e5f6a7b8c9d0", "recovery_tokens", "token_hash"),
 )
 
 
