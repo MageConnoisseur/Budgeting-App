@@ -228,6 +228,20 @@ class AnnualBudgetOut(BaseModel):
     months: list[BudgetMonthOut]
 
 
+class MonthActualsOut(BaseModel):
+    """Actuals logged in one calendar month, keyed by category id."""
+
+    month: int
+    actuals: dict[str, Decimal] = Field(default_factory=dict)
+
+
+class YearActualsOut(BaseModel):
+    """Compact plan-vs-actual fills for the budget page (no extra dashboard payload)."""
+
+    year: int
+    months: list[MonthActualsOut]
+
+
 class CopyFromMonthRequest(BaseModel):
     source_year: int
     source_month: int = Field(ge=1, le=12)

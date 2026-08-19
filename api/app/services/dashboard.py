@@ -27,10 +27,12 @@ from app.schemas import (
     KindTotals,
     MonthlyDashboardOut,
     MonthlyTrendPoint,
+    MonthActualsOut,
     PlanSuggestion,
     SavingsBucketOut,
     SpendingPaceDay,
     SpendingPaceOut,
+    YearActualsOut,
 )
 from app.services.budget import get_or_create_month
 from app.services.category_health import build_category_health_scores
@@ -90,6 +92,60 @@ def _actuals_by_category(
     for tx in txs:
         totals[tx.category_id] = totals.get(tx.category_id, ZERO) + tx.amount
     return totals
+
+
+def _fill_actual(kind: str, amount: Decimal) -> Decimal | None:
+    """Amount that should grow a budget-cell fill for this category kind.
+
+    Income/expense use absolute logged amounts. Savings uses contributions
+    (positive) only — withdrawals are bucket *use*, not progress vs the
+    contribution plan.
+    """
+    if kind == CategoryKind.savings.value:
+        return amount if amount > ZERO else None
+    return abs(amount) if amount != ZERO else None
+
+
+def build_year_actuals(db: Session, user: User, year: int) -> YearActualsOut:
+    """Compact actuals for the budget planner (monthly + annual cell fills)."""
+    start = date(year, 1, 1)
+    end = date(year, 12, 31)
+    txs = (
+        db.scalars(
+            select(Transaction)
+            .options(joinedload(Transaction.category))
+            .where(
+                Transaction.user_id == user.id,
+                Transaction.date >= start,
+                Transaction.date <= end,
+            )
+        )
+        .unique()
+        .all()
+    )
+    by_month: dict[int, dict[str, Decimal]] = {m: {} for m in range(1, 13)}
+    for tx in txs:
+        kind = tx.category.kind if tx.category is not None else ""
+        add = _fill_actual(kind, tx.amount)
+        if add is None:
+            continue
+        bucket = by_month[tx.date.month]
+        key = str(tx.category_id)
+        bucket[key] = bucket.get(key, ZERO) + add
+    return YearActualsOut(
+        year=year,
+        months=[
+            MonthActualsOut(
+                month=m,
+                actuals={
+                    cid: _money(amount)
+                    for cid, amount in by_month[m].items()
+                    if amount != ZERO
+                },
+            )
+            for m in range(1, 13)
+        ],
+    )
 
 
 def _planned_by_category(budget_month: BudgetMonth | None) -> dict[UUID, Decimal]:

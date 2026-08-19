@@ -6,11 +6,13 @@ import {
   BudgetBalancePanel,
   sumByKind,
 } from '../components/BudgetBalance'
+import { BudgetFillInput } from '../components/BudgetFillInput'
 import { BudgetPlanDiffStrip } from '../components/BudgetPlanDiffStrip'
 import { PeriodNavigator } from '../components/PeriodNavigator'
 import { SavingsBucketsGuide } from '../components/SavingsBucketsGuide'
 import { ViewModeToggle } from '../components/ViewModeToggle'
 import { useAuth } from '../context/AuthContext'
+import { indexYearActuals, parseDraftAmount } from '../lib/budgetFill'
 import {
   MONTH_SHORT,
   currentYearMonth,
@@ -75,6 +77,9 @@ export function BudgetPage() {
     null,
   )
   const [hasPriorPlan, setHasPriorPlan] = useState(false)
+  const [yearActuals, setYearActuals] = useState<
+    Record<number, Record<string, number>>
+  >({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [status, setStatus] = useState<string | null>(null)
@@ -104,10 +109,12 @@ export function BudgetPage() {
       if (view === 'monthly') {
         const prior = shiftMonth(year, month, -1)
         // Annual fetch lists existing months only — avoids creating an empty prior.
-        const [bm, priorAnnual] = await Promise.all([
+        const [bm, priorAnnual, actuals] = await Promise.all([
           budgetsApi.getBudgetMonth(year, month, true),
           budgetsApi.getAnnualBudget(prior.year),
+          budgetsApi.getYearActuals(year),
         ])
+        setYearActuals(indexYearActuals(actuals))
         setBudget(bm)
         const map: Record<string, string> = {}
         const fund: Record<string, string> = {}
@@ -139,7 +146,11 @@ export function BudgetPage() {
           setStatus(null)
         }
       } else {
-        const annual = await budgetsApi.getAnnualBudget(year)
+        const [annual, actuals] = await Promise.all([
+          budgetsApi.getAnnualBudget(year),
+          budgetsApi.getYearActuals(year),
+        ])
+        setYearActuals(indexYearActuals(actuals))
         setAnnualMonths(annual.months)
         const draft = draftFromAnnual(cats, annual.months)
         setAnnualDraft(draft.amounts)
@@ -434,8 +445,8 @@ export function BudgetPage() {
         <div>
           <h1>Budget</h1>
           <p className="muted">
-            Planned amounts by month. USD only. Going over is allowed later in
-            the tracker.
+            Planned amounts by month. The fill behind each amount is actuals
+            for that month — hover a cell for the dollars.
           </p>
         </div>
         <ViewModeToggle value={view} onChange={(m) => void onViewChange(m)} />
@@ -504,7 +515,10 @@ export function BudgetPage() {
                     {grouped[kind].map((c) => (
                       <div key={c.id} className="budget-line">
                         <span>{c.name}</span>
-                        <input
+                        <BudgetFillInput
+                          kind={kind}
+                          actual={yearActuals[month]?.[c.id] ?? 0}
+                          planned={parseDraftAmount(amounts[c.id])}
                           inputMode="decimal"
                           value={amounts[c.id] ?? ''}
                           onChange={(e) =>
@@ -720,8 +734,13 @@ export function BudgetPage() {
                                   : ''
                               }`}
                             >
-                              <input
+                              <BudgetFillInput
                                 className="cell-input"
+                                kind={c.kind}
+                                actual={yearActuals[m]?.[c.id] ?? 0}
+                                planned={parseDraftAmount(
+                                  annualDraft[annualCellKey(c.id, m)],
+                                )}
                                 inputMode="decimal"
                                 value={annualDraft[annualCellKey(c.id, m)] ?? ''}
                                 onChange={(e) =>

@@ -20,8 +20,10 @@ from app.schemas import (
     ExpenseFundingOut,
     MessageOut,
     SaveTemplateRequest,
+    YearActualsOut,
 )
 from app.services import budget as budget_service
+from app.services import dashboard as dashboard_service
 from app.services.funding import get_expense_funding
 
 router = APIRouter(prefix="/budgets", tags=["budgets"])
@@ -109,6 +111,16 @@ def get_annual_budget(
 ) -> AnnualBudgetOut:
     months = budget_service.get_annual_budget(db, user, year)
     return AnnualBudgetOut(year=year, months=[_month_out(m) for m in months])
+
+
+@router.get("/actuals/{year}", response_model=YearActualsOut)
+def get_year_actuals(
+    year: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> YearActualsOut:
+    """Per-month category actuals for budget-cell progress fills."""
+    return dashboard_service.build_year_actuals(db, user, year)
 
 
 @router.put("/annual/cell", response_model=BudgetMonthOut)

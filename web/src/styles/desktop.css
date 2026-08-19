@@ -147,6 +147,10 @@
     padding: 0.3rem 0.4rem;
   }
 
+  .annual-grid .budget-fill {
+    min-height: 2.1rem;
+  }
+
   .widget {
     padding: 0.9rem 1rem;
   }
