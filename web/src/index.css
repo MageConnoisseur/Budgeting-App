@@ -1462,6 +1462,12 @@ a.btn {
   stroke-dasharray: 3 4;
 }
 
+.chart-zero {
+  stroke: var(--ink-soft);
+  stroke-width: 1.25;
+  opacity: 0.45;
+}
+
 .chart-axis {
   fill: var(--muted);
   font-size: 11px;
