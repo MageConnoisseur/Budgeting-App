@@ -580,13 +580,25 @@ class DashboardWidget(BaseModel):
     order: int = 0
 
 
+class DashboardLayoutPreset(BaseModel):
+    """Named dashboard page: same widget catalog, different layout/visibility."""
+
+    id: str
+    name: str = Field(..., min_length=1, max_length=80)
+    widgets: list[DashboardWidget]
+
+
 class DashboardLayoutOut(BaseModel):
     view_mode: ViewMode
     widgets: list[DashboardWidget]
+    presets: list[DashboardLayoutPreset] = Field(default_factory=list)
+    active_preset_id: Optional[str] = None
 
 
 class DashboardLayoutUpdate(BaseModel):
     widgets: list[DashboardWidget]
+    presets: Optional[list[DashboardLayoutPreset]] = None
+    active_preset_id: Optional[str] = None
 
 
 class MessageOut(BaseModel):

@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { nearListEnd, virtualWindow } from '../src/lib/virtualWindow'
+import { ensureLayout, visiblePlaced } from '../src/dashboard/grid'
+import type { DashboardWidget } from '../src/types/api'
 
 function uniqueUser() {
   const stamp = Date.now().toString(36)
@@ -88,5 +90,61 @@ test.describe('core smoke: auth → categories → budget → tracker → dashbo
     await expect(page.getByText('$400.00').first()).toBeVisible()
     await expect(page.getByText('$12.50').first()).toBeVisible()
     await expect(page.getByText('Groceries').first()).toBeVisible()
+  })
+})
+
+test.describe('dashboard grid layout', () => {
+  test('packs progress widgets side by side on a 12-column grid', () => {
+    const widgets: DashboardWidget[] = [
+      {
+        id: 'income-progress',
+        type: 'kind_progress',
+        title: 'Income',
+        order: 1,
+        config: { kind: 'income' },
+      },
+      {
+        id: 'expense-progress',
+        type: 'kind_progress',
+        title: 'Expenses',
+        order: 2,
+        config: { kind: 'expense' },
+      },
+      {
+        id: 'savings-progress',
+        type: 'kind_progress',
+        title: 'Savings',
+        order: 3,
+        config: { kind: 'savings' },
+      },
+    ]
+    const placed = visiblePlaced(ensureLayout(widgets, 'monthly'))
+    expect(placed).toHaveLength(3)
+    expect(placed.map((w) => w.rect)).toEqual([
+      { x: 0, y: 0, w: 4, h: 4 },
+      { x: 4, y: 0, w: 4, h: 4 },
+      { x: 8, y: 0, w: 4, h: 4 },
+    ])
+  })
+
+  test('user can hide a widget and save a named view', async ({ page }) => {
+    await register(page)
+    await expect(page.getByRole('heading', { name: 'Expenses', exact: true })).toBeVisible()
+
+    await page.getByRole('button', { name: 'Customize layout' }).click()
+    await page.getByRole('checkbox', { name: /Expenses/ }).uncheck()
+    await expect(
+      page.getByRole('heading', { name: 'Expenses', exact: true }),
+    ).toHaveCount(0)
+
+    await page.getByRole('button', { name: 'Save as view' }).click()
+    await page.getByPlaceholder('Spending focus').fill('Lean month')
+    await page.getByRole('button', { name: 'Save' }).click()
+    await expect(page.getByText('Saved view “Lean month”')).toBeVisible()
+    await page.getByRole('button', { name: 'Done' }).click()
+    await expect(page.getByText('View: Lean month')).toBeVisible()
+    await expect(
+      page.getByRole('heading', { name: 'Expenses', exact: true }),
+    ).toHaveCount(0)
   })
 })

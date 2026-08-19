@@ -13,6 +13,7 @@ from app.models import DashboardLayout, User
 from app.schemas import (
     AnnualDashboardOut,
     DashboardLayoutOut,
+    DashboardLayoutPreset,
     DashboardLayoutUpdate,
     DashboardWidget,
     MonthlyDashboardOut,
@@ -129,6 +130,51 @@ def _merge_default_widgets(
     return merged
 
 
+def _parse_layout_doc(
+    raw: str,
+) -> tuple[list[DashboardWidget], list[DashboardLayoutPreset], str | None]:
+    """Accept legacy widget arrays and v2 {widgets, presets} envelopes."""
+    data = json.loads(raw)
+    if isinstance(data, list):
+        widgets = [DashboardWidget.model_validate(w) for w in data]
+        return widgets, [], None
+    if not isinstance(data, dict):
+        return [], [], None
+    widgets = [DashboardWidget.model_validate(w) for w in (data.get("widgets") or [])]
+    presets = [
+        DashboardLayoutPreset.model_validate(p) for p in (data.get("presets") or [])
+    ]
+    active = data.get("active_preset_id")
+    active_id = active if isinstance(active, str) else None
+    return widgets, presets, active_id
+
+
+def _dump_layout_doc(
+    widgets: list[DashboardWidget],
+    presets: list[DashboardLayoutPreset] | None,
+    active_preset_id: str | None,
+) -> str:
+    if not presets and not active_preset_id:
+        return json.dumps([w.model_dump() for w in widgets])
+    return json.dumps(
+        {
+            "v": 2,
+            "widgets": [w.model_dump() for w in widgets],
+            "presets": [p.model_dump() for p in (presets or [])],
+            "active_preset_id": active_preset_id,
+        }
+    )
+
+
+def _merge_presets(
+    presets: list[DashboardLayoutPreset], defaults: list[DashboardWidget]
+) -> list[DashboardLayoutPreset]:
+    return [
+        p.model_copy(update={"widgets": _merge_default_widgets(p.widgets, defaults)})
+        for p in presets
+    ]
+
+
 @router.get("/layout/{view_mode}", response_model=DashboardLayoutOut)
 def get_layout(
     view_mode: ViewMode,
@@ -148,10 +194,18 @@ def get_layout(
     )
     if row is None:
         return DashboardLayoutOut(view_mode=view_mode, widgets=defaults)
-    widgets = [DashboardWidget.model_validate(w) for w in json.loads(row.layout_json)]
+    widgets, presets, active_id = _parse_layout_doc(row.layout_json)
+    presets = _merge_presets(presets, defaults)
+    if active_id:
+        match = next((p for p in presets if p.id == active_id), None)
+        if match is not None:
+            widgets = list(match.widgets)
+    widgets = _merge_default_widgets(widgets, defaults)
     return DashboardLayoutOut(
         view_mode=view_mode,
-        widgets=_merge_default_widgets(widgets, defaults),
+        widgets=widgets,
+        presets=presets,
+        active_preset_id=active_id,
     )
 
 
@@ -168,7 +222,8 @@ def put_layout(
             DashboardLayout.view_mode == view_mode.value,
         )
     )
-    payload = json.dumps([w.model_dump() for w in body.widgets])
+    presets = body.presets or []
+    payload = _dump_layout_doc(body.widgets, presets, body.active_preset_id)
     if row is None:
         row = DashboardLayout(
             user_id=user.id, view_mode=view_mode.value, layout_json=payload
@@ -178,4 +233,9 @@ def put_layout(
         row.layout_json = payload
         db.add(row)
     db.commit()
-    return DashboardLayoutOut(view_mode=view_mode, widgets=body.widgets)
+    return DashboardLayoutOut(
+        view_mode=view_mode,
+        widgets=body.widgets,
+        presets=presets,
+        active_preset_id=body.active_preset_id,
+    )

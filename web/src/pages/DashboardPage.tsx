@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ApiError } from '../api/client'
 import * as budgetsApi from '../api/budgets'
 import * as dashboardApi from '../api/dashboard'
@@ -12,6 +12,8 @@ import {
 } from '../components/charts/TrendCharts'
 import { CategoryHealthWidget } from '../components/CategoryHealthWidget'
 import { BudgetCoachWidget } from '../components/BudgetCoachWidget'
+import { DashboardCustomizeBar } from '../components/DashboardCustomizeBar'
+import { DashboardGrid } from '../components/DashboardGrid'
 import { PeriodNavigator } from '../components/PeriodNavigator'
 import { KindBadge } from '../components/KindBadge'
 import { SoftWarning } from '../components/SoftWarning'
@@ -19,6 +21,14 @@ import { SavingsBucketsGuide } from '../components/SavingsBucketsGuide'
 import { TrueLeftoverWidget } from '../components/TrueLeftoverWidget'
 import { ViewModeToggle } from '../components/ViewModeToggle'
 import { useAuth } from '../context/AuthContext'
+import { type WidgetDefinition } from '../dashboard/catalog'
+import {
+  ensureLayout,
+  isHidden,
+  resetLayout,
+  setHidden,
+  toggleWidget,
+} from '../dashboard/grid'
 import {
   MONTH_SHORT,
   currentYearMonth,
@@ -39,6 +49,7 @@ import type {
   CategoryKind,
   CategoryProgress,
   CoachTip,
+  DashboardLayoutPreset,
   DashboardWidget,
   KindTotals,
   MonthlyDashboard,
@@ -47,6 +58,19 @@ import type {
   SpendingPace,
   ViewMode,
 } from '../types/api'
+
+function newPresetId(): string {
+  return crypto.randomUUID()
+}
+
+function syncActivePreset(
+  presets: DashboardLayoutPreset[],
+  activeId: string | null,
+  widgets: DashboardWidget[],
+): DashboardLayoutPreset[] {
+  if (!activeId) return presets
+  return presets.map((p) => (p.id === activeId ? { ...p, widgets } : p))
+}
 
 const KIND_ORDER: CategoryKind[] = ['income', 'expense', 'savings']
 const KIND_SECTION_LABEL: Record<CategoryKind, string> = {
@@ -418,6 +442,9 @@ export function DashboardPage() {
   const [annual, setAnnual] = useState<AnnualDashboard | null>(null)
   const [trendYear, setTrendYear] = useState<AnnualDashboard | null>(null)
   const [widgets, setWidgets] = useState<DashboardWidget[]>([])
+  const [presets, setPresets] = useState<DashboardLayoutPreset[]>([])
+  const [activePresetId, setActivePresetId] = useState<string | null>(null)
+  const [customizing, setCustomizing] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [layoutStatus, setLayoutStatus] = useState<string | null>(null)
@@ -433,6 +460,33 @@ export function DashboardPage() {
   )
   const [applyingCoachId, setApplyingCoachId] = useState<string | null>(null)
   const [coachStatus, setCoachStatus] = useState<string | null>(null)
+  const saveTimer = useRef<number | null>(null)
+  const widgetsRef = useRef(widgets)
+  const presetsRef = useRef(presets)
+  const activePresetRef = useRef(activePresetId)
+  useEffect(() => {
+    widgetsRef.current = widgets
+    presetsRef.current = presets
+    activePresetRef.current = activePresetId
+  }, [widgets, presets, activePresetId])
+
+  useEffect(() => {
+    return () => {
+      if (saveTimer.current) window.clearTimeout(saveTimer.current)
+    }
+  }, [])
+
+  function applyServerLayout(
+    layoutWidgets: DashboardWidget[],
+    layoutPresets: DashboardLayoutPreset[] | undefined,
+    layoutActive: string | null | undefined,
+    mode: ViewMode,
+  ) {
+    const laidOut = ensureLayout(layoutWidgets, mode)
+    setWidgets(laidOut)
+    setPresets(layoutPresets ?? [])
+    setActivePresetId(layoutActive ?? null)
+  }
 
   useEffect(() => {
     if (user?.preferred_dashboard_view) {
@@ -452,7 +506,12 @@ export function DashboardPage() {
           dashboardApi.getMonthlyDashboard(year, month),
           dashboardApi.getAnnualDashboard(year),
         ])
-        setWidgets([...layout.widgets].sort((a, b) => a.order - b.order))
+        applyServerLayout(
+          layout.widgets,
+          layout.presets,
+          layout.active_preset_id,
+          view,
+        )
         setMonthly(md)
         setTrendYear(yd)
         setAnnual(null)
@@ -461,7 +520,12 @@ export function DashboardPage() {
           dashboardApi.getDashboardLayout(view),
           dashboardApi.getAnnualDashboard(year),
         ])
-        setWidgets([...layout.widgets].sort((a, b) => a.order - b.order))
+        applyServerLayout(
+          layout.widgets,
+          layout.presets,
+          layout.active_preset_id,
+          view,
+        )
         setAnnual(ad)
         setMonthly(null)
         setTrendYear(null)
@@ -477,6 +541,54 @@ export function DashboardPage() {
     void load()
   }, [load])
 
+  async function persistLayout(
+    nextWidgets: DashboardWidget[],
+    nextPresets = presetsRef.current,
+    nextActive = activePresetRef.current,
+  ) {
+    try {
+      await dashboardApi.putDashboardLayout(view, nextWidgets, {
+        presets: nextPresets,
+        active_preset_id: nextActive,
+      })
+      setLayoutStatus('Layout saved')
+    } catch (e) {
+      setError(e instanceof ApiError ? e.detail : 'Could not save layout')
+      await load()
+    }
+  }
+
+  function commitLayout(
+    nextWidgets: DashboardWidget[],
+    options?: {
+      presets?: DashboardLayoutPreset[]
+      activeId?: string | null
+      immediate?: boolean
+    },
+  ) {
+    const nextActive =
+      options && 'activeId' in options
+        ? (options.activeId ?? null)
+        : activePresetRef.current
+    const nextPresets =
+      options?.presets ??
+      syncActivePreset(presetsRef.current, nextActive, nextWidgets)
+    setWidgets(nextWidgets)
+    setPresets(nextPresets)
+    setActivePresetId(nextActive)
+    widgetsRef.current = nextWidgets
+    presetsRef.current = nextPresets
+    activePresetRef.current = nextActive
+    if (saveTimer.current) window.clearTimeout(saveTimer.current)
+    if (options?.immediate) {
+      void persistLayout(nextWidgets, nextPresets, nextActive)
+      return
+    }
+    saveTimer.current = window.setTimeout(() => {
+      void persistLayout(nextWidgets, nextPresets, nextActive)
+    }, 350)
+  }
+
   async function onViewChange(mode: ViewMode) {
     setView(mode)
     try {
@@ -486,22 +598,74 @@ export function DashboardPage() {
     }
   }
 
-  async function moveWidget(id: string, dir: -1 | 1) {
-    const sorted = [...widgets].sort((a, b) => a.order - b.order)
-    const idx = sorted.findIndex((w) => w.id === id)
-    const swap = idx + dir
-    if (idx < 0 || swap < 0 || swap >= sorted.length) return
-    const next = [...sorted]
-    ;[next[idx], next[swap]] = [next[swap], next[idx]]
-    const reordered = next.map((w, i) => ({ ...w, order: i }))
-    setWidgets(reordered)
-    try {
-      await dashboardApi.putDashboardLayout(view, reordered)
-      setLayoutStatus('Layout saved')
-    } catch (e) {
-      setError(e instanceof ApiError ? e.detail : 'Could not save layout')
-      await load()
+  function onToggleCatalogWidget(def: WidgetDefinition, show: boolean) {
+    commitLayout(toggleWidget(widgetsRef.current, def, show, view), {
+      immediate: true,
+    })
+  }
+
+  function onHideWidget(id: string) {
+    commitLayout(
+      widgetsRef.current.map((w) => (w.id === id ? setHidden(w, true) : w)),
+      { immediate: true },
+    )
+  }
+
+  function onResetLayout() {
+    commitLayout(resetLayout(view), { immediate: true })
+  }
+
+  function onSelectPreset(id: string) {
+    const preset = presetsRef.current.find((p) => p.id === id)
+    if (!preset) return
+    const laidOut = ensureLayout(preset.widgets, view)
+    commitLayout(laidOut, { activeId: id, immediate: true })
+    setLayoutStatus(`Switched to ${preset.name}`)
+  }
+
+  function onSaveAsView(name: string) {
+    const id = newPresetId()
+    const preset: DashboardLayoutPreset = {
+      id,
+      name,
+      widgets: widgetsRef.current,
     }
+    commitLayout(widgetsRef.current, {
+      presets: [...presetsRef.current, preset],
+      activeId: id,
+      immediate: true,
+    })
+    setLayoutStatus(`Saved view “${name}”`)
+  }
+
+  function onRenameView(name: string) {
+    const active = activePresetRef.current
+    if (!active) return
+    commitLayout(widgetsRef.current, {
+      presets: presetsRef.current.map((p) =>
+        p.id === active ? { ...p, name } : p,
+      ),
+      immediate: true,
+    })
+  }
+
+  function onDeleteView() {
+    const active = activePresetRef.current
+    const remaining = presetsRef.current.filter((p) => p.id !== active)
+    const next = remaining[0]
+    if (!next) {
+      commitLayout(widgetsRef.current, {
+        presets: [],
+        activeId: null,
+        immediate: true,
+      })
+      return
+    }
+    commitLayout(ensureLayout(next.widgets, view), {
+      presets: remaining,
+      activeId: next.id,
+      immediate: true,
+    })
   }
 
   async function onAcceptPlanSuggestion(s: PlanSuggestion) {
@@ -1061,13 +1225,15 @@ export function DashboardPage() {
           <h1>Dashboard</h1>
           <p className="muted">
             Plan vs actual, plus a rolling spending-pace check against average
-            income. Soft warnings only — overspending is never blocked.
+            income. Customize the layout to resize widgets, place them side by
+            side, or save different views. Soft warnings only — overspending is
+            never blocked.
           </p>
         </div>
         <ViewModeToggle value={view} onChange={(m) => void onViewChange(m)} />
       </header>
 
-      <div className="toolbar">
+      <div className="toolbar dashboard-toolbar">
         <PeriodNavigator
           year={year}
           month={month}
@@ -1077,38 +1243,38 @@ export function DashboardPage() {
             setMonth(m)
           }}
         />
+        <DashboardCustomizeBar
+          view={view}
+          customizing={customizing}
+          onCustomizingChange={setCustomizing}
+          widgets={widgets}
+          presets={presets}
+          activePresetId={activePresetId}
+          onToggleWidget={onToggleCatalogWidget}
+          onResetLayout={onResetLayout}
+          onSelectPreset={onSelectPreset}
+          onSaveAs={onSaveAsView}
+          onRename={onRenameView}
+          onDelete={onDeleteView}
+        />
         {layoutStatus && <p className="status-chip">{layoutStatus}</p>}
       </div>
 
       {error && <p className="form-error">{error}</p>}
       {loading ? (
         <p className="muted">Loading…</p>
+      ) : widgets.filter((w) => !isHidden(w)).length === 0 ? (
+        <p className="muted">
+          No widgets on this view. Use Customize layout → Widgets to add some.
+        </p>
       ) : (
-        <div className="dashboard-layout">
-          {widgets.map((w) => (
-            <div key={w.id} className="widget-shell">
-              <div className="widget-controls">
-                <button
-                  type="button"
-                  className="btn ghost tiny"
-                  aria-label="Move up"
-                  onClick={() => void moveWidget(w.id, -1)}
-                >
-                  ↑
-                </button>
-                <button
-                  type="button"
-                  className="btn ghost tiny"
-                  aria-label="Move down"
-                  onClick={() => void moveWidget(w.id, 1)}
-                >
-                  ↓
-                </button>
-              </div>
-              {renderWidget(w)}
-            </div>
-          ))}
-        </div>
+        <DashboardGrid
+          widgets={widgets}
+          customizing={customizing}
+          onLayoutChange={(next) => commitLayout(next)}
+          onHide={onHideWidget}
+          renderItem={renderWidget}
+        />
       )}
     </div>
   )

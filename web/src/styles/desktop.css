@@ -161,7 +161,8 @@
 }
 
 @media (min-width: 1440px) {
-  .shell:has(.page-budget-annual) {
+  .shell:has(.page-budget-annual),
+  .shell:has(.dashboard-grid) {
     max-width: min(100%, 110rem);
   }
 }
