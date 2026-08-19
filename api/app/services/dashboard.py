@@ -944,9 +944,10 @@ def build_monthly_dashboard(
     today: date | None = None,
 ) -> MonthlyDashboardOut:
     as_of = today or date.today()
-    if ensure_month:
-        _load_budget_month(db, user, year, month, ensure=True)
     ledger = load_user_ledger(db, user)
+    if ensure_month and (year, month) not in ledger.budget_months:
+        _load_budget_month(db, user, year, month, ensure=True)
+        ledger = load_user_ledger(db, user)
     return _monthly_from_ledger(
         ledger, year, month, include_pace=include_pace, today=as_of
     )
