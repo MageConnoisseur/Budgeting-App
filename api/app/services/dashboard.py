@@ -37,6 +37,18 @@ from app.schemas import (
 from app.services.budget import get_or_create_month
 from app.services.category_health import build_category_health_scores
 from app.services.coach import CoachLine, build_budget_coach
+from app.services.dashboard_insights import (
+    build_flexible_split,
+    build_category_month_cells,
+    build_period_compare,
+    build_prior_year_totals,
+    build_recurring_load,
+    build_runway,
+    build_savings_history,
+    build_top_transactions,
+    build_tradeoffs,
+    mark_committed,
+)
 from app.services.recurring import occurrences_in_month
 
 ZERO = Decimal("0.00")
@@ -829,6 +841,7 @@ def _monthly_from_ledger(
     month: int,
     *,
     include_pace: bool,
+    include_insights: bool = False,
     today: date,
 ) -> MonthlyDashboardOut:
     """Assemble one month of dashboard insight from a preloaded ledger."""
@@ -875,6 +888,7 @@ def _monthly_from_ledger(
                 funded_by_category_name=fund.name if fund else None,
             )
         )
+    progress = mark_committed(progress)
 
     by_kind = {
         CategoryKind.income: [r for r in progress if r.kind == CategoryKind.income],
@@ -974,6 +988,38 @@ def _monthly_from_ledger(
         today=as_of,
     )
 
+    top_transactions: list = []
+    recurring_load: list = []
+    runway = None
+    flexible = None
+    tradeoffs: list = []
+    last_month = None
+    same_month_last_year = None
+    if include_insights:
+        top_transactions = build_top_transactions(
+            ledger.transactions, start=start, end=end
+        )
+        recurring_load = build_recurring_load(
+            ledger.recurring, progress, year=year, month=month
+        )
+        runway = build_runway(
+            today=as_of,
+            year=year,
+            month=month,
+            expense_planned=expense_totals.planned,
+            expense_actual=expense_totals.actual,
+        )
+        flexible = build_flexible_split(progress, leftover_planned, leftover_actual)
+        tradeoffs = build_tradeoffs(
+            progress,
+            buckets,
+            apply_year=year,
+            apply_month=month,
+        )
+        last_month, same_month_last_year = build_period_compare(
+            ledger, categories, year=year, month=month
+        )
+
     return MonthlyDashboardOut(
         year=year,
         month=month,
@@ -986,6 +1032,13 @@ def _monthly_from_ledger(
         savings_buckets=buckets,
         spending_pace=spending_pace,
         coach=coach,
+        top_transactions=top_transactions,
+        recurring_load=recurring_load,
+        runway=runway,
+        flexible_split=flexible,
+        tradeoffs=tradeoffs,
+        last_month=last_month,
+        same_month_last_year=same_month_last_year,
     )
 
 
@@ -1005,7 +1058,12 @@ def build_monthly_dashboard(
         _load_budget_month(db, user, year, month, ensure=True)
         ledger = load_user_ledger(db, user)
     return _monthly_from_ledger(
-        ledger, year, month, include_pace=include_pace, today=as_of
+        ledger,
+        year,
+        month,
+        include_pace=include_pace,
+        include_insights=True,
+        today=as_of,
     )
 
 
@@ -1228,4 +1286,54 @@ def build_annual_dashboard(
         savings_buckets=buckets,
         spending_pace=spending_pace,
         coach=coach,
+        top_transactions=build_top_transactions(
+            ledger.transactions,
+            start=date(year, 1, 1),
+            end=date(year, 12, 31),
+        ),
+        flexible_split=build_flexible_split(
+            mark_committed(
+                [
+                    CategoryProgress(
+                        category_id=t.category_id,
+                        category_name=t.category_name,
+                        kind=t.kind,
+                        planned=t.total_planned,
+                        actual=t.total_actual,
+                        remaining=t.total_planned - t.total_actual,
+                        over_budget=t.months_over_budget > 0,
+                    )
+                    for t in trends
+                ]
+            ),
+            leftover_planned,
+            leftover_actual,
+        ),
+        tradeoffs=build_tradeoffs(
+            mark_committed(
+                [
+                    CategoryProgress(
+                        category_id=t.category_id,
+                        category_name=t.category_name,
+                        kind=t.kind,
+                        planned=_money(t.total_planned / Decimal(plan_month_count)),
+                        actual=_money(t.total_actual / Decimal(plan_month_count)),
+                        remaining=_money(
+                            (t.total_planned - t.total_actual)
+                            / Decimal(plan_month_count)
+                        ),
+                        over_budget=t.months_over_budget > 0,
+                    )
+                    for t in trends
+                ]
+            ),
+            buckets,
+            apply_year=coach.apply_year,
+            apply_month=coach.apply_month,
+        ),
+        category_month_cells=build_category_month_cells(category_accum),
+        savings_history=build_savings_history(ledger, buckets, year=year),
+        prior_year=build_prior_year_totals(
+            ledger, ledger.categories, year=year
+        ),
     )

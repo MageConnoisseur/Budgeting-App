@@ -403,6 +403,12 @@ def test_transactions_search_sort_filter_and_dashboard(
     assert body["spending_pace"]["has_data"] is True
     assert body["spending_pace"]["window_days"] >= 1
     assert Decimal(body["spending_pace"]["expense"]) >= Decimal("555.25")
+    assert body["runway"] is not None
+    assert body["runway"]["has_data"] is True
+    movers = body["top_transactions"]
+    assert any(Decimal(t["amount"]) == Decimal("500.00") for t in movers)
+    assert "tradeoffs" in body
+    assert "flexible_split" in body
 
     annual = client.get("/api/dashboard/annual/2026", headers=h)
     assert annual.status_code == 200
@@ -412,6 +418,8 @@ def test_transactions_search_sort_filter_and_dashboard(
     assert isinstance(annual.json()["plan_suggestions"], list)
     assert "category_health" in annual.json()
     assert isinstance(annual.json()["category_health"], list)
+    assert "category_month_cells" in annual.json()
+    assert "savings_history" in annual.json()
     assert "coach" in body
     assert "headline" in body["coach"]
     assert "tips" in body["coach"]
@@ -484,6 +492,16 @@ def test_transactions_search_sort_filter_and_dashboard(
     coach_w = next(w for w in widgets if w["id"] == "budget-coach")
     assert coach_w["type"] == "budget_coach"
     assert len(widgets) >= 1
+    # Existing layouts keep current widgets as "My layout" and gain themed views.
+    payload = got.json()
+    names = [p["name"] for p in payload["presets"]]
+    assert "My layout" in names
+    assert "This month" in names
+    assert "Fix the plan" in names
+    assert "Savings" in names
+    assert payload["active_preset_id"] == "user-current"
+    snapshot = next(w for w in widgets if w["id"] == "allocation-snapshot")
+    assert snapshot["config"].get("hidden") is True
 
 
 def test_budget_coach_surplus_funds_savings_target(
@@ -1157,5 +1175,34 @@ def test_dashboard_layout_hidden_widgets_and_named_views(
     # Future default widgets still merge in (extensibility).
     assert "spending-pace" in by_id
     assert payload["active_preset_id"] == "overview"
-    assert len(payload["presets"]) == 2
+    names = [p["name"] for p in payload["presets"]]
+    assert names[:2] == ["Overview", "Lean"]
+    assert "This month" in names
+    assert "Fix the plan" in names
+    assert "Savings" in names
+    assert len(payload["presets"]) >= 5
+
+
+def test_new_user_gets_themed_dashboard_views(auth_headers: dict[str, str]) -> None:
+    got = client.get("/api/dashboard/layout/monthly", headers=auth_headers)
+    assert got.status_code == 200, got.text
+    body = got.json()
+    assert body["active_preset_id"] == "setaside-this-month"
+    assert [p["name"] for p in body["presets"]] == [
+        "This month",
+        "Fix the plan",
+        "Savings",
+    ]
+    by_id = {w["id"]: w for w in body["widgets"]}
+    assert by_id["allocation-snapshot"]["config"].get("hidden") is not True
+    assert by_id["expense-progress"]["config"].get("hidden") is True
+    annual = client.get("/api/dashboard/layout/annual", headers=auth_headers)
+    assert annual.status_code == 200
+    assert annual.json()["active_preset_id"] == "setaside-this-year"
+    assert [p["name"] for p in annual.json()["presets"]] == [
+        "This year",
+        "Fix the plan",
+        "Savings",
+    ]
+
 

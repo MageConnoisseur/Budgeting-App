@@ -2517,3 +2517,25 @@ a.btn {
     grid-template-columns: 1fr;
   }
 }
+
+.mover-list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.mover-list li {
+  border-top: 1px solid var(--line);
+  padding-top: 0.4rem;
+}
+
+.chart-legend.wrap {
+  flex-wrap: wrap;
+}
+
+.heatmap-scroll {
+  overflow-x: auto;
+}

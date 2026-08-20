@@ -20,41 +20,9 @@ from app.schemas import (
     SavingsBucketOut,
 )
 from app.services import dashboard as dashboard_service
+from app.services.dashboard_layout import seed_layout
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
-
-DEFAULT_MONTHLY_WIDGETS = [
-    DashboardWidget(id="spending-pace", type="spending_pace", title="Spending pace", order=0, config={}),
-    DashboardWidget(id="income-progress", type="kind_progress", title="Income", order=1, config={"kind": "income"}),
-    DashboardWidget(id="expense-progress", type="kind_progress", title="Expenses", order=2, config={"kind": "expense"}),
-    DashboardWidget(id="savings-progress", type="kind_progress", title="Savings", order=3, config={"kind": "savings"}),
-    DashboardWidget(id="cashflow-trend", type="cashflow_trend", title="Year cash-flow trend", order=4, config={}),
-    DashboardWidget(id="savings-buckets", type="savings_buckets", title="Savings buckets", order=5, config={}),
-    DashboardWidget(id="category-breakdown", type="category_breakdown", title="Categories", order=6, config={}),
-]
-# Separate append keeps parallel agents from conflicting on the shared list literal.
-DEFAULT_MONTHLY_WIDGETS.append(
-    DashboardWidget(id="true-leftover", type="true_leftover", title="True leftover", order=0, config={}),
-)
-DEFAULT_MONTHLY_WIDGETS.append(
-    DashboardWidget(id="budget-coach", type="budget_coach", title="Budget coach", order=-1, config={}),
-)
-
-DEFAULT_ANNUAL_WIDGETS = [
-    DashboardWidget(id="spending-pace-year", type="spending_pace", title="Spending pace", order=0, config={}),
-    DashboardWidget(id="year-totals", type="year_totals", title="Year totals", order=1, config={}),
-    DashboardWidget(id="month-trends", type="month_trends", title="Month-to-month trends", order=2, config={}),
-    DashboardWidget(id="over-budget-patterns", type="category_trends", title="Repeated overruns", order=3, config={}),
-    DashboardWidget(id="savings-buckets-year", type="savings_buckets", title="Savings buckets", order=4, config={}),
-    # Appended (not inserted mid-list) to reduce merge conflicts with parallel dashboard work.
-    DashboardWidget(id="category-health", type="category_health", title="Category health", order=5, config={}),
-]
-DEFAULT_ANNUAL_WIDGETS.append(
-    DashboardWidget(id="true-leftover-year", type="true_leftover", title="True leftover", order=0, config={}),
-)
-DEFAULT_ANNUAL_WIDGETS.append(
-    DashboardWidget(id="budget-coach-year", type="budget_coach", title="Budget coach", order=-1, config={}),
-)
 
 
 @router.get("/monthly/{year}/{month}", response_model=MonthlyDashboardOut)
@@ -116,20 +84,6 @@ def savings_balances(
     ]
 
 
-def _merge_default_widgets(
-    saved: list[DashboardWidget], defaults: list[DashboardWidget]
-) -> list[DashboardWidget]:
-    """Keep saved order/config; append any new default widgets the user lacks."""
-    have = {w.id for w in saved}
-    merged = list(saved)
-    next_order = max((w.order for w in saved), default=-1) + 1
-    for w in defaults:
-        if w.id not in have:
-            merged.append(w.model_copy(update={"order": next_order}))
-            next_order += 1
-    return merged
-
-
 def _parse_layout_doc(
     raw: str,
 ) -> tuple[list[DashboardWidget], list[DashboardLayoutPreset], str | None]:
@@ -166,26 +120,12 @@ def _dump_layout_doc(
     )
 
 
-def _merge_presets(
-    presets: list[DashboardLayoutPreset], defaults: list[DashboardWidget]
-) -> list[DashboardLayoutPreset]:
-    return [
-        p.model_copy(update={"widgets": _merge_default_widgets(p.widgets, defaults)})
-        for p in presets
-    ]
-
-
 @router.get("/layout/{view_mode}", response_model=DashboardLayoutOut)
 def get_layout(
     view_mode: ViewMode,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> DashboardLayoutOut:
-    defaults = (
-        DEFAULT_MONTHLY_WIDGETS
-        if view_mode == ViewMode.monthly
-        else DEFAULT_ANNUAL_WIDGETS
-    )
     row = db.scalar(
         select(DashboardLayout).where(
             DashboardLayout.user_id == user.id,
@@ -193,14 +133,12 @@ def get_layout(
         )
     )
     if row is None:
-        return DashboardLayoutOut(view_mode=view_mode, widgets=defaults)
-    widgets, presets, active_id = _parse_layout_doc(row.layout_json)
-    presets = _merge_presets(presets, defaults)
-    if active_id:
-        match = next((p for p in presets if p.id == active_id), None)
-        if match is not None:
-            widgets = list(match.widgets)
-    widgets = _merge_default_widgets(widgets, defaults)
+        widgets, presets, active_id = seed_layout(None, [], None, view_mode)
+    else:
+        saved_widgets, saved_presets, saved_active = _parse_layout_doc(row.layout_json)
+        widgets, presets, active_id = seed_layout(
+            saved_widgets, saved_presets, saved_active, view_mode
+        )
     return DashboardLayoutOut(
         view_mode=view_mode,
         widgets=widgets,

@@ -146,6 +146,7 @@ export interface CategoryProgress {
   over_budget: boolean
   funded_by_category_id?: string | null
   funded_by_category_name?: string | null
+  committed?: boolean
 }
 
 export interface SavingsBucket {
@@ -259,6 +260,97 @@ export interface ExpenseFunding {
   funded_by_category_name: string | null
 }
 
+export interface DashboardTransaction {
+  id: string
+  category_id: string
+  category_name: string
+  kind: CategoryKind
+  amount: string
+  date: string
+  note: string | null
+}
+
+export interface RecurringLoadItem {
+  schedule_id: string
+  category_id: string
+  category_name: string
+  kind: CategoryKind
+  amount: string
+  note: string | null
+  next_occurrence: string
+  occurrences_this_period: number
+  remaining_in_category: string
+  logged_this_period: string
+}
+
+export interface SpendingRunway {
+  as_of: string
+  days_in_month: number
+  days_elapsed: number
+  days_left: number
+  expense_planned: string
+  expense_actual: string
+  expense_remaining: string
+  daily_spent: string
+  daily_remaining: string
+  ahead: boolean
+  has_data: boolean
+}
+
+export interface FlexibleSplit {
+  committed_planned: string
+  committed_actual: string
+  flexible_planned: string
+  flexible_actual: string
+  funded_planned: string
+  funded_actual: string
+  leftover_planned: string
+  leftover_actual: string
+  savings_planned: string
+  savings_actual: string
+}
+
+export interface TradeoffSuggestion {
+  source_category_id: string
+  source_category_name: string
+  unused_planned: string
+  dest_category_id: string
+  dest_category_name: string
+  dest_target_amount: string | null
+  current_source_planned: string
+  current_dest_planned: string
+  suggested_source_planned: string
+  suggested_dest_planned: string
+  apply_year: number
+  apply_month: number
+  hit_before: string | null
+  hit_after: string | null
+  message: string
+}
+
+export interface CategoryMonthCell {
+  category_id: string
+  category_name: string
+  kind: CategoryKind
+  month: number
+  planned: string
+  actual: string
+}
+
+export interface SavingsHistoryPoint {
+  month: number
+  balance: string
+  contribution: string
+  withdrawal: string
+}
+
+export interface SavingsHistorySeries {
+  category_id: string
+  category_name: string
+  target_amount: string | null
+  points: SavingsHistoryPoint[]
+}
+
 export interface MonthlyDashboard {
   year: number
   month: number
@@ -271,6 +363,13 @@ export interface MonthlyDashboard {
   savings_buckets: SavingsBucket[]
   spending_pace: SpendingPace
   coach: BudgetCoach
+  top_transactions?: DashboardTransaction[]
+  recurring_load?: RecurringLoadItem[]
+  runway?: SpendingRunway | null
+  flexible_split?: FlexibleSplit | null
+  tradeoffs?: TradeoffSuggestion[]
+  last_month?: MonthlyTrendPoint | null
+  same_month_last_year?: MonthlyTrendPoint | null
 }
 
 export interface MonthlyTrendPoint {
@@ -339,6 +438,12 @@ export interface AnnualDashboard {
   savings_buckets: SavingsBucket[]
   spending_pace: SpendingPace
   coach: BudgetCoach
+  top_transactions?: DashboardTransaction[]
+  flexible_split?: FlexibleSplit | null
+  tradeoffs?: TradeoffSuggestion[]
+  category_month_cells?: CategoryMonthCell[]
+  savings_history?: SavingsHistorySeries[]
+  prior_year?: MonthlyTrendPoint | null
 }
 
 export interface DashboardWidget {

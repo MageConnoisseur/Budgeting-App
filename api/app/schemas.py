@@ -356,6 +356,105 @@ class CategoryProgress(BaseModel):
     over_budget: bool  # soft warning flag only — never blocks logging
     funded_by_category_id: Optional[UUID] = None
     funded_by_category_name: Optional[str] = None
+    committed: bool = False  # rent/mortgage-like; not first to reallocate
+
+
+class KindTotals(BaseModel):
+    planned: Decimal
+    actual: Decimal
+    remaining: Decimal
+    over_budget: bool
+
+
+class DashboardTransactionOut(BaseModel):
+    id: UUID
+    category_id: UUID
+    category_name: str
+    kind: CategoryKind
+    amount: Decimal
+    date: date
+    note: Optional[str] = None
+
+
+class RecurringLoadItem(BaseModel):
+    schedule_id: UUID
+    category_id: UUID
+    category_name: str
+    kind: CategoryKind
+    amount: Decimal
+    note: Optional[str] = None
+    next_occurrence: date
+    occurrences_this_period: int
+    remaining_in_category: Decimal
+    logged_this_period: Decimal
+
+
+class SpendingRunwayOut(BaseModel):
+    as_of: date
+    days_in_month: int
+    days_elapsed: int
+    days_left: int
+    expense_planned: Decimal
+    expense_actual: Decimal
+    expense_remaining: Decimal
+    daily_spent: Decimal
+    daily_remaining: Decimal
+    ahead: bool
+    has_data: bool
+
+
+class FlexibleSplitOut(BaseModel):
+    committed_planned: Decimal
+    committed_actual: Decimal
+    flexible_planned: Decimal
+    flexible_actual: Decimal
+    funded_planned: Decimal
+    funded_actual: Decimal
+    savings_planned: Decimal
+    savings_actual: Decimal
+    leftover_planned: Decimal
+    leftover_actual: Decimal
+
+
+class TradeoffSuggestion(BaseModel):
+    source_category_id: UUID
+    source_category_name: str
+    unused_planned: Decimal
+    dest_category_id: UUID
+    dest_category_name: str
+    dest_target_amount: Optional[Decimal] = None
+    current_source_planned: Decimal
+    current_dest_planned: Decimal
+    suggested_source_planned: Decimal
+    suggested_dest_planned: Decimal
+    apply_year: int
+    apply_month: int
+    hit_before: Optional[str] = None
+    hit_after: Optional[str] = None
+    message: str
+
+
+class CategoryMonthCell(BaseModel):
+    category_id: UUID
+    category_name: str
+    kind: CategoryKind
+    month: int
+    planned: Decimal
+    actual: Decimal
+
+
+class SavingsHistoryPoint(BaseModel):
+    month: int
+    balance: Decimal
+    contribution: Decimal
+    withdrawal: Decimal
+
+
+class SavingsHistorySeries(BaseModel):
+    category_id: UUID
+    category_name: str
+    target_amount: Optional[Decimal] = None
+    points: list[SavingsHistoryPoint] = Field(default_factory=list)
 
 
 class KindTotals(BaseModel):
@@ -490,6 +589,17 @@ class BudgetCoachOut(BaseModel):
     tips: list[CoachTip] = Field(default_factory=list)
 
 
+class MonthlyTrendPoint(BaseModel):
+    year: int
+    month: int
+    income_planned: Decimal
+    income_actual: Decimal
+    expense_planned: Decimal
+    expense_actual: Decimal
+    savings_planned: Decimal
+    savings_actual: Decimal
+
+
 class MonthlyDashboardOut(BaseModel):
     year: int
     month: int
@@ -502,17 +612,13 @@ class MonthlyDashboardOut(BaseModel):
     savings_buckets: list[SavingsBucketOut]
     spending_pace: SpendingPaceOut
     coach: BudgetCoachOut
-
-
-class MonthlyTrendPoint(BaseModel):
-    year: int
-    month: int
-    income_planned: Decimal
-    income_actual: Decimal
-    expense_planned: Decimal
-    expense_actual: Decimal
-    savings_planned: Decimal
-    savings_actual: Decimal
+    top_transactions: list[DashboardTransactionOut] = Field(default_factory=list)
+    recurring_load: list[RecurringLoadItem] = Field(default_factory=list)
+    runway: Optional[SpendingRunwayOut] = None
+    flexible_split: Optional[FlexibleSplitOut] = None
+    tradeoffs: list[TradeoffSuggestion] = Field(default_factory=list)
+    last_month: Optional[MonthlyTrendPoint] = None
+    same_month_last_year: Optional[MonthlyTrendPoint] = None
 
 
 class CategoryTrend(BaseModel):
@@ -570,6 +676,12 @@ class AnnualDashboardOut(BaseModel):
     savings_buckets: list[SavingsBucketOut]
     spending_pace: SpendingPaceOut
     coach: BudgetCoachOut
+    top_transactions: list[DashboardTransactionOut] = Field(default_factory=list)
+    flexible_split: Optional[FlexibleSplitOut] = None
+    tradeoffs: list[TradeoffSuggestion] = Field(default_factory=list)
+    category_month_cells: list[CategoryMonthCell] = Field(default_factory=list)
+    savings_history: list[SavingsHistorySeries] = Field(default_factory=list)
+    prior_year: Optional[MonthlyTrendPoint] = None
 
 
 class DashboardWidget(BaseModel):

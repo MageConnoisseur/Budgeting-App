@@ -23,6 +23,7 @@ Hosts on **Render**; database is **PostgreSQL on Neon**. Web (Vite/React on Verc
 - Savings bucket balances derived from the transaction ledger
 - Optional savings **targets** with projected hit month from balance + monthly contribution
 - Persisted dashboard widget layouts + Monthly/Annual view preferences on the user
+- Default habit views (**This month/year**, **Fix the plan**, **Savings**) merged onto existing layouts without overwriting a custom page
 
 ## Auth strategy
 

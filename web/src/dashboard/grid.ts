@@ -8,6 +8,7 @@ import {
   type GridRect,
   type WidgetDefinition,
 } from './catalog'
+import { widgetsForTheme } from './presets'
 import type { ViewMode } from '../types/api'
 
 export type { GridRect }
@@ -274,10 +275,9 @@ export function toggleWidget(
   return ensureLayout([...widgets, added], view)
 }
 
-export function resetLayout(view: ViewMode): DashboardWidget[] {
-  const fresh = catalogForView(view).map((def, i) => ({
-    ...newWidgetFromDefinition(def),
-    order: i,
-  }))
-  return ensureLayout(fresh, view)
+export function resetLayout(
+  view: ViewMode,
+  presetId?: string | null,
+): DashboardWidget[] {
+  return ensureLayout(widgetsForTheme(view, presetId), view)
 }
