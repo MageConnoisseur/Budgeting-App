@@ -86,9 +86,10 @@ test.describe('core smoke: auth → categories → budget → tracker → dashbo
 
     await page.getByRole('link', { name: 'Dashboard' }).click()
     await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Expenses', exact: true })).toBeVisible()
-    await expect(page.getByText('$400.00').first()).toBeVisible()
-    await expect(page.getByText('$12.50').first()).toBeVisible()
+    await expect(page.getByText('View: This month')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Categories' })).toBeVisible()
+    await expect(page.locator('.plan-vs-actual-table')).toContainText('$400.00')
+    await expect(page.locator('.plan-vs-actual-table')).toContainText('$12.50')
     await expect(page.getByText('Groceries').first()).toBeVisible()
   })
 })
@@ -129,22 +130,17 @@ test.describe('dashboard grid layout', () => {
 
   test('user can hide a widget and save a named view', async ({ page }) => {
     await register(page)
-    await expect(page.getByRole('heading', { name: 'Expenses', exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Categories' })).toBeVisible()
 
     await page.getByRole('button', { name: 'Customize layout' }).click()
-    await page.getByRole('checkbox', { name: /Expenses/ }).uncheck()
-    await expect(
-      page.getByRole('heading', { name: 'Expenses', exact: true }),
-    ).toHaveCount(0)
+    await page.getByRole('checkbox', { name: 'Categories Plan vs actual by category' }).uncheck()
+    await expect(page.getByRole('heading', { name: 'Categories' })).toHaveCount(0)
 
     await page.getByRole('button', { name: 'Save as view' }).click()
     await page.getByPlaceholder('Spending focus').fill('Lean month')
     await page.getByRole('button', { name: 'Save' }).click()
-    await expect(page.getByText('Saved view “Lean month”')).toBeVisible()
     await page.getByRole('button', { name: 'Done' }).click()
     await expect(page.getByText('View: Lean month')).toBeVisible()
-    await expect(
-      page.getByRole('heading', { name: 'Expenses', exact: true }),
-    ).toHaveCount(0)
+    await expect(page.getByRole('heading', { name: 'Categories' })).toHaveCount(0)
   })
 })

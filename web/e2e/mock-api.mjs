@@ -249,27 +249,107 @@ function dashboardFor(user, year, month) {
     savings_buckets: [],
     spending_pace: emptyPace(),
     coach: emptyCoach(year, month),
+    top_transactions: txs.slice(0, 8).map((t) => {
+      const cat = catById.get(t.category_id)
+      return {
+        id: t.id,
+        category_id: t.category_id,
+        category_name: cat?.name || 'Unknown',
+        kind: cat?.kind || 'expense',
+        amount: money(t.amount),
+        date: t.date,
+        note: t.note,
+      }
+    }),
+    recurring_load: [],
+    runway: {
+      as_of: `${year}-${String(month).padStart(2, '0')}-15`,
+      days_in_month: 30,
+      days_elapsed: 15,
+      days_left: 15,
+      expense_planned: expense.planned,
+      expense_actual: expense.actual,
+      expense_remaining: money(Number(expense.planned) - Number(expense.actual)),
+      daily_spent: '0.00',
+      daily_remaining: '0.00',
+      ahead: false,
+      has_data: Number(expense.planned) > 0 || Number(expense.actual) > 0,
+    },
+    flexible_split: null,
+    tradeoffs: [],
+    last_month: null,
+    same_month_last_year: null,
   }
 }
 
+function themeWidgets(catalog, visibleIds) {
+  return catalog.map((w, i) => ({
+    ...w,
+    order: i,
+    config: { ...(w.config || {}), hidden: !visibleIds.includes(w.id) },
+  }))
+}
+
 function defaultLayout(viewMode) {
-  const monthly = [
-    { id: 'budget-coach', type: 'budget_coach', title: 'Budget coach', order: -1, config: {} },
-    { id: 'spending-pace', type: 'spending_pace', title: 'Spending pace', order: 0, config: {} },
-    { id: 'income-progress', type: 'kind_progress', title: 'Income', order: 1, config: { kind: 'income' } },
-    { id: 'expense-progress', type: 'kind_progress', title: 'Expenses', order: 2, config: { kind: 'expense' } },
-    { id: 'savings-progress', type: 'kind_progress', title: 'Savings', order: 3, config: { kind: 'savings' } },
-    { id: 'category-breakdown', type: 'category_breakdown', title: 'Categories', order: 6, config: {} },
+  const monthlyCatalog = [
+    { id: 'budget-coach', type: 'budget_coach', title: 'Budget coach', config: {} },
+    { id: 'true-leftover', type: 'true_leftover', title: 'True leftover', config: {} },
+    { id: 'spending-pace', type: 'spending_pace', title: 'Spending pace', config: {} },
+    { id: 'income-progress', type: 'kind_progress', title: 'Income', config: { kind: 'income' } },
+    { id: 'expense-progress', type: 'kind_progress', title: 'Expenses', config: { kind: 'expense' } },
+    { id: 'savings-progress', type: 'kind_progress', title: 'Savings', config: { kind: 'savings' } },
+    { id: 'category-breakdown', type: 'category_breakdown', title: 'Categories', config: {} },
+    { id: 'allocation-snapshot', type: 'allocation_snapshot', title: 'This month at a glance', config: {} },
+    { id: 'allocation-mix', type: 'allocation_mix', title: 'Planned vs actual mix', config: {} },
+    { id: 'leftover-waterfall', type: 'leftover_waterfall', title: 'Leftover waterfall', config: {} },
+    { id: 'spending-runway', type: 'spending_runway', title: 'Month runway', config: {} },
+    { id: 'largest-movers', type: 'largest_movers', title: 'Largest movers', config: {} },
+    { id: 'recurring-due', type: 'recurring_due', title: 'Recurring vs remaining', config: {} },
   ]
-  const annual = [
-    { id: 'year-totals', type: 'year_totals', title: 'Year totals', order: 1, config: {} },
-    { id: 'month-trends', type: 'month_trends', title: 'Month-to-month trends', order: 2, config: {} },
+  const thisMonth = [
+    'allocation-snapshot',
+    'budget-coach',
+    'leftover-waterfall',
+    'allocation-mix',
+    'spending-runway',
+    'largest-movers',
+    'recurring-due',
+    'category-breakdown',
+    'spending-pace',
+  ]
+  const annualCatalog = [
+    { id: 'year-totals', type: 'year_totals', title: 'Year totals', config: {} },
+    { id: 'month-trends', type: 'month_trends', title: 'Month-to-month trends', config: {} },
+    { id: 'allocation-snapshot-year', type: 'allocation_snapshot', title: 'This year at a glance', config: {} },
+  ]
+  if (viewMode === 'annual') {
+    const widgets = themeWidgets(annualCatalog, ['allocation-snapshot-year', 'year-totals', 'month-trends'])
+    return {
+      view_mode: viewMode,
+      widgets,
+      presets: [{ id: 'setaside-this-year', name: 'This year', widgets }],
+      active_preset_id: 'setaside-this-year',
+    }
+  }
+  const widgets = themeWidgets(monthlyCatalog, thisMonth)
+  const presets = [
+    { id: 'setaside-this-month', name: 'This month', widgets },
+    {
+      id: 'setaside-fix-the-plan',
+      name: 'Fix the plan',
+      widgets: themeWidgets(monthlyCatalog, ['category-breakdown', 'budget-coach', 'expense-progress']),
+    },
+    {
+      id: 'setaside-savings',
+      name: 'Savings',
+      widgets: themeWidgets(monthlyCatalog, ['true-leftover', 'budget-coach', 'savings-progress']),
+    },
   ]
   return {
     view_mode: viewMode,
-    widgets: viewMode === 'annual' ? annual : monthly,
-    presets: [],
-    active_preset_id: null,
+    widgets,
+    presets,
+    active_preset_id: 'setaside-this-month',
   }
 }
 
@@ -595,6 +675,12 @@ async function handle(req, res) {
       savings_buckets: [],
       spending_pace: emptyPace(),
       coach: emptyCoach(year, 1),
+      top_transactions: monthly.top_transactions || [],
+      flexible_split: null,
+      tradeoffs: [],
+      category_month_cells: [],
+      savings_history: [],
+      prior_year: null,
     })
     return
   }

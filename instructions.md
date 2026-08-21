@@ -155,13 +155,14 @@ Widgets should respect the active view (month-scoped vs year-scoped), not only d
 
 Shipped / expected direction:
 
-- **Customizable widgets / layout** the user can rearrange (deepen beyond simple reorder: hide/show, clearer controls as needed)
+- **Customizable widgets / layout** the user can rearrange, hide/show, and save as named views
+- **Three default habit views** (Monthly and Annual each): **This month/year** (pace leftover mix), **Fix the plan** (unused plan, overruns, heatmap, reallocate), **Savings** (trajectory, fill vs use, targets). Existing users receive these views on next load without losing a custom layout (kept as **My layout**)
 - Progress vs plan for income, expenses, and savings
 - **Month-to-month trends** and readable plan-vs-actual visuals (including overlapping bars / major vs smaller bands where useful)
 - **Spending pace:** rolling ~30-day actuals vs average daily income capacity (soft overspending signal)
 - **Plan coaching:** after repeated expense/savings overruns, soft suggestions to raise plans (median overrun) or tip seasonal clusters; one-click apply via annual budget cell; dismissals may be local-only
 - **Budget coach:** deterministic leftover / shortfall / savings-target recommendations (monthly and annual). Shortfall tips skip rent/mortgage-like fixed costs. Income under-plan is overrun only after paydays (or the month) are due. Optional one-click apply; dedicated Coach page plus a compact Dashboard widget. Not an LLM — dollar amounts come from the user’s plan.
-- Category drill-downs and filters as the widget set grows
+- Allocation mix, leftover waterfall, month runway, largest movers, recurring vs remaining, unused plan, flexible vs committed, category drill-down, savings trajectory, plan heatmap / drift, optional reallocate-to-target apply
 
 Over-budget behavior: **soft warnings only**. Emphasize patterns across months so users can raise allocations where they repeatedly overrun.
 
@@ -264,7 +265,7 @@ Prioritize (order is guidance, not a rigid checklist):
 
 1. **Desktop UX polish** — Budget monthly + annual editing fluency, Tracker findability/speed, Dashboard clarity and customization depth
 2. **Categories & planning power** — sort order UI, archive/restore clarity, template/copy flows on both monthly and annual where useful
-3. **Dashboard customization** — hide/show widgets, stronger layout controls, better annual vs monthly widget behavior
+3. **Dashboard customization** — hide/show, named views, and three default habit layouts (This month/year, Fix the plan, Savings)
 4. **Account reliability** — password reset/recovery (**shipped**: forgot/reset via Resend, change/set password, signup recovery-email reminder), OAuth/prod auth hardening, safer migrations (no sharp legacy rebuild surprises on real data)
 5. **Quality bar** — API tests kept green; add web smoke/E2E coverage for core flows; performance as data grows
 6. **Visual coherence** — coherent desktop visual system under the **Setaside** brand
@@ -369,7 +370,7 @@ All user-owned rows must be scoped by authenticated user.
 | Plan coaching | After 3+ expense/savings overruns in a year: suggest raising the apply-month plan by the median overrun, or tip “looks seasonal” for a short contiguous cluster; one-click apply via annual budget cell; dismissals local-only |
 | Budget coach | Deterministic leftover coach (Phase 1.x): unassigned plan leftover → fund a savings bucket (prefer unmet targets); plan shortfall → optional trim of **flexible** spend (skip rent/mortgage/dominant housing-sized lines); income under-plan is only flagged after paydays or the month are due; plus existing raise/seasonal tips and spending-pace warnings. Dedicated **Coach** page + compact Dashboard widget. Apply is optional; dismissals local-only. |
 | AI / LLM coach | **Later (Phase 3+), not now.** If added, it must wrap the deterministic engine (explain tips, answer “why”) and must not invent dollar amounts or bypass soft-advisory rules. No API-key LLM in the current desktop-depth phase. |
-| Dashboard | Robust, customizable widgets; insight for future adjustments |
+| Dashboard | Robust, customizable widgets; three default habit views (This month/year, Fix the plan, Savings); existing users gain those views without losing My layout |
 | Dashboard spending pace | Rolling ~30-day actuals vs average daily income capacity (lookback ≤ ~6 months, clamped to first tracking day) — soft overspending signal that avoids mid-month paycheck skew |
 | Budget / Dashboard views | Monthly and Annual modes; easy swap; annual budget editing allowed; preferences stored on the user |
 | Tracker findability | Search, sort, and filters required |
@@ -387,7 +388,6 @@ All user-owned rows must be scoped by authenticated user.
 
 ## 11. Open items (do not block desktop depth)
 
-- Exact dashboard widget set evolution and richer layout persistence (hide/show, denser controls)
 - Whether plan-suggestion and coach-tip dismissals stay local-only or move server-side
 - Whether a future LLM layer is used only for copy, or also for ranking which deterministic tips to show
 - Monorepo tooling (pnpm/npm workspaces, uv, etc.) — optional; not required to keep shipping

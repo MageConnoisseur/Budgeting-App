@@ -12,6 +12,24 @@ import {
 } from '../components/charts/TrendCharts'
 import { CategoryHealthWidget } from '../components/CategoryHealthWidget'
 import { BudgetCoachWidget } from '../components/BudgetCoachWidget'
+import {
+  AllocationMixWidget,
+  AllocationSnapshotWidget,
+  BucketFlowWidget,
+  CategoryDrilldownWidget,
+  FlexibleSplitWidget,
+  IncomeReliabilityWidget,
+  LargestMoversWidget,
+  LeftoverWaterfallWidget,
+  MonthCompareWidget,
+  PlanDriftWidget,
+  PlanHeatmapWidget,
+  RecurringDueWidget,
+  SavingsTrajectoryWidget,
+  SpendingRunwayWidget,
+  TradeoffWidget,
+  UnderusedPlanWidget,
+} from '../components/dashboard/InsightWidgets'
 import { DashboardCustomizeBar } from '../components/DashboardCustomizeBar'
 import { DashboardGrid } from '../components/DashboardGrid'
 import { PeriodNavigator } from '../components/PeriodNavigator'
@@ -56,6 +74,7 @@ import type {
   PlanSuggestion,
   SavingsBucket,
   SpendingPace,
+  TradeoffSuggestion,
   ViewMode,
 } from '../types/api'
 
@@ -460,6 +479,7 @@ export function DashboardPage() {
   )
   const [applyingCoachId, setApplyingCoachId] = useState<string | null>(null)
   const [coachStatus, setCoachStatus] = useState<string | null>(null)
+  const [applyingTradeoffId, setApplyingTradeoffId] = useState<string | null>(null)
   const saveTimer = useRef<number | null>(null)
   const widgetsRef = useRef(widgets)
   const presetsRef = useRef(presets)
@@ -612,7 +632,7 @@ export function DashboardPage() {
   }
 
   function onResetLayout() {
-    commitLayout(resetLayout(view), { immediate: true })
+    commitLayout(resetLayout(view, activePresetRef.current), { immediate: true })
   }
 
   function onSelectPreset(id: string) {
@@ -743,6 +763,36 @@ export function DashboardPage() {
     }
   }
 
+  async function onAcceptTradeoff(tip: TradeoffSuggestion) {
+    setApplyingTradeoffId(tip.source_category_id)
+    setCoachStatus(null)
+    try {
+      await budgetsApi.upsertAnnualCell({
+        year: tip.apply_year,
+        month: tip.apply_month,
+        category_id: tip.source_category_id,
+        planned_amount: tip.suggested_source_planned,
+      })
+      await budgetsApi.upsertAnnualCell({
+        year: tip.apply_year,
+        month: tip.apply_month,
+        category_id: tip.dest_category_id,
+        planned_amount: tip.suggested_dest_planned,
+      })
+      const when = `${MONTH_SHORT[tip.apply_month - 1]} ${tip.apply_year}`
+      setCoachStatus(
+        `Moved ${formatUsd(tip.unused_planned)} from ${tip.source_category_name} to ${tip.dest_category_name} for ${when}.`,
+      )
+      await load()
+    } catch (e) {
+      setCoachStatus(
+        e instanceof ApiError ? e.detail : 'Could not apply that reallocation',
+      )
+    } finally {
+      setApplyingTradeoffId(null)
+    }
+  }
+
   const monthlyExpenseBars = useMemo(() => {
     if (!monthly) return []
     return monthly.categories
@@ -810,7 +860,94 @@ export function DashboardPage() {
       }
     }
 
+    const dash = view === 'monthly' ? monthly : annual
+    if (dash && w.type === 'allocation_snapshot') {
+      return (
+        <AllocationSnapshotWidget
+          data={dash}
+          title={w.title}
+          scopeLabel={view === 'monthly' ? 'this month' : 'this year'}
+        />
+      )
+    }
+    if (dash && w.type === 'leftover_waterfall') {
+      return (
+        <LeftoverWaterfallWidget leftover={dash.leftover_actual} title={w.title} />
+      )
+    }
+    if (dash && w.type === 'flexible_split') {
+      return <FlexibleSplitWidget split={dash.flexible_split} title={w.title} />
+    }
+    if (dash && w.type === 'tradeoff') {
+      return (
+        <TradeoffWidget
+          tips={dash.tradeoffs}
+          title={w.title}
+          applying={applyingTradeoffId}
+          onApply={(t) => void onAcceptTradeoff(t)}
+        />
+      )
+    }
+    if (dash && w.type === 'bucket_flow') {
+      return (
+        <BucketFlowWidget buckets={dash.savings_buckets} title={w.title} />
+      )
+    }
+    if (w.type === 'savings_trajectory') {
+      const history = annual?.savings_history ?? trendYear?.savings_history
+      return <SavingsTrajectoryWidget series={history} title={w.title} />
+    }
+
     if (view === 'monthly' && monthly) {
+      if (w.type === 'allocation_mix') {
+        return (
+          <AllocationMixWidget categories={monthly.categories} title={w.title} />
+        )
+      }
+      if (w.type === 'spending_runway') {
+        return <SpendingRunwayWidget runway={monthly.runway} title={w.title} />
+      }
+      if (w.type === 'largest_movers') {
+        return (
+          <LargestMoversWidget items={monthly.top_transactions} title={w.title} />
+        )
+      }
+      if (w.type === 'recurring_due') {
+        return <RecurringDueWidget items={monthly.recurring_load} title={w.title} />
+      }
+      if (w.type === 'month_compare') {
+        return (
+          <MonthCompareWidget
+            current={{
+              income: Number(monthly.income.actual),
+              expense: Number(monthly.expense.actual),
+              savings: Number(monthly.savings.actual),
+            }}
+            lastMonth={monthly.last_month}
+            lastYear={monthly.same_month_last_year}
+            title={w.title}
+          />
+        )
+      }
+      if (w.type === 'category_drilldown') {
+        return (
+          <CategoryDrilldownWidget
+            categories={monthly.categories}
+            cells={trendYear?.category_month_cells}
+            movers={monthly.top_transactions}
+            title={w.title}
+          />
+        )
+      }
+      if (w.type === 'underused_plan') {
+        return (
+          <UnderusedPlanWidget
+            categories={monthly.categories}
+            trends={trendYear?.category_trends}
+            title={w.title}
+          />
+        )
+      }
       if (w.type === 'kind_progress') {
         const kind = (w.config.kind as string) || 'expense'
         const totals =
@@ -1035,6 +1172,15 @@ export function DashboardPage() {
     }
 
     if (view === 'annual' && annual) {
+      const yearCategories = annual.category_trends.map((t) => ({
+        category_id: t.category_id,
+        category_name: t.category_name,
+        kind: t.kind,
+        planned: t.total_planned,
+        actual: t.total_actual,
+        remaining: (Number(t.total_planned) - Number(t.total_actual)).toFixed(2),
+        over_budget: t.months_over_budget > 0,
+      }))
       if (w.type === 'year_totals') {
         return (
           <div className="widget-grid three">
@@ -1042,6 +1188,44 @@ export function DashboardPage() {
             <KindCard title="Expenses" totals={annual.expense} kind="expense" />
             <KindCard title="Savings" totals={annual.savings} kind="savings" />
           </div>
+        )
+      }
+      if (w.type === 'allocation_mix') {
+        return <AllocationMixWidget categories={yearCategories} title={w.title} />
+      }
+      if (w.type === 'largest_movers') {
+        return (
+          <LargestMoversWidget items={annual.top_transactions} title={w.title} />
+        )
+      }
+      if (w.type === 'category_drilldown') {
+        return (
+          <CategoryDrilldownWidget
+            categories={yearCategories}
+            cells={annual.category_month_cells}
+            movers={annual.top_transactions}
+            title={w.title}
+          />
+        )
+      }
+      if (w.type === 'underused_plan') {
+        return (
+          <UnderusedPlanWidget trends={annual.category_trends} title={w.title} />
+        )
+      }
+      if (w.type === 'plan_heatmap') {
+        return <PlanHeatmapWidget cells={annual.category_month_cells} title={w.title} />
+      }
+      if (w.type === 'plan_drift') {
+        return <PlanDriftWidget cells={annual.category_month_cells} title={w.title} />
+      }
+      if (w.type === 'income_reliability') {
+        return (
+          <IncomeReliabilityWidget
+            months={annual.months}
+            prior={annual.prior_year}
+            title={w.title}
+          />
         )
       }
       if (w.type === 'month_trends') {
@@ -1224,10 +1408,9 @@ export function DashboardPage() {
         <div>
           <h1>Dashboard</h1>
           <p className="muted">
-            Plan vs actual, plus a rolling spending-pace check against average
-            income. Customize the layout to resize widgets, place them side by
-            side, or save different views. Soft warnings only — overspending is
-            never blocked.
+            Plan vs actual, leftover, and habit views you can switch. Customize
+            to resize widgets or save your own layout. Soft warnings only —
+            overspending is never blocked.
           </p>
         </div>
         <ViewModeToggle value={view} onChange={(m) => void onViewChange(m)} />

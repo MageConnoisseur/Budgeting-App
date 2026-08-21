@@ -211,6 +211,31 @@ def _is_discretionary(name: str) -> bool:
     return bool(_DISCRETIONARY_NAME_RE.search(name))
 
 
+def expense_is_committed(
+    name: str,
+    planned: Decimal,
+    *,
+    expense_plans: list[Decimal],
+    funded: bool = False,
+) -> bool:
+    """Rent/mortgage-like or dominant housing-sized lines — not first to trim.
+
+    Bucket-funded expenses are excluded (they are not paycheck-flexible).
+    """
+    if funded:
+        return False
+    if _is_named_fixed(name):
+        return True
+    if _is_discretionary(name):
+        return False
+    total = sum(expense_plans, ZERO)
+    return (
+        len(expense_plans) >= 2
+        and total > ZERO
+        and planned >= total * _DOMINANT_SHARE
+    )
+
+
 def _pick_shortfall_line(
     lines: list[CoachLine],
     *,

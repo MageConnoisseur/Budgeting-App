@@ -535,3 +535,237 @@ export function bandByMagnitude<T extends { planned: number; actual: number }>(
 export function monthLabels(count = 12): string[] {
   return MONTH_SHORT.slice(0, count)
 }
+
+export type ShareSlice = {
+  id: string
+  label: string
+  value: number
+  color: string
+}
+
+/** 100% stacked bar for allocation mix. */
+export function ShareBarChart({
+  slices,
+  label,
+}: {
+  slices: ShareSlice[]
+  label: string
+}) {
+  const total = slices.reduce((s, x) => s + Math.max(0, x.value), 0)
+  const width = 640
+  const height = 48
+  const pad = { left: 0, right: 0, top: 8, bottom: 8 }
+  let x = pad.left
+  const innerW = width - pad.left - pad.right
+  return (
+    <div className="chart-block">
+      <p className="muted compact">{label}</p>
+      <svg
+        className="trend-chart"
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label={label}
+      >
+        <rect
+          x={0}
+          y={pad.top}
+          width={width}
+          height={height - pad.top - pad.bottom}
+          rx={6}
+          fill="#dfe8e1"
+        />
+        {slices.map((slice) => {
+          const w =
+            total <= 0 ? 0 : (Math.max(0, slice.value) / total) * innerW
+          const rect = (
+            <rect
+              key={slice.id}
+              x={x}
+              y={pad.top}
+              width={Math.max(w, 0)}
+              height={height - pad.top - pad.bottom}
+              fill={slice.color}
+            >
+              <title>
+                {slice.label}: {formatUsd(slice.value)} (
+                {total > 0 ? Math.round((slice.value / total) * 100) : 0}%)
+              </title>
+            </rect>
+          )
+          x += w
+          return rect
+        })}
+      </svg>
+      <ul className="chart-legend wrap">
+        {slices.map((s) => (
+          <li key={s.id}>
+            <span className="swatch" style={{ background: s.color }} />
+            {s.label}{' '}
+            <span className="muted">
+              {total > 0 ? Math.round((s.value / total) * 100) : 0}%
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+export type WaterfallStep = {
+  key: string
+  label: string
+  value: number
+  color: string
+  isTotal?: boolean
+}
+
+/** Running-total bars: income minus spend minus savings = leftover. */
+export function WaterfallChart({ steps }: { steps: WaterfallStep[] }) {
+  const width = 640
+  const height = 200
+  const pad = { top: 16, right: 16, bottom: 36, left: 48 }
+  const innerW = width - pad.left - pad.right
+  const innerH = height - pad.top - pad.bottom
+  let running = 0
+  const bars = steps.map((step) => {
+    if (step.isTotal) {
+      const start = 0
+      const end = step.value
+      return { ...step, start, end }
+    }
+    const start = running
+    running += step.value
+    return { ...step, start, end: running }
+  })
+  const values = bars.flatMap((b) => [b.start, b.end])
+  const { min: minY, max: maxY } = niceExtent(values)
+  const spanY = maxY - minY || 1
+  const yAt = (v: number) => pad.top + innerH - ((v - minY) / spanY) * innerH
+  const barW = Math.max(18, innerW / (steps.length * 1.6))
+  return (
+    <div className="chart-block">
+      <svg
+        className="trend-chart"
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label="Leftover waterfall"
+      >
+        {bars.map((bar, i) => {
+          const x =
+            pad.left +
+            (i + 0.5) * (innerW / Math.max(steps.length, 1)) -
+            barW / 2
+          const top = yAt(Math.max(bar.start, bar.end))
+          const bot = yAt(Math.min(bar.start, bar.end))
+          return (
+            <g key={bar.key}>
+              <rect
+                x={x}
+                y={top}
+                width={barW}
+                height={Math.max(2, bot - top)}
+                rx={3}
+                fill={bar.color}
+              >
+                <title>
+                  {bar.label}: {formatUsd(bar.value)}
+                </title>
+              </rect>
+              <text
+                x={x + barW / 2}
+                y={height - 12}
+                className="chart-axis"
+                textAnchor="middle"
+              >
+                {bar.label}
+              </text>
+            </g>
+          )
+        })}
+      </svg>
+    </div>
+  )
+}
+
+export type HeatmapRow = {
+  id: string
+  label: string
+  values: number[]
+}
+
+function heatColor(ratio: number): string {
+  if (!Number.isFinite(ratio) || ratio < 0) return '#e7eee8'
+  if (ratio <= 0.85) return '#b7d4c4'
+  if (ratio <= 1.05) return '#e6d9a8'
+  if (ratio <= 1.25) return '#e0b48a'
+  return '#c9785c'
+}
+
+/** Category × month cells colored by actual ÷ plan. */
+export function HeatmapChart({
+  rows,
+  labels = MONTH_SHORT,
+}: {
+  rows: HeatmapRow[]
+  labels?: string[]
+}) {
+  const cols = 12
+  const rowH = 22
+  const pad = { top: 24, right: 12, bottom: 8, left: 120 }
+  const width = 720
+  const height = pad.top + pad.bottom + Math.max(1, rows.length) * rowH
+  const innerW = width - pad.left - pad.right
+  const cellW = innerW / cols
+  return (
+    <div className="chart-block heatmap-scroll">
+      <svg
+        className="trend-chart"
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label="Plan versus actual heatmap"
+      >
+        {labels.map((label, i) => (
+          <text
+            key={label}
+            x={pad.left + i * cellW + cellW / 2}
+            y={16}
+            className="chart-axis"
+            textAnchor="middle"
+          >
+            {label}
+          </text>
+        ))}
+        {rows.map((row, r) => (
+          <g key={row.id}>
+            <text
+              x={pad.left - 8}
+              y={pad.top + r * rowH + 14}
+              className="chart-axis"
+              textAnchor="end"
+            >
+              {row.label.length > 16 ? `${row.label.slice(0, 15)}…` : row.label}
+            </text>
+            {row.values.map((ratio, c) => (
+              <rect
+                key={`${row.id}-${c}`}
+                x={pad.left + c * cellW + 1}
+                y={pad.top + r * rowH + 2}
+                width={cellW - 2}
+                height={rowH - 4}
+                rx={3}
+                fill={heatColor(ratio)}
+              >
+                <title>
+                  {row.label} {labels[c]}:{' '}
+                  {Number.isFinite(ratio)
+                    ? `${Math.round(ratio * 100)}% of plan`
+                    : 'no plan'}
+                </title>
+              </rect>
+            ))}
+          </g>
+        ))}
+      </svg>
+    </div>
+  )
+}

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { catalogForView, type WidgetDefinition } from '../dashboard/catalog'
 import { isHidden } from '../dashboard/grid'
+import { isSystemPreset } from '../dashboard/presets'
 import type {
   DashboardLayoutPreset,
   DashboardWidget,
@@ -109,7 +110,8 @@ export function DashboardCustomizeBar({
           <section className="dashboard-customize-section" aria-label="Saved views">
             <h2>Views</h2>
             <p className="muted compact">
-              Save different pages and switch between them.
+              This month / Fix the plan / Savings are built-in. Save your own
+              layouts too.
             </p>
             {presets.length > 0 ? (
               <label className="dashboard-view-select">
@@ -179,7 +181,7 @@ export function DashboardCustomizeBar({
                     Rename
                   </button>
                 )}
-                {active && presets.length > 1 && (
+                {active && !isSystemPreset(active.id) && presets.length > 1 && (
                   <button type="button" className="btn ghost tiny" onClick={onDelete}>
                     Delete view
                   </button>
