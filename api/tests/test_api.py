@@ -97,6 +97,20 @@ def test_cors_allows_vercel_preview_origin() -> None:
     assert register.headers.get("access-control-allow-origin") == origin
 
 
+def test_cors_allows_expo_web_origin() -> None:
+    origin = "http://localhost:8081"
+    preflight = client.options(
+        "/api/auth/login",
+        headers={
+            "Origin": origin,
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+    assert preflight.status_code == 200
+    assert preflight.headers.get("access-control-allow-origin") == origin
+
+
 def test_register_login_and_me(auth_headers: dict[str, str]) -> None:
     r = client.get("/api/auth/me", headers=auth_headers)
     assert r.status_code == 200

@@ -17,6 +17,7 @@ app = FastAPI(
     description=(
         "Phase 1 REST API for personal budgeting: categories, monthly/annual plans, "
         "transactions (search/sort/filter), and dashboard insights. "
+        "Shared by the desktop web app and the thin Expo expense logger. "
         "USD only. Over-budget is a soft warning — never blocked."
     ),
     version="0.1.0",
@@ -27,7 +28,11 @@ app.add_middleware(
     allow_origins=settings.cors_origin_list,
     # Always allow Vercel preview/production hosts so registration from
     # *.vercel.app works even if CORS_ORIGINS was left at localhost defaults.
-    allow_origin_regex=r"https://[\w.-]+\.vercel\.app",
+    # Local Expo web (default Metro :8081) is allowed the same way.
+    allow_origin_regex=(
+        r"https://[\w.-]+\.vercel\.app"
+        r"|http://(localhost|127\.0\.0\.1):(8081|19006|19000)"
+    ),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -14,10 +14,10 @@ Pass this file to new coding agents so they share the same product, architecture
 |-------|------|--------|
 | **Phase 1** | MVP (web + API) | **Done** |
 | **Phase 1.x / v2** | **Desktop web depth** | **Active — prefer this scope** |
-| **Phase 2** | Mobile (Expo) | **Deferred** until desktop web feels robust |
+| **Phase 2** | Mobile (Expo) | **Thin expense logger** in `mobile/` — do not grow it unless asked |
 | **Phase 3+** | Growth (CSV, households, multi-currency, …) | Do not build until explicitly asked. CSV/bank import **design** is in §12 |
 
-**Do not start Expo / `mobile/` or Phase 3+ work unless the task explicitly asks.** When uncertain, invest in desktop Budget, Tracker, Dashboard, Categories, and auth/account reliability.
+**Keep `mobile/` thin** (sign in + log expenses). Do not add Budget, Dashboard, Categories, or income/savings logging to the phone app unless the task explicitly asks. Phase 3+ still needs an explicit ask. When uncertain, invest in desktop Budget, Tracker, Dashboard, Categories, and auth/account reliability.
 
 ---
 
@@ -29,7 +29,7 @@ A full-stack **personal budgeting app** with:
 2. **Expense / transaction tracker** — log real money movement against those plan categories, with strong **search/sort**
 3. **Dashboard** — analyze plan vs actual (monthly or annual), spot trends, and refine future budgets
 
-**Clients:** The **desktop web app is the product right now** (planning + analysis + full tracking). A phone app may come later for on-the-go logging. All clients use the **same API and database**.
+**Clients:** The **desktop web app is the product** (planning + analysis + full tracking). `mobile/` is a thin Expo client for **on-the-go expense logging** against the same API. New product features go on web, not both clients. All clients use the **same API and database**.
 
 **Not in scope until asked:** bank sync, household sharing, multi-currency, hard spending locks, native mobile, CSV/bank import. Intended import design (inbox, dedup, categorization, cost) is in **§12** — do not build it unless explicitly asked.
 
@@ -42,7 +42,7 @@ A full-stack **personal budgeting app** with:
 - **Do not force re-entering everything.** New months are seeded from the previous plan; users edit only what changed.
 - **Going over budget is allowed.** Soft visual warnings only — never block logging. Trends should make overspending obvious over time.
 - **Savings are buckets with balances**, not just another expense line.
-- **Desktop web first.** Optimize for a dense, reliable, keyboard-friendly desktop experience. Responsive layouts are fine; do not sacrifice desktop power for a mobile-first redesign.
+- **Desktop web first.** Optimize for a dense, reliable, keyboard-friendly desktop experience. Responsive layouts are fine; do not sacrifice desktop power for a mobile-first redesign. The phone app stays a small expense logger so web can keep changing without a matching mobile rewrite.
 - **Monthly and annual views are first-class** on Budget and Dashboard — users can switch preference easily and edit in either mode.
 - **Tracker must be easy to search and sort** so users can confirm whether something was already logged.
 - **Ship depth before breadth.** Prefer making existing surfaces excellent over adding new product areas.
@@ -192,16 +192,16 @@ Do not build multi-user sharing yet, but avoid hard-coding assumptions that make
 | Database | **PostgreSQL** | **Neon** |
 | API | **FastAPI (Python)** | **Render** |
 | Web client | **React** (**Vite + React SPA**) | **Vercel** |
-| Mobile (later) | **Expo (React Native)**, Android first | App stores / EAS later |
+| Mobile | **Expo (React Native)**, Android first — expense logging only | Expo Go now; App stores / EAS later |
 
-**Single source of truth:** Neon via FastAPI. Web (and later mobile) are clients only — no separate client database.
+**Single source of truth:** Neon via FastAPI. Web and mobile are clients only — no separate client database.
 
 ### 5.2 Why this shape
 
 - Owner is most familiar with **React + FastAPI + Postgres**.
 - API on Render keeps Python backend independent of the Vercel frontend.
 - Vite SPA on Vercel is a natural fit when the API is external.
-- Expo remains the planned mobile approach **after** desktop web is robust; shared API keeps one source of truth.
+- Expo is a **thin logging client**; shared API keeps one source of truth so web can keep adding planning/analysis without a matching phone rewrite.
 
 ### 5.3 Repo layout
 
@@ -211,7 +211,7 @@ Do not build multi-user sharing yet, but avoid hard-coding assumptions that make
   AGENTS.md                # points coding agents here
   api/                     # FastAPI → Render
   web/                     # React (Vite) → Vercel (Root Directory = web)
-  mobile/                  # Expo → deferred (do not scaffold unless asked)
+  mobile/                  # Expo expense logger (thin; do not grow unless asked)
   packages/                # optional shared types/utils later
 ```
 
@@ -223,7 +223,7 @@ Keep **api / web / mobile** separation clear. Prefer top-level `web/` over neste
 
 - REST (OpenAPI-documented HTTP) from FastAPI
 - Auth-protected routes for user data
-- CORS configured for the Vercel web origin (and later the mobile app)
+- CORS configured for the Vercel web origin (and local Expo web). Native Android/iOS do not use CORS.
 - Migrations for Postgres schema (Alembic) — do not rely on ad-hoc manual schema edits for lasting changes
 - Environment variables for `DATABASE_URL`, secrets, allowed origins — never commit secrets
 
@@ -250,7 +250,7 @@ Shipped on `main`:
 
 Out of scope for Phase 1 (still out of scope unless asked):
 
-- Native mobile app
+- Native mobile app (a thin Expo expense logger now lives in `mobile/`)
 - CSV / bank import
 - Multi-currency
 - Household sharing
@@ -272,16 +272,18 @@ Prioritize (order is guidance, not a rigid checklist):
 
 Coach depth that stays **rule-based** (clearer copy, more apply actions, dismissal persistence) is in-scope. A conversational LLM coach is **not** the active goal.
 
-**Explicitly not the active goal:** scaffolding Expo, App Store work, or Phase 3 growth features.
+**Explicitly not the active goal:** growing the phone app, App Store / EAS work, or Phase 3 growth features.
 
-### Phase 2 — Mobile (DEFERRED)
+### Phase 2 — Mobile (thin expense logger)
 
-Only after desktop web feels robust:
+Shipped as a **small Expo client** in `mobile/` so someone can log spend away from the desk. It is not a second product.
 
-- Expo Android app against the same API
-- Optimize for **quick transaction entry** on the go
-- Budget/dashboard can be thinner than web at first
-- iOS via EAS when ready
+- Same FastAPI + JWT account as web
+- Sign in (username/email + password). No registration, OAuth, or password reset in the app — those stay on the website
+- Log **expenses** only (amount, category, date, optional note, paid-from withdrawal when the month’s plan has one)
+- Recent expense list with search, edit, and delete
+- **Do not add** Budget, Dashboard, Categories, Coach, income, or savings logging unless explicitly asked
+- Android / Expo Go first; iOS via EAS when ready
 
 ### Phase 3+ — Growth (do not build until asked)
 
@@ -306,10 +308,12 @@ Only after desktop web feels robust:
 - Coach: first-class desktop page for plan-balance advice; compact widget on Dashboard. Stay advisory; do not add a chat UI unless Phase 3+ LLM work is explicitly requested.
 - Keyboard support and accessibility basics matter on desktop (labels, focus, contrast).
 
-### Mobile (when eventually built)
+### Mobile (`mobile/` — expense logger only)
 
-- Fast path: open app → log transaction → done.
-- Same categories and months as web; never fork business rules client-side.
+- Fast path: open app → sign in → amount + category → Log expense.
+- Same expense categories and paid-from rules as web; never fork business rules client-side.
+- If a category does not exist yet, tell the user to create it on the website.
+- Keep this client small. Feature work belongs on `web/` unless it is required to log an expense in the moment.
 
 ### Design
 
@@ -341,7 +345,7 @@ All user-owned rows must be scoped by authenticated user.
 ## 9. Rules for coding agents
 
 1. **Read this file first** before changing product behavior.
-2. **Prefer Phase 1.x / v2 desktop web depth.** Do not implement Phase 2 (mobile) or Phase 3+ features unless the task explicitly asks.
+2. **Prefer Phase 1.x / v2 desktop web depth.** `mobile/` is a thin expense logger — do not add planning/analysis surfaces there unless the task explicitly asks. Do not implement Phase 3+ features unless asked.
 3. **Keep one API contract** for all clients; avoid embedding business logic only in the web app.
 4. **Preserve copy-forward semantics** when touching budget months.
 5. **Budget and Dashboard must support Monthly and Annual views** with easy switching; annual budget view remains editable.
@@ -378,7 +382,7 @@ All user-owned rows must be scoped by authenticated user.
 | Auth later / desktop depth | Password reset/recovery **shipped** (Resend forgot-password email, change/set password). Email verification is not required to sign in |
 | Users | Individual accounts; households later |
 | Currency | USD now; multi-currency later |
-| Mobile | **Deferred** Expo Android until desktop web is robust; shared API/DB |
+| Mobile | Thin Expo expense logger (`mobile/`); planning stays on web; shared API/DB |
 | Schema | Alembic under `api/` is source of truth (not a separate `database/` SQL apply tree) |
 | Hosting | Neon (DB) + Render (API) + Vercel (web) |
 | Stack | React (Vite) web, FastAPI, PostgreSQL |
