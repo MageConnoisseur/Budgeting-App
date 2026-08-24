@@ -22,8 +22,12 @@ export function LoginScreen() {
   const [submitting, setSubmitting] = useState(false)
 
   async function onSubmit() {
-    if (!username.trim() || password.length < 8) {
-      setError('Enter your username or email and password.')
+    if (!username.trim()) {
+      setError('Enter your username or email.')
+      return
+    }
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters.')
       return
     }
     setSubmitting(true)

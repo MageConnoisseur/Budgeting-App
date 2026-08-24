@@ -226,23 +226,33 @@ export function TrackerScreen() {
     }
   }
 
+  async function doDelete(tx: Transaction) {
+    try {
+      await txApi.deleteTransaction(tx.id)
+      if (editingId === tx.id) resetForm()
+      await loadTransactions()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : 'Delete failed')
+    }
+  }
+
   function confirmDelete(tx: Transaction) {
     const name = tx.category?.name ?? 'this expense'
-    Alert.alert('Delete expense?', `${formatUsd(tx.amount)} · ${name}`, [
+    const message = `${formatUsd(tx.amount)} · ${name}`
+    if (Platform.OS === 'web') {
+      const ok =
+        typeof globalThis.confirm === 'function' &&
+        globalThis.confirm(`Delete expense?\n${message}`)
+      if (ok) void doDelete(tx)
+      return
+    }
+    Alert.alert('Delete expense?', message, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
         style: 'destructive',
         onPress: () => {
-          void (async () => {
-            try {
-              await txApi.deleteTransaction(tx.id)
-              if (editingId === tx.id) resetForm()
-              await loadTransactions()
-            } catch (err) {
-              setError(err instanceof ApiError ? err.detail : 'Delete failed')
-            }
-          })()
+          void doDelete(tx)
         },
       },
     ])
@@ -431,21 +441,23 @@ export function TrackerScreen() {
               </Text>
             }
             renderItem={({ item }) => (
-              <Pressable
-                onPress={() => startEdit(item)}
-                onLongPress={() => confirmDelete(item)}
-                style={({ pressed }) => [styles.row, pressed && styles.pressed]}
-                accessibilityRole="button"
-                accessibilityLabel={`${item.category?.name ?? 'Expense'}, ${formatUsd(item.amount)}`}
-              >
-                <View style={styles.rowMain}>
+              <View style={styles.row}>
+                <Pressable
+                  onPress={() => startEdit(item)}
+                  style={({ pressed }) => [
+                    styles.rowMain,
+                    pressed && styles.pressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${item.category?.name ?? 'Expense'}, ${formatUsd(item.amount)}, edit`}
+                >
                   <Text style={styles.rowCat}>
                     {item.category?.name ?? 'Expense'}
                   </Text>
                   <Text style={styles.rowNote} numberOfLines={1}>
                     {item.note || formatShortDate(item.date)}
                   </Text>
-                </View>
+                </Pressable>
                 <View style={styles.rowRight}>
                   <Text style={styles.rowAmt}>{formatUsd(item.amount)}</Text>
                   <Pressable
@@ -457,7 +469,7 @@ export function TrackerScreen() {
                     <Text style={styles.delete}>Delete</Text>
                   </Pressable>
                 </View>
-              </Pressable>
+              </View>
             )}
           />
         )}
