@@ -31,7 +31,7 @@ A full-stack **personal budgeting app** with:
 
 **Clients:** The **desktop web app is the product** (planning + analysis + full tracking). `mobile/` is a thin Expo client for **on-the-go expense logging** against the same API. New product features go on web, not both clients. All clients use the **same API and database**.
 
-**Not in scope until asked:** bank sync, household sharing, multi-currency, hard spending locks, native mobile, CSV/bank import. Intended import design (inbox, dedup, categorization, cost) is in **§12** — do not build it unless explicitly asked.
+**Not in scope until asked:** bank sync, household sharing, multi-currency, hard spending locks, CSV/bank import. Intended import design (inbox, dedup, categorization, cost) is in **§12** — do not build it unless explicitly asked.
 
 ---
 
@@ -192,7 +192,7 @@ Do not build multi-user sharing yet, but avoid hard-coding assumptions that make
 | Database | **PostgreSQL** | **Neon** |
 | API | **FastAPI (Python)** | **Render** |
 | Web client | **React** (**Vite + React SPA**) | **Vercel** |
-| Mobile | **Expo (React Native)**, Android first — expense logging only | Expo Go now; App stores / EAS later |
+| Mobile | **Expo (React Native)**, Android first — expense logging only | Sideloadable APK (Android Studio); Play Store later |
 
 **Single source of truth:** Neon via FastAPI. Web and mobile are clients only — no separate client database.
 
@@ -250,7 +250,7 @@ Shipped on `main`:
 
 Out of scope for Phase 1 (still out of scope unless asked):
 
-- Native mobile app (a thin Expo expense logger now lives in `mobile/`)
+- Native mobile beyond the thin Android expense logger in `mobile/`
 - CSV / bank import
 - Multi-currency
 - Household sharing
@@ -278,12 +278,12 @@ Coach depth that stays **rule-based** (clearer copy, more apply actions, dismiss
 
 Shipped as a **small Expo client** in `mobile/` so someone can log spend away from the desk. It is not a second product.
 
-- Same FastAPI + JWT account as web
+- Same FastAPI + JWT account as web (live Render origin baked into the APK)
 - Sign in (username/email + password). No registration, OAuth, or password reset in the app — those stay on the website
 - Log **expenses** only (amount, category, date, optional note, paid-from withdrawal when the month’s plan has one)
 - Recent expense list with search, edit, and delete
 - **Do not add** Budget, Dashboard, Categories, Coach, income, or savings logging unless explicitly asked
-- Android / Expo Go first; iOS via EAS when ready
+- Ship as a **standalone Android APK** (Android Studio / `npm run apk`). The phone must not need Metro, Expo Go, or a running computer. iOS / Play Store later
 
 ### Phase 3+ — Growth (do not build until asked)
 
@@ -310,10 +310,11 @@ Shipped as a **small Expo client** in `mobile/` so someone can log spend away fr
 
 ### Mobile (`mobile/` — expense logger only)
 
-- Fast path: open app → sign in → amount + category → Log expense.
+- Fast path: open the installed app → sign in → amount + category → Log expense.
 - Same expense categories and paid-from rules as web; never fork business rules client-side.
 - If a category does not exist yet, tell the user to create it on the website.
 - Keep this client small. Feature work belongs on `web/` unless it is required to log an expense in the moment.
+- The Android app is a real APK with the API URL compiled in. Do not send people to Expo Go.
 
 ### Design
 
@@ -382,7 +383,7 @@ All user-owned rows must be scoped by authenticated user.
 | Auth later / desktop depth | Password reset/recovery **shipped** (Resend forgot-password email, change/set password). Email verification is not required to sign in |
 | Users | Individual accounts; households later |
 | Currency | USD now; multi-currency later |
-| Mobile | Thin Expo expense logger (`mobile/`); planning stays on web; shared API/DB |
+| Mobile | Thin Android expense logger (`mobile/`, sideload APK); planning stays on web; shared API/DB |
 | Schema | Alembic under `api/` is source of truth (not a separate `database/` SQL apply tree) |
 | Hosting | Neon (DB) + Render (API) + Vercel (web) |
 | Stack | React (Vite) web, FastAPI, PostgreSQL |

@@ -47,7 +47,11 @@ test('resolveApiBaseUrl rewrites Android emulator loopback', () => {
     'http://localhost:8000',
   )
   assert.equal(
-    resolveApiBaseUrl('https://api.example.com', 'android'),
-    'https://api.example.com',
+    resolveApiBaseUrl('https://budgeting-app-m3aj.onrender.com', 'android'),
+    'https://budgeting-app-m3aj.onrender.com',
+  )
+  assert.equal(
+    resolveApiBaseUrl(undefined, 'ios'),
+    'https://budgeting-app-m3aj.onrender.com',
   )
 })

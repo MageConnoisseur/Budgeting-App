@@ -4,15 +4,13 @@
   "main": "index.ts",
   "private": true,
   "dependencies": {
-    "@expo/metro-runtime": "~57.0.13",
     "expo": "~57.0.16",
     "expo-secure-store": "~57.0.1",
     "expo-status-bar": "~57.0.1",
+    "expo-system-ui": "~57.0.2",
     "react": "19.2.3",
-    "react-dom": "19.2.3",
     "react-native": "0.86.2",
-    "react-native-safe-area-context": "~5.7.0",
-    "react-native-web": "^0.21.2"
+    "react-native-safe-area-context": "~5.7.0"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
@@ -20,12 +18,10 @@
     "typescript": "~6.0.3"
   },
   "scripts": {
-    "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web",
+    "android": "expo run:android --variant release",
+    "prebuild": "expo prebuild --platform android",
+    "apk": "bash ./scripts/build-apk.sh",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test src/lib/format.test.ts src/api/http.test.ts",
-    "mock-api": "node scripts/mock-api.mjs"
+    "test": "tsx --test src/lib/format.test.ts src/api/http.test.ts"
   }
 }

@@ -65,7 +65,10 @@ export function resolveApiBaseUrl(
   raw: string | undefined,
   os: string,
 ): string {
-  const base = (raw ?? 'http://localhost:8000').replace(/\/$/, '')
+  const base = (raw ?? 'https://budgeting-app-m3aj.onrender.com').replace(
+    /\/$/,
+    '',
+  )
   if (
     os === 'android' &&
     /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(base)
