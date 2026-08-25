@@ -15,7 +15,10 @@ class Settings(BaseSettings):
     database_url: str
     secret_key: str = "dev-only-change-me"
     access_token_expire_minutes: int = 60 * 24 * 7  # 7 days
-    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    cors_origins: str = (
+        "http://localhost:5173,http://127.0.0.1:5173,"
+        "http://localhost:8081,http://127.0.0.1:8081"
+    )
     algorithm: str = "HS256"
 
     # Public URLs used for OAuth redirects (no trailing slash).

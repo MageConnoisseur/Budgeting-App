@@ -3,7 +3,7 @@
 
 FastAPI backend for Setaside (desktop web + shared API).
 
-Hosts on **Render**; database is **PostgreSQL on Neon**. Web (Vite/React on Vercel) and future mobile clients share this API.
+Hosts on **Render**; database is **PostgreSQL on Neon**. Web (Vite/React on Vercel) and the thin Expo expense-logging client (`mobile/`) share this API.
 
 ## Features
 
@@ -78,7 +78,7 @@ OpenAPI docs: http://localhost:8000/docs
 |----------|----------|-------------|
 | `DATABASE_URL` | yes | Neon Postgres connection string |
 | `SECRET_KEY` | yes (prod) | JWT signing secret |
-| `CORS_ORIGINS` | no | Comma-separated allowed origins (default local Vite). `*.vercel.app` is also allowed automatically. |
+| `CORS_ORIGINS` | no | Comma-separated allowed origins (default local Vite + Expo web on `:8081`). `*.vercel.app` is also allowed automatically. Native Android/iOS do not use CORS. |
 | `FRONTEND_URL` | no | Web app origin for OAuth redirects (default `http://localhost:5173`) |
 | `API_PUBLIC_URL` | no | Public API origin used as OAuth redirect_uri base (default `http://localhost:8000`) |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | no | Enable Google sign-in |
