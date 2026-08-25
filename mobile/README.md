@@ -1,57 +1,61 @@
-# Setaside — Mobile
+# Setaside — Android
 
-Thin **Expo** client for logging expenses on the go. It talks to the same FastAPI backend as the website. Planning, categories, budgets, and the dashboard stay on the web app — this phone app does not reimplement them.
+Standalone phone app for logging expenses. It is a real Android APK: install it, put the phone in your pocket, and it talks to the same live API as the website. Your computer does not need to stay on.
 
-**Fast path:** open app → sign in → amount + category → Log expense.
+**Fast path:** open Setaside → sign in → amount + category → Log expense.
 
-## What it does
+Planning, categories, budgets, and the dashboard stay on the website. This app does not reimplement them.
 
-- Sign in with the same username/email + password as the website
-- Log an **expense** against existing expense categories
-- Optional note (with the same note-memory suggestions as web)
-- If that category is **paid from** a savings bucket this month, offer the same paired withdrawal
-- Recent expenses with search, tap-to-edit, delete
-- Sign out
+## Install on your phone (sideload)
 
-**Not in this app:** registration, OAuth, budget editor, dashboard, category CRUD, income/savings logging. Use the website.
+You do **not** need Expo Go or the Play Store. Android can install an APK you built.
 
-## Setup
+### Option A — Android Studio
+
+1. Open **Android Studio**.
+2. **File → Open** and choose `mobile/android` (the `android` folder, not the repo root).
+3. Wait for Gradle to sync.
+4. **Build → Build Bundle(s) / APK(s) → Build APK(s)** (use the **release** variant so the JavaScript is packed inside the app).
+5. When it finishes, click **locate** and copy `app-release.apk` to your phone.
+6. On the phone, open the file and install it. Allow “Install unknown apps” for Files / Chrome if Android asks.
+
+### Option B — command line
 
 ```bash
 cd mobile
-cp .env.example .env   # set EXPO_PUBLIC_API_URL
 npm install
-npx expo start
+npm run apk
 ```
 
-Scan the QR code with **Expo Go** (Android first).
+That writes:
 
-| Variable | Description |
-|----------|-------------|
-| `EXPO_PUBLIC_API_URL` | FastAPI origin, no trailing slash, no `/api`. Same value as web `VITE_API_URL`. |
+`mobile/android/app/build/outputs/apk/release/app-release.apk`
 
-### Connecting to the API
+Copy it to the phone, or with USB debugging:
 
-| Where you run Expo | `EXPO_PUBLIC_API_URL` |
-|--------------------|------------------------|
-| Production / out and about | Your Render origin, e.g. `https://your-service.onrender.com` |
-| API on this machine + Android emulator | `http://localhost:8000` (rewritten to `10.0.2.2`) |
-| API on this machine + physical phone | `http://YOUR_LAN_IP:8000` (phone and computer on the same Wi-Fi) |
-| Expo web in a browser | `http://localhost:8000` — CORS must allow `http://localhost:8081` |
+```bash
+adb install -r android/app/build/outputs/apk/release/app-release.apk
+```
 
-Native Android/iOS do not use CORS. Expo web does.
+Sign in with the same username/email and password as the website. Create expense categories on the website first.
 
-Create expense categories (and your account) on the website first. The phone app only logs against categories that already exist.
+## API
+
+The APK is built against the live Render API:
+
+`https://budgeting-app-m3aj.onrender.com`
+
+Same origin the website uses. Native Android does not use CORS.
+
+To point a **rebuild** at a different API (for example a local server), set `EXPO_PUBLIC_API_URL` before `npm run apk`. Changing `.env` after the APK is installed does nothing — the URL is baked in at build time.
 
 ## Scripts
 
 ```bash
-npm start          # Expo dev server
-npm run android    # Expo Go / emulator
-npm run web        # Browser preview
-npm test           # Unit tests (format + HTTP client)
-npm run typecheck  # tsc --noEmit
-npm run mock-api   # In-memory API on :8000 for local Expo web checks
+npm run apk        # release APK with JS + API URL inside
+npm run android    # build release and install on a plugged-in device
+npm test
+npm run typecheck
 ```
 
-App Store / Play Store / EAS builds are later. This folder is meant to stay a small logging client so new product work lands on `web/` instead of both clients.
+`npx expo prebuild --platform android` regenerates `android/` from `app.config.ts`. Do not add Budget/Dashboard screens here; keep this client a logger.
