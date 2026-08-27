@@ -1,7 +1,5 @@
-# Copy to local.properties (Android Studio also writes sdk.dir here).
-# Do not commit local.properties.
+# Android Studio writes sdk.dir here. Do not commit local.properties.
+# You do not normally need to edit this file. Run:
+#   cd mobile && bash ./scripts/setup-android-studio.sh
 
 # sdk.dir=/home/YOU/Android/Sdk
-
-# If Gradle says it cannot run 'node', paste the output of `which node`:
-# node.binary=/usr/bin/node

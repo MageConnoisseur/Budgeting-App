@@ -1,74 +1,33 @@
 pluginManagement {
-  def resolveNode() {
-    def fromEnv = System.getenv("NODE_BINARY")
-    if (fromEnv && new File(fromEnv).exists()) return fromEnv
-
-    def propsFile = new File(rootDir, "local.properties")
-    if (propsFile.exists()) {
-      def props = new Properties()
-      propsFile.withInputStream { props.load(it) }
-      def fromProps = props.getProperty("node.binary") ?: props.getProperty("nodejs.dir")
-      if (fromProps) {
-        def f = new File(fromProps.trim())
-        if (f.isDirectory()) f = new File(f, "node")
-        if (f.exists()) return f.absolutePath
-      }
-    }
-
-    def home = System.getProperty("user.home")
-    def hits = []
-    (System.getenv("PATH") ?: "").split(File.pathSeparator).each {
-      hits << new File(it, "node").absolutePath
-    }
-    [
-      "/usr/local/bin/node",
-      "/usr/bin/node",
-      "/opt/homebrew/bin/node",
-      "${home}/.volta/bin/node",
-      "${home}/.asdf/shims/node",
-      "${home}/.local/share/fnm/aliases/default/bin/node",
-    ].each { hits << it.toString() }
-    def nvm = new File("${home}/.nvm/versions/node")
-    if (nvm.isDirectory()) {
-      nvm.listFiles()?.findAll { it.isDirectory() }?.sort { it.name }?.reverse()?.each {
-        hits.add(0, new File(it, "bin/node").absolutePath)
-      }
-    }
-    for (p in hits) {
-      if (new File(p).exists()) return p
-    }
+  def nodeWrapper = new File(rootDir, "bin/node")
+  if (!nodeWrapper.exists()) {
     throw new GradleException(
-      """Could not find Node.js.
+      """Missing ${nodeWrapper.absolutePath}
 
-Install Node 22 (https://nodejs.org), then:
+In a terminal:
 
-  cd ${rootDir.parentFile.absolutePath}
-  npm install
-  which node
-
-Put that path in android/local.properties:
-
-  node.binary=/the/path/from/which/node
+  cd ${new File(rootDir, "..").canonicalFile.absolutePath}
+  bash ./scripts/setup-android-studio.sh
 
 Then File → Sync Project with Gradle Files.
 """
     )
   }
-
-  def nodeBinary = resolveNode()
+  // Always invoke via bash + wrapper so GUI Android Studio does not need `node` on PATH.
+  def node = ["/bin/bash", nodeWrapper.absolutePath]
 
   def reactNativeGradlePlugin = new File(
     providers.exec {
       workingDir(rootDir)
-      commandLine(nodeBinary, "--print", "require.resolve('@react-native/gradle-plugin/package.json', { paths: [require.resolve('react-native/package.json')] })")
+      commandLine(node + ["--print", "require.resolve('@react-native/gradle-plugin/package.json', { paths: [require.resolve('react-native/package.json')] })"])
     }.standardOutput.asText.get().trim()
   ).getParentFile().absolutePath
   includeBuild(reactNativeGradlePlugin)
-  
+
   def expoPluginsPath = new File(
     providers.exec {
       workingDir(rootDir)
-      commandLine(nodeBinary, "--print", "require.resolve('expo-modules-autolinking/package.json', { paths: [require.resolve('expo/package.json')] })")
+      commandLine(node + ["--print", "require.resolve('expo-modules-autolinking/package.json', { paths: [require.resolve('expo/package.json')] })"])
     }.standardOutput.asText.get().trim(),
     "../android/expo-gradle-plugin"
   ).absolutePath
@@ -80,6 +39,7 @@ plugins {
   id("expo-autolinking-settings")
 }
 
+apply from: new File(settingsDir, "ensureNodePath.gradle")
 apply from: new File(settingsDir, "findNode.gradle")
 
 extensions.configure(com.facebook.react.ReactSettingsExtension) { ex ->

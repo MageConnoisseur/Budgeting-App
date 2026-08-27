@@ -8,59 +8,46 @@ Planning, categories, budgets, and the dashboard stay on the website. This app d
 
 ## Install on your phone (sideload)
 
-You do **not** need Expo Go or the Play Store. Android can install an APK you built.
+You do **not** need Expo Go, the Play Store, or a working Android Studio sync.
 
-### Option A — Android Studio
+### Option A — Download from GitHub (easiest)
 
-This project needs **Node.js 22** on the machine that runs Android Studio (Gradle calls `node` during sync). Install it from [nodejs.org](https://nodejs.org) or:
+1. Open the latest release:  
+   [https://github.com/MageConnoisseur/Budgeting-App/releases/tag/setaside-android-latest](https://github.com/MageConnoisseur/Budgeting-App/releases/tag/setaside-android-latest)
+2. Download **Setaside.apk**
+3. Copy it to your phone (USB, Drive, email to yourself, etc.)
+4. On the phone, open the file and install. Allow “Install unknown apps” if Android asks.
+5. Sign in with the same username/email and password as the website.
 
-```bash
-sudo apt update
-sudo apt install nodejs npm
-```
+If that release is not published yet, download the CI artifact from a green **Android APK** run under the repo’s [Actions](https://github.com/MageConnoisseur/Budgeting-App/actions/workflows/android-apk.yml) tab → open the run → **Artifacts** → **Setaside-android-apk**.
 
-Then:
+### Option B — Use the APK you already built
 
-```bash
-cd mobile
-npm install
-```
-
-1. Open **Android Studio**.
-2. **File → Open** and choose `mobile/android` (the `android` folder, not the repo root).
-3. Wait for Gradle to sync.
-4. **Build → Build Bundle(s) / APK(s) → Build APK(s)** (use the **release** variant so the JavaScript is packed inside the app).
-5. When it finishes, click **locate** and copy `app-release.apk` to your phone.
-6. On the phone, open the file and install it. Allow “Install unknown apps” for Files / Chrome if Android asks.
-
-If sync fails with `Cannot run program "node"`: Android Studio was started without Node on its PATH (common with nvm). In a terminal run `which node`, then create `mobile/android/local.properties` (next to `settings.gradle`) with your SDK path **and**:
-
-```properties
-sdk.dir=/home/YOU/Android/Sdk
-node.binary=/full/path/from/which/node
-```
-
-Then **File → Sync Project with Gradle Files**.
-
-### Option B — command line
-
-```bash
-cd mobile
-npm install
-npm run apk
-```
-
-That writes:
+If `npm run apk` already succeeded on your computer, the file is here:
 
 `mobile/android/app/build/outputs/apk/release/app-release.apk`
 
-Copy it to the phone, or with USB debugging:
+Copy that file to the phone and open it to install. No Android Studio needed.
 
 ```bash
+# optional USB install if adb works
+cd mobile
 adb install -r android/app/build/outputs/apk/release/app-release.apk
 ```
 
-Sign in with the same username/email and password as the website. Create expense categories on the website first.
+### Option C — Build again from the terminal
+
+```bash
+cd mobile
+bash ./scripts/setup-android-studio.sh
+npm run apk
+```
+
+Then copy `android/app/build/outputs/apk/release/app-release.apk` to the phone.
+
+### Option D — Android Studio
+
+Only needed if you want to develop in Studio. The project needs Node 22. Run `bash ./scripts/setup-android-studio.sh` in `mobile/`, open `mobile/android`, sync, and build the **release** variant.
 
 ## API
 
@@ -75,8 +62,9 @@ To point a **rebuild** at a different API (for example a local server), set `EXP
 ## Scripts
 
 ```bash
-npm run apk        # release APK with JS + API URL inside
-npm run android    # build release and install on a plugged-in device
+npm run studio-setup   # Node check + npm install + Expo Node patches
+npm run apk            # release APK with JS + API URL inside
+npm run android        # build release and install on a plugged-in device
 npm test
 npm run typecheck
 ```

@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+# Wrapper so Android Studio's Gradle daemon can run Node.
+# GUI-launched Studio often has no `node` on PATH (nvm, fnm, volta).
+# Gradle looks up the name "node"; this file is that name, on a PATH
+# we prepend from settings.gradle.
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+self="${script_dir}/node"
+
+node_on_path() {
+  local dir p
+  local old_ifs="${IFS}"
+  IFS=":"
+  # shellcheck disable=SC2086
+  for dir in ${PATH}; do
+    p="${dir}/node"
+    if [[ -x "${p}" && "${p}" != "${self}" ]]; then
+      IFS="${old_ifs}"
+      printf '%s\n' "${p}"
+      return 0
+    fi
+  done
+  IFS="${old_ifs}"
+  return 1
+}
+
+resolve_node() {
+  if [[ -n "${NODE_BINARY:-}" && -x "${NODE_BINARY}" && "${NODE_BINARY}" != "${self}" ]]; then
+    printf '%s\n' "${NODE_BINARY}"
+    return 0
+  fi
+
+  local home props from_props latest found
+  home="${HOME:-}"
+
+  props="${script_dir}/../local.properties"
+  if [[ -f "${props}" ]]; then
+    from_props="$(grep -E '^[[:space:]]*node\.binary=' "${props}" | tail -n1 | cut -d= -f2- | tr -d '\r' || true)"
+    if [[ -n "${from_props}" && -x "${from_props}" ]]; then
+      printf '%s\n' "${from_props}"
+      return 0
+    fi
+  fi
+
+  if found="$(node_on_path)"; then
+    printf '%s\n' "${found}"
+    return 0
+  fi
+
+  if [[ -s "${home}/.nvm/nvm.sh" ]]; then
+    set +u
+    # shellcheck disable=SC1091
+    . "${home}/.nvm/nvm.sh" >/dev/null 2>&1 || true
+    set -u
+    if found="$(node_on_path)"; then
+      printf '%s\n' "${found}"
+      return 0
+    fi
+  fi
+
+  if [[ -d "${home}/.nvm/versions/node" ]]; then
+    latest="$(ls -1 "${home}/.nvm/versions/node" 2>/dev/null | sort -V | tail -n1 || true)"
+    if [[ -n "${latest}" && -x "${home}/.nvm/versions/node/${latest}/bin/node" ]]; then
+      printf '%s\n' "${home}/.nvm/versions/node/${latest}/bin/node"
+      return 0
+    fi
+  fi
+
+  if command -v fnm >/dev/null 2>&1; then
+    eval "$(fnm env 2>/dev/null)" || true
+    if found="$(node_on_path)"; then
+      printf '%s\n' "${found}"
+      return 0
+    fi
+  fi
+
+  local candidate
+  for candidate in \
+    /usr/local/bin/node \
+    /usr/bin/node \
+    /opt/homebrew/bin/node \
+    "${home}/.volta/bin/node" \
+    "${home}/.asdf/shims/node" \
+    "${home}/.local/share/fnm/aliases/default/bin/node" \
+    "${home}/.fnm/aliases/default/bin/node" \
+    "${home}/.local/bin/node" \
+    /snap/bin/node
+  do
+    if [[ -x "${candidate}" && "${candidate}" != "${self}" ]]; then
+      printf '%s\n' "${candidate}"
+      return 0
+    fi
+  done
+
+  echo "Setaside could not find Node.js." >&2
+  echo "Android Studio needs Node on this computer to sync the Android project." >&2
+  echo >&2
+  echo "1. Install Node 22 from https://nodejs.org  (or: sudo apt install nodejs npm)" >&2
+  echo "2. In a terminal:" >&2
+  echo "     cd ${script_dir}/../.." >&2
+  echo "     bash ./scripts/setup-android-studio.sh" >&2
+  echo "3. In Android Studio: File → Sync Project with Gradle Files" >&2
+  exit 127
+}
+
+if [[ "${1:-}" == "--print-path" ]]; then
+  resolve_node
+  exit 0
+fi
+
+NODE_PATH="$(resolve_node)"
+exec "${NODE_PATH}" "$@"

@@ -2,48 +2,37 @@ const { withAppBuildGradle, withDangerousMod, withSettingsGradle } = require('ex
 const fs = require('fs')
 const path = require('path')
 
-const RESOLVER = `  def resolveNode() {
-    def fromEnv = System.getenv("NODE_BINARY")
-    if (fromEnv && new File(fromEnv).exists()) return fromEnv
-    def propsFile = new File(rootDir, "local.properties")
-    if (propsFile.exists()) {
-      def props = new Properties()
-      propsFile.withInputStream { props.load(it) }
-      def fromProps = props.getProperty("node.binary") ?: props.getProperty("nodejs.dir")
-      if (fromProps) {
-        def f = new File(fromProps.trim())
-        if (f.isDirectory()) f = new File(f, "node")
-        if (f.exists()) return f.absolutePath
-      }
+function copyIfExists(src, dest) {
+  if (fs.existsSync(src) && path.resolve(src) !== path.resolve(dest)) {
+    fs.mkdirSync(path.dirname(dest), { recursive: true })
+    fs.copyFileSync(src, dest)
+    try {
+      fs.chmodSync(dest, 0o755)
+    } catch {
+      // Best-effort; setup-android-studio.sh also chmods.
     }
-    def home = System.getProperty("user.home")
-    def hits = []
-    (System.getenv("PATH") ?: "").split(File.pathSeparator).each {
-      hits << new File(it, "node").absolutePath
-    }
-    ["/usr/local/bin/node", "/usr/bin/node", "/opt/homebrew/bin/node"].each { hits << it }
-    def nvm = new File("\${home}/.nvm/versions/node")
-    if (nvm.isDirectory()) {
-      nvm.listFiles()?.findAll { it.isDirectory() }?.sort { it.name }?.reverse()?.each {
-        hits.add(0, new File(it, "bin/node").absolutePath)
-      }
-    }
-    for (p in hits) {
-      if (new File(p).exists()) return p
-    }
-    throw new GradleException("Could not find Node.js. Install Node 22, run npm install in mobile/, and set node.binary in android/local.properties to the output of: which node")
   }
-  def nodeBinary = resolveNode()
-`
+}
 
 function withNodeBinary(config) {
   config = withDangerousMod(config, [
     'android',
     async (mod) => {
-      const src = path.join(mod.modRequest.projectRoot, 'android', 'findNode.gradle')
-      const dest = path.join(mod.modRequest.platformProjectRoot, 'findNode.gradle')
-      if (fs.existsSync(src) && path.resolve(src) !== path.resolve(dest)) {
-        fs.copyFileSync(src, dest)
+      const androidSrc = path.join(mod.modRequest.projectRoot, 'android')
+      const androidDest = mod.modRequest.platformProjectRoot
+      for (const rel of ['findNode.gradle', 'ensureNodePath.gradle', 'bin/node']) {
+        copyIfExists(path.join(androidSrc, rel), path.join(androidDest, rel))
+      }
+      const gradlew = path.join(androidDest, 'gradlew')
+      if (fs.existsSync(gradlew)) {
+        let text = fs.readFileSync(gradlew, 'utf8')
+        if (!text.includes("APP_HOME/bin/node")) {
+          text = text.replace(
+            'APP_HOME=$( cd -P "${APP_HOME:-./}" > /dev/null && printf \'%s\\n\' "$PWD" ) || exit\n',
+            'APP_HOME=$( cd -P "${APP_HOME:-./}" > /dev/null && printf \'%s\\n\' "$PWD" ) || exit\n\n# Setaside: prepend android/bin so Gradle can run node\nif [ -x "$APP_HOME/bin/node" ]; then\n    PATH="$APP_HOME/bin:$PATH"\n    export PATH\nfi\n',
+          )
+          fs.writeFileSync(gradlew, text)
+        }
       }
       return mod
     },
@@ -51,13 +40,10 @@ function withNodeBinary(config) {
 
   config = withSettingsGradle(config, (mod) => {
     let contents = mod.modResults.contents
-    contents = contents.replaceAll('commandLine("node",', 'commandLine(nodeBinary,')
-    if (!contents.includes('def resolveNode()')) {
-      contents = contents.replace(
-        'pluginManagement {',
-        `pluginManagement {\n${RESOLVER}`,
-      )
-    }
+    contents = contents.replaceAll(
+      'commandLine("node",',
+      'commandLine("/bin/bash", new File(rootDir, "bin/node").absolutePath,',
+    )
     mod.modResults.contents = contents
     return mod
   })
