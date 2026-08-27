@@ -27,7 +27,7 @@ if ! command -v node >/dev/null 2>&1; then
   echo "Node.js is not installed on this computer."
   echo
   echo "Install Node 22 from https://nodejs.org"
-  echo "On Ubuntu/Debian you can also run:"
+  echo "On Ubuntu/Debian / Pop!_OS:"
   echo "  sudo apt update && sudo apt install nodejs npm"
   echo
   echo "Then run this script again."
@@ -35,12 +35,12 @@ if ! command -v node >/dev/null 2>&1; then
 fi
 
 NODE_PATH="$(command -v node)"
+# Prefer the real binary, not a shell function / relative path.
+NODE_PATH="$(readlink -f "${NODE_PATH}" 2>/dev/null || printf '%s' "${NODE_PATH}")"
 echo "Using ${NODE_PATH} ($(node -v))"
 npm install
 chmod +x android/bin/node android/gradlew 2>/dev/null || true
 
-# Remember the real Node path for Android Studio (it cannot see nvm's PATH).
-# Keep any sdk.dir line Android Studio already wrote.
 PROPS="android/local.properties"
 mkdir -p android
 if [[ -f "${PROPS}" ]] && grep -qE '^[[:space:]]*node\.binary=' "${PROPS}"; then
@@ -52,20 +52,33 @@ else
 fi
 echo "Wrote node.binary=${NODE_PATH} into android/local.properties"
 
-# Expo's Gradle plugins call the command name `node`. Android Studio's daemon
-# only searches /usr/bin and /usr/local/bin, not nvm. Link once if needed.
-if [[ -x /usr/bin/node || -x /usr/local/bin/node ]]; then
-  echo "System Node is already on Android Studio's PATH."
-else
-  echo "Linking Node into /usr/local/bin so Android Studio can find it (sudo once)..."
+# Expo's Gradle plugins hardcode commandLine("node"). Android Studio's daemon
+# does NOT see nvm. It only finds Node if it lives in a normal PATH location.
+studio_node=""
+for candidate in /usr/local/bin/node /usr/bin/node; do
+  if [[ -x "${candidate}" ]]; then
+    studio_node="${candidate}"
+    break
+  fi
+done
+
+if [[ -z "${studio_node}" ]]; then
+  echo
+  echo "Android Studio cannot see Node yet (only nvm/fnm/volta paths exist)."
+  echo "Creating /usr/local/bin/node (needs your password once)..."
   if sudo ln -sf "${NODE_PATH}" /usr/local/bin/node; then
+    studio_node=/usr/local/bin/node
     echo "Linked /usr/local/bin/node -> ${NODE_PATH}"
   else
-    echo "Could not create /usr/local/bin/node. Install Node with:"
+    echo
+    echo "Link failed. Run ONE of these, then re-run this script:"
+    echo "  sudo ln -sf ${NODE_PATH} /usr/local/bin/node"
     echo "  sudo apt update && sudo apt install nodejs npm"
-    echo "or start Android Studio from this same terminal after Node works here."
+    exit 1
   fi
 fi
+
+echo "Android Studio Node path: ${studio_node} ($(${studio_node} -v))"
 
 if [[ -x android/gradlew ]]; then
   (cd android && ./gradlew --stop >/dev/null 2>&1 || true)
@@ -73,7 +86,12 @@ fi
 
 echo
 echo "Setup finished."
-echo "In Android Studio: File → Sync Project with Gradle Files"
-echo "If it still fails, quit Android Studio completely and open the folder"
-echo "  $(pwd)/android"
-echo "again."
+echo
+echo "Next:"
+echo "  1. Fully quit Android Studio (File → Exit)."
+echo "  2. Open Android Studio again."
+echo "  3. File → Open → $(pwd)/android"
+echo "  4. File → Sync Project with Gradle Files"
+echo
+echo "Or skip Studio and build the APK from this terminal:"
+echo "  npm run apk"

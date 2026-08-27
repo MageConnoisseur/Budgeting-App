@@ -28,23 +28,29 @@ cd mobile
 bash ./scripts/setup-android-studio.sh
 ```
 
-That installs JavaScript packages and records where Node lives so Android Studio can find it. You do **not** need to edit any properties file by hand.
+That installs JavaScript packages. It also puts `node` where Android Studio can see it (`/usr/local/bin/node`). The script may ask for your password once. You do **not** edit any properties file by hand.
 
-The script may ask for your password once so it can put `node` in `/usr/local/bin` (Android Studio does not see nvm). If you prefer, install Node with `sudo apt install nodejs npm` instead.
+If sync still says `Cannot run program "node"`, run this once in a terminal and then fully quit Android Studio:
+
+```bash
+sudo ln -sf "$(readlink -f "$(which node)")" /usr/local/bin/node
+/usr/local/bin/node -v
+```
 
 #### 3. Sync and build in Android Studio
 
-1. Open **Android Studio**.
-2. **File → Open** and choose the `mobile/android` folder (not the repo root).
-3. **File → Sync Project with Gradle Files**.
-4. **Build → Select Build Variant** and pick **release** (debug still wants a Metro server).
-5. **Build → Build Bundle(s) / APK(s) → Build APK(s)**.
-6. Click **locate** and copy `app-release.apk` to your phone.
-7. On the phone, open the file and install it. Allow “Install unknown apps” if Android asks.
+1. Fully quit Android Studio if it is open (**File → Exit**).
+2. Open **Android Studio**.
+3. **File → Open** and choose the `mobile/android` folder (not the repo root).
+4. **File → Sync Project with Gradle Files**.
+5. **Build → Select Build Variant** and pick **release** (debug still wants a Metro server).
+6. **Build → Build Bundle(s) / APK(s) → Build APK(s)**.
+7. Click **locate** and copy `app-release.apk` to your phone.
+8. On the phone, open the file and install it. Allow “Install unknown apps” if Android asks.
 
-If sync still says it cannot run `node`, fully quit Android Studio (File → Exit), then start it again and open `mobile/android`.
+### Option B — command line (often easier)
 
-### Option B — command line
+You can skip Android Studio sync and build the APK in a terminal:
 
 ```bash
 cd mobile
