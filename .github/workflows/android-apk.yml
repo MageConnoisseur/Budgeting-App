@@ -7,9 +7,13 @@ on:
       - 'mobile/**'
       - '.github/workflows/android-apk.yml'
   push:
+    branches: [main]
     paths:
       - 'mobile/**'
       - '.github/workflows/android-apk.yml'
+
+permissions:
+  contents: write
 
 jobs:
   apk:
@@ -30,11 +34,39 @@ jobs:
           java-version: '17'
       - uses: android-actions/setup-android@v3
       - run: npm ci
+      - run: node ./scripts/patch-expo-node.js
       - run: bash ./scripts/build-apk.sh
         env:
           NODE_ENV: production
           EXPO_PUBLIC_API_URL: https://budgeting-app-m3aj.onrender.com
+      - name: Name the APK for download
+        run: |
+          mkdir -p /tmp/setaside-apk
+          cp android/app/build/outputs/apk/release/app-release.apk /tmp/setaside-apk/Setaside.apk
+          ls -lh /tmp/setaside-apk/Setaside.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: setaside-android
-          path: mobile/android/app/build/outputs/apk/release/app-release.apk
+          name: Setaside-android-apk
+          path: /tmp/setaside-apk/Setaside.apk
+          if-no-files-found: error
+          retention-days: 30
+      - name: Publish downloadable GitHub Release
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: setaside-android-latest
+          name: Setaside Android APK
+          body: |
+            Sideloadable Setaside expense logger for Android.
+
+            1. Download **Setaside.apk** below
+            2. Copy it to your phone
+            3. Open the file and install (allow “Install unknown apps” if asked)
+            4. Sign in with the same account as the website
+
+            Built against `https://budgeting-app-m3aj.onrender.com`
+          files: /tmp/setaside-apk/Setaside.apk
+          make_latest: true
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

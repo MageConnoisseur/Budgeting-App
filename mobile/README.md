@@ -8,54 +8,34 @@ Planning, categories, budgets, and the dashboard stay on the website. This app d
 
 ## Install on your phone (sideload)
 
-You do **not** need Expo Go or the Play Store. Android can install an APK you built.
+You do **not** need Expo Go, the Play Store, or a working Android Studio sync.
 
-### Option A — Android Studio
+### Option A — Download from GitHub (easiest)
 
-#### 1. Install Node.js once
+1. Open the latest release:  
+   [https://github.com/MageConnoisseur/Budgeting-App/releases/tag/setaside-android-latest](https://github.com/MageConnoisseur/Budgeting-App/releases/tag/setaside-android-latest)
+2. Download **Setaside.apk**
+3. Copy it to your phone (USB, Drive, email to yourself, etc.)
+4. On the phone, open the file and install. Allow “Install unknown apps” if Android asks.
+5. Sign in with the same username/email and password as the website.
 
-This computer needs Node 22. Download LTS from [nodejs.org](https://nodejs.org), or on Ubuntu/Debian:
+If that release is not published yet, download the CI artifact from a green **Android APK** run under the repo’s [Actions](https://github.com/MageConnoisseur/Budgeting-App/actions/workflows/android-apk.yml) tab → open the run → **Artifacts** → **Setaside-android-apk**.
+
+### Option B — Use the APK you already built
+
+If `npm run apk` already succeeded on your computer, the file is here:
+
+`mobile/android/app/build/outputs/apk/release/app-release.apk`
+
+Copy that file to the phone and open it to install. No Android Studio needed.
 
 ```bash
-sudo apt update
-sudo apt install nodejs npm
-```
-
-#### 2. Run this in a terminal
-
-```bash
+# optional USB install if adb works
 cd mobile
-bash ./scripts/setup-android-studio.sh
+adb install -r android/app/build/outputs/apk/release/app-release.apk
 ```
 
-That installs JavaScript packages. It also puts `node` where Android Studio can see it (`/usr/local/bin/node`). The script may ask for your password once. You do **not** edit any properties file by hand.
-
-If sync still says `Cannot run program "node"`, pull the latest fix branch and re-run setup (it patches Expo’s Gradle plugins to find Node without PATH):
-
-```bash
-cd /path/to/Budgeting-App
-git fetch origin
-git checkout -B cursor/android-studio-node-bec9 origin/cursor/android-studio-node-bec9
-cd mobile
-bash ./scripts/setup-android-studio.sh
-```
-
-Then fully quit Android Studio and sync again.
-
-#### 3. Sync and build in Android Studio
-
-1. Fully quit Android Studio if it is open (**File → Exit**).
-2. Open **Android Studio**.
-3. **File → Open** and choose the `mobile/android` folder (not the repo root).
-4. **File → Sync Project with Gradle Files**.
-5. **Build → Select Build Variant** and pick **release** (debug still wants a Metro server).
-6. **Build → Build Bundle(s) / APK(s) → Build APK(s)**.
-7. Click **locate** and copy `app-release.apk` to your phone.
-8. On the phone, open the file and install it. Allow “Install unknown apps” if Android asks.
-
-### Option B — command line (often easier)
-
-You can skip Android Studio sync and build the APK in a terminal:
+### Option C — Build again from the terminal
 
 ```bash
 cd mobile
@@ -63,17 +43,11 @@ bash ./scripts/setup-android-studio.sh
 npm run apk
 ```
 
-That writes:
+Then copy `android/app/build/outputs/apk/release/app-release.apk` to the phone.
 
-`mobile/android/app/build/outputs/apk/release/app-release.apk`
+### Option D — Android Studio
 
-Copy it to the phone, or with USB debugging:
-
-```bash
-adb install -r android/app/build/outputs/apk/release/app-release.apk
-```
-
-Sign in with the same username/email and password as the website. Create expense categories on the website first.
+Only needed if you want to develop in Studio. The project needs Node 22. Run `bash ./scripts/setup-android-studio.sh` in `mobile/`, open `mobile/android`, sync, and build the **release** variant.
 
 ## API
 
@@ -88,7 +62,7 @@ To point a **rebuild** at a different API (for example a local server), set `EXP
 ## Scripts
 
 ```bash
-npm run studio-setup   # Node check + npm install (run before Android Studio)
+npm run studio-setup   # Node check + npm install + Expo Node patches
 npm run apk            # release APK with JS + API URL inside
 npm run android        # build release and install on a plugged-in device
 npm test
