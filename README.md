@@ -11,7 +11,7 @@ Full-stack personal budgeting app (desktop web first) for monthly income, expens
   instructions.md
   api/          # FastAPI → Render (Phase 1)
   web/          # React (Vite) → Vercel
-  mobile/       # Expo expense logger (thin; Android / Expo Go)
+  mobile/       # Android expense logger (sideload APK; same API as web)
 ```
 
 Top-level `web/` (sibling of `api/`) so Vercel’s Root Directory dropdown can select it — nested `apps/web` is often omitted from that picker.
@@ -26,4 +26,4 @@ See [`web/README.md`](./web/README.md). Locally: run the API on `:8000`, then `c
 
 ## Mobile
 
-See [`mobile/README.md`](./mobile/README.md). Same API as web. Expense logging only — create categories and plans on the website.
+See [`mobile/README.md`](./mobile/README.md). Build a release APK in Android Studio (open `mobile/android`) or `cd mobile && npm run apk`, then sideload it. Same live API as the website — the computer does not need to stay running.

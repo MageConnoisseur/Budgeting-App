@@ -9,7 +9,7 @@ dist/
 web-build/
 expo-env.d.ts
 
-# Native
+# Native signing / secrets
 .kotlin/
 *.orig.*
 *.jks
@@ -37,6 +37,18 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 
-# generated native folders
+# generated iOS (not shipping yet)
 /ios
-/android
+
+# Android Studio / Gradle outputs — keep the project, ignore build junk
+android/local.properties
+android/.gradle/
+android/build/
+android/app/build/
+android/app/.cxx/
+android/.idea/
+android/*.iml
+android/captures/
+*.apk
+*.aab
+*.ap_
