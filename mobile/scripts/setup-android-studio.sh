@@ -39,7 +39,14 @@ NODE_PATH="$(command -v node)"
 NODE_PATH="$(readlink -f "${NODE_PATH}" 2>/dev/null || printf '%s' "${NODE_PATH}")"
 echo "Using ${NODE_PATH} ($(node -v))"
 npm install
+node ./scripts/patch-expo-node.js
 chmod +x android/bin/node android/gradlew 2>/dev/null || true
+
+# Force Gradle to recompile the patched Expo plugin sources.
+rm -rf android/.gradle android/build android/app/build 2>/dev/null || true
+if [[ -x android/gradlew ]]; then
+  (cd android && ./gradlew --stop >/dev/null 2>&1 || true)
+fi
 
 PROPS="android/local.properties"
 mkdir -p android

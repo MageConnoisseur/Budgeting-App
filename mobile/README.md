@@ -30,12 +30,17 @@ bash ./scripts/setup-android-studio.sh
 
 That installs JavaScript packages. It also puts `node` where Android Studio can see it (`/usr/local/bin/node`). The script may ask for your password once. You do **not** edit any properties file by hand.
 
-If sync still says `Cannot run program "node"`, run this once in a terminal and then fully quit Android Studio:
+If sync still says `Cannot run program "node"`, pull the latest fix branch and re-run setup (it patches Expo’s Gradle plugins to find Node without PATH):
 
 ```bash
-sudo ln -sf "$(readlink -f "$(which node)")" /usr/local/bin/node
-/usr/local/bin/node -v
+cd /path/to/Budgeting-App
+git fetch origin
+git checkout -B cursor/android-studio-node-bec9 origin/cursor/android-studio-node-bec9
+cd mobile
+bash ./scripts/setup-android-studio.sh
 ```
+
+Then fully quit Android Studio and sync again.
 
 #### 3. Sync and build in Android Studio
 
