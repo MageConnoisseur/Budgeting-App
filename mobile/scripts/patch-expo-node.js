@@ -190,7 +190,94 @@ function main() {
     console.log('ExpoAutolinkingPlugin.kt already patched')
   }
 
+  patchExpoConstantsGradle()
+
   console.log('Setaside Expo Node patch complete')
+}
+
+function patchExpoConstantsGradle() {
+  const candidates = [
+    path.join(
+      ROOT,
+      'node_modules/expo/node_modules/expo-constants/scripts/get-app-config-android.gradle',
+    ),
+    path.join(ROOT, 'node_modules/expo-constants/scripts/get-app-config-android.gradle'),
+  ]
+  const filePath = candidates.find((p) => fs.existsSync(p))
+  if (!filePath) {
+    console.log('expo-constants get-app-config-android.gradle not found; skip')
+    return
+  }
+  let src = fs.readFileSync(filePath, 'utf8')
+  if (src.includes(MARKER)) {
+    console.log('get-app-config-android.gradle already patched')
+    return
+  }
+
+  const resolverBlock = `// ${MARKER}
+def setasideResolveNode() {
+  def fromEnv = System.getenv("NODE_BINARY")
+  if (fromEnv && new File(fromEnv).canExecute()) return fromEnv
+  def dir = rootProject.projectDir
+  for (int i = 0; i < 8 && dir != null; i++) {
+    def propsFile = new File(dir, "local.properties")
+    if (propsFile.isFile()) {
+      def props = new Properties()
+      propsFile.withInputStream { props.load(it) }
+      def p = props.getProperty("node.binary")
+      if (p && new File(p.trim()).canExecute()) return p.trim()
+    }
+    def wrapper = new File(dir, "bin/node")
+    if (wrapper.exists()) return wrapper.absolutePath
+    dir = dir.parentFile
+  }
+  def home = System.getProperty("user.home")
+  def nvm = new File("\${home}/.nvm/versions/node")
+  if (nvm.isDirectory()) {
+    def versions = nvm.listFiles()?.findAll { it.isDirectory() }?.sort { it.name }?.reverse()
+    for (v in versions) {
+      def n = new File(v, "bin/node")
+      if (n.canExecute()) return n.absolutePath
+    }
+  }
+  for (c in ["/usr/local/bin/node", "/usr/bin/node"]) {
+    if (new File(c).canExecute()) return c
+  }
+  return "node"
+}
+def setasideNode = setasideResolveNode()
+def setasideNodeCmd = {
+  def f = new File(setasideNode)
+  if (f.exists() && f.length() < 100000L && f.getText("UTF-8").contains("resolve_node")) {
+    return ["/bin/bash", setasideNode]
+  }
+  return [setasideNode]
+}()
+
+`
+
+  // Fix JS escaping: we want Groovy ${home} in the output file
+  const resolverGroovy = resolverBlock.replace(
+    '\\${home}',
+    '${home}',
+  )
+
+  src = src.replace(
+    /def expoConstantsDir = project\.providers\.exec \{\s*workingDir\(projectDir\)\s*commandLine\("node", "-e", "console\.log\(require\('path'\)\.dirname\(require\.resolve\('expo-constants\/package\.json'\)\)\);"\)\s*\}\.standardOutput\.asText\.get\(\)\.trim\(\)\s*\n\s*def config = project\.hasProperty\("react"\) \? project\.react : \[\];\s*\ndef nodeExecutableAndArgs = config\.nodeExecutableAndArgs \?: \["node"\]/,
+    `${resolverGroovy}def expoConstantsDir = project.providers.exec {
+  workingDir(projectDir)
+  commandLine(*(setasideNodeCmd + ["-e", "console.log(require('path').dirname(require.resolve('expo-constants/package.json')));"]))
+}.standardOutput.asText.get().trim()
+
+def config = project.hasProperty("react") ? project.react : [];
+def nodeExecutableAndArgs = config.nodeExecutableAndArgs ?: setasideNodeCmd`,
+  )
+
+  if (!src.includes(MARKER)) {
+    throw new Error('Failed to patch get-app-config-android.gradle')
+  }
+  writeFile(filePath, src)
+  console.log('patched get-app-config-android.gradle')
 }
 
 main()
