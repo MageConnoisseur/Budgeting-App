@@ -20,6 +20,7 @@
   "scripts": {
     "android": "expo run:android --variant release",
     "prebuild": "expo prebuild --platform android",
+    "studio-setup": "bash ./scripts/setup-android-studio.sh",
     "apk": "bash ./scripts/build-apk.sh",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test src/lib/format.test.ts src/api/http.test.ts"

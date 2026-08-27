@@ -1,14 +1,10 @@
 /**
  * Resolve a Node.js binary Android Studio's Gradle daemon can actually run.
- * GUI-launched Studio often has a stripped PATH, so "node" is missing even
- * when a terminal can run it (nvm / fnm / volta / asdf).
- *
- * Override with:
- *   NODE_BINARY=/usr/bin/node
- *   or android/local.properties → node.binary=/usr/bin/node
+ * Prefer android/bin/node (wrapper). Override with NODE_BINARY or
+ * android/local.properties → node.binary=
  */
 
-def androidRoot() {
+def androidRootForFindNode() {
   def candidates = []
   try { candidates << settingsDir } catch (Throwable ignored) {}
   try { candidates << rootDir } catch (Throwable ignored) {}
@@ -17,24 +13,13 @@ def androidRoot() {
     if (d == null) continue
     def dir = d instanceof File ? d : file(d.toString())
     if (new File(dir, "settings.gradle").exists()) return dir
-    if (new File(dir, "settings.gradle.kts").exists()) return dir
     def parent = dir.parentFile
     if (parent != null && new File(parent, "settings.gradle").exists()) return parent
   }
   return file(".")
 }
 
-def readLocalNodeBinary(File root) {
-  def propsFile = new File(root, "local.properties")
-  if (!propsFile.exists()) return null
-  def props = new Properties()
-  propsFile.withInputStream { props.load(it) }
-  def fromProps = props.getProperty("node.binary") ?: props.getProperty("nodejs.dir")
-  if (fromProps == null || fromProps.trim().isEmpty()) return null
-  def f = new File(fromProps.trim())
-  if (f.isDirectory()) f = new File(f, "node")
-  return f.exists() ? f.absolutePath : null
-}
+apply from: new File(androidRootForFindNode(), "ensureNodePath.gradle")
 
 def executableNode(String path) {
   if (path == null || path.trim().isEmpty()) return null
@@ -42,79 +27,26 @@ def executableNode(String path) {
   return f.exists() ? f.absolutePath : null
 }
 
-def searchNodeOnDisk() {
-  def home = System.getProperty("user.home")
-  def found = []
-
-  def envPath = System.getenv("PATH") ?: ""
-  envPath.split(File.pathSeparator).each { dir ->
-    found << new File(dir, "node").absolutePath
-  }
-
-  [
-    "/usr/local/bin/node",
-    "/usr/bin/node",
-    "/opt/homebrew/bin/node",
-    "${home}/.volta/bin/node",
-    "${home}/.asdf/shims/node",
-    "${home}/.local/share/fnm/aliases/default/bin/node",
-    "${home}/.fnm/aliases/default/bin/node",
-  ].each { found << it.toString() }
-
-  def nvmRoot = new File("${home}/.nvm/versions/node")
-  if (nvmRoot.isDirectory()) {
-    def versions = nvmRoot.listFiles()?.findAll { it.isDirectory() }?.sort { it.name }?.reverse()
-    versions?.each { ver ->
-      found.add(0, new File(ver, "bin/node").absolutePath)
-    }
-  }
-
-  def nvmAlias = new File("${home}/.nvm/alias/default")
-  if (nvmAlias.exists()) {
-    def alias = nvmAlias.text.trim()
-    def aliased = new File("${home}/.nvm/versions/node/${alias}/bin/node")
-    if (aliased.exists()) found.add(0, aliased.absolutePath)
-  }
-
-  for (p in found) {
-    def hit = executableNode(p)
-    if (hit != null) return hit
-  }
-  return null
-}
-
 def resolveNodeBinary() {
   def fromEnv = executableNode(System.getenv("NODE_BINARY"))
   if (fromEnv != null) return fromEnv
 
-  def root = androidRoot()
-  def fromLocal = readLocalNodeBinary(root)
-  if (fromLocal != null) return fromLocal
-
-  def fromDisk = searchNodeOnDisk()
-  if (fromDisk != null) return fromDisk
+  def wrapperFile = new File(androidRootForFindNode(), "bin/node")
+  if (wrapperFile.exists()) {
+    def proc = ["/bin/bash", wrapperFile.absolutePath, "--print-path"].execute()
+    proc.waitFor()
+    def printed = proc.text.trim()
+    if (proc.exitValue() == 0 && printed) return printed
+    return wrapperFile.absolutePath
+  }
 
   throw new GradleException(
-    """Could not find Node.js (command 'node').
+    """Could not find Node.js.
 
-This Android app is an Expo / React Native project. Gradle has to run Node
-during sync. Android Studio often does not see Node if it was installed with
-nvm, or if Studio was opened from the app menu.
+Install Node 22 from https://nodejs.org then in a terminal:
 
-Do this:
-
-  1. Install Node 22 from https://nodejs.org (or: sudo apt install nodejs npm)
-  2. In a terminal:
-
-       cd ${root.parentFile.absolutePath}
-       npm install
-       which node
-
-  3. Either:
-       • File → Invalidate Caches / Restart after putting Node on your login PATH, or
-       • Add this line to android/local.properties (create the file if needed):
-
-           node.binary=/full/path/from/which\\ node
+  cd ${androidRootForFindNode().parentFile.absolutePath}
+  bash ./scripts/setup-android-studio.sh
 
 Then File → Sync Project with Gradle Files.
 """
@@ -123,16 +55,16 @@ Then File → Sync Project with Gradle Files.
 
 ext.NODE_BINARY = resolveNodeBinary()
 
-def mobileRoot = androidRoot().parentFile
+def mobileRoot = androidRootForFindNode().parentFile
 def reactNativePkg = new File(mobileRoot, "node_modules/react-native/package.json")
 if (!reactNativePkg.exists()) {
   throw new GradleException(
-    """Node was found (${ext.NODE_BINARY}) but mobile/node_modules is missing.
+    """Node wrapper is present but mobile/node_modules is missing.
 
 In a terminal:
 
   cd ${mobileRoot.absolutePath}
-  npm install
+  bash ./scripts/setup-android-studio.sh
 
 Then File → Sync Project with Gradle Files in Android Studio.
 """
@@ -140,4 +72,4 @@ Then File → Sync Project with Gradle Files in Android Studio.
 }
 
 gradle.ext.nodeBinary = ext.NODE_BINARY
-logger.lifecycle("Using Node.js at ${ext.NODE_BINARY}")
+logger.lifecycle("Using Node.js via ${ext.NODE_BINARY}")

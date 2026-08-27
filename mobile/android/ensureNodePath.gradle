@@ -1,0 +1,80 @@
+/**
+ * Put android/bin on PATH for this Gradle JVM so Expo/RN plugins that
+ * hardcode commandLine("node") find our wrapper instead of failing.
+ *
+ * Safe to apply more than once.
+ */
+
+def androidDirForNode() {
+  def candidates = []
+  try { candidates << settingsDir } catch (Throwable ignored) {}
+  try { candidates << rootDir } catch (Throwable ignored) {}
+  try { candidates << projectDir } catch (Throwable ignored) {}
+  for (d in candidates) {
+    if (d == null) continue
+    def dir = d instanceof File ? d : file(d.toString())
+    if (new File(dir, "settings.gradle").exists()) return dir
+    def parent = dir.parentFile
+    if (parent != null && new File(parent, "settings.gradle").exists()) return parent
+  }
+  return file(".")
+}
+
+def prependDirToPath(String directory) {
+  def current = System.getenv("PATH") ?: ""
+  def parts = current.split(File.pathSeparator) as List
+  if (parts.contains(directory)) return
+  def newPath = directory + File.pathSeparator + current
+
+  try {
+    def env = System.getenv()
+    def inner = env.getClass().getDeclaredField("m")
+    inner.setAccessible(true)
+    inner.get(env).put("PATH", newPath)
+  } catch (Throwable ignored) {
+  }
+
+  try {
+    def pe = Class.forName("java.lang.ProcessEnvironment")
+    def varClz = Class.forName("java.lang.ProcessEnvironment\$Variable")
+    def valClz = Class.forName("java.lang.ProcessEnvironment\$Value")
+    def varOf = varClz.getDeclaredMethod("valueOfQueryOnly", String.class)
+    def valOf = valClz.getDeclaredMethod("valueOfQueryOnly", String.class)
+    varOf.setAccessible(true)
+    valOf.setAccessible(true)
+    def key = varOf.invoke(null, "PATH")
+    def value = valOf.invoke(null, newPath)
+    ["theEnvironment", "theUnmodifiableEnvironment"].each { name ->
+      try {
+        def f = pe.getDeclaredField(name)
+        f.setAccessible(true)
+        def map = f.get(null)
+        if (map instanceof Map) {
+          map.put(key, value)
+        }
+      } catch (Throwable ignored) {
+      }
+    }
+  } catch (Throwable ignored) {
+  }
+}
+
+def androidRootDir = androidDirForNode()
+def nodeBinDir = new File(androidRootDir, "bin")
+def nodeWrapper = new File(nodeBinDir, "node")
+if (!nodeWrapper.exists()) {
+  throw new GradleException(
+    """Missing ${nodeWrapper.absolutePath}
+
+Pull the latest Setaside Android files, then in a terminal:
+
+  cd ${androidRootDir.parentFile.absolutePath}
+  bash ./scripts/setup-android-studio.sh
+
+Then in Android Studio: File → Sync Project with Gradle Files.
+"""
+  )
+}
+
+prependDirToPath(nodeBinDir.absolutePath)
+ext.NODE_WRAPPER = nodeWrapper.absolutePath

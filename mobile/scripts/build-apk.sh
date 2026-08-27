@@ -13,7 +13,7 @@ if [[ ! -d android ]]; then
 fi
 
 cd android
-chmod +x gradlew
+chmod +x gradlew bin/node
 ./gradlew assembleRelease
 APK="app/build/outputs/apk/release/app-release.apk"
 echo

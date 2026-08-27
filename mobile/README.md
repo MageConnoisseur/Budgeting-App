@@ -12,41 +12,43 @@ You do **not** need Expo Go or the Play Store. Android can install an APK you bu
 
 ### Option A — Android Studio
 
-This project needs **Node.js 22** on the machine that runs Android Studio (Gradle calls `node` during sync). Install it from [nodejs.org](https://nodejs.org) or:
+#### 1. Install Node.js once
+
+This computer needs Node 22. Download LTS from [nodejs.org](https://nodejs.org), or on Ubuntu/Debian:
 
 ```bash
 sudo apt update
 sudo apt install nodejs npm
 ```
 
-Then:
+#### 2. Run this in a terminal
 
 ```bash
 cd mobile
-npm install
+bash ./scripts/setup-android-studio.sh
 ```
+
+That installs JavaScript packages and records where Node lives so Android Studio can find it. You do **not** need to edit any properties file by hand.
+
+The script may ask for your password once so it can put `node` in `/usr/local/bin` (Android Studio does not see nvm). If you prefer, install Node with `sudo apt install nodejs npm` instead.
+
+#### 3. Sync and build in Android Studio
 
 1. Open **Android Studio**.
-2. **File → Open** and choose `mobile/android` (the `android` folder, not the repo root).
-3. Wait for Gradle to sync.
-4. **Build → Build Bundle(s) / APK(s) → Build APK(s)** (use the **release** variant so the JavaScript is packed inside the app).
-5. When it finishes, click **locate** and copy `app-release.apk` to your phone.
-6. On the phone, open the file and install it. Allow “Install unknown apps” for Files / Chrome if Android asks.
+2. **File → Open** and choose the `mobile/android` folder (not the repo root).
+3. **File → Sync Project with Gradle Files**.
+4. **Build → Select Build Variant** and pick **release** (debug still wants a Metro server).
+5. **Build → Build Bundle(s) / APK(s) → Build APK(s)**.
+6. Click **locate** and copy `app-release.apk` to your phone.
+7. On the phone, open the file and install it. Allow “Install unknown apps” if Android asks.
 
-If sync fails with `Cannot run program "node"`: Android Studio was started without Node on its PATH (common with nvm). In a terminal run `which node`, then create `mobile/android/local.properties` (next to `settings.gradle`) with your SDK path **and**:
-
-```properties
-sdk.dir=/home/YOU/Android/Sdk
-node.binary=/full/path/from/which/node
-```
-
-Then **File → Sync Project with Gradle Files**.
+If sync still says it cannot run `node`, fully quit Android Studio (File → Exit), then start it again and open `mobile/android`.
 
 ### Option B — command line
 
 ```bash
 cd mobile
-npm install
+bash ./scripts/setup-android-studio.sh
 npm run apk
 ```
 
@@ -75,8 +77,9 @@ To point a **rebuild** at a different API (for example a local server), set `EXP
 ## Scripts
 
 ```bash
-npm run apk        # release APK with JS + API URL inside
-npm run android    # build release and install on a plugged-in device
+npm run studio-setup   # Node check + npm install (run before Android Studio)
+npm run apk            # release APK with JS + API URL inside
+npm run android        # build release and install on a plugged-in device
 npm test
 npm run typecheck
 ```
