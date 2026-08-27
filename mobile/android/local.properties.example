@@ -1,0 +1,7 @@
+# Copy to local.properties (Android Studio also writes sdk.dir here).
+# Do not commit local.properties.
+
+# sdk.dir=/home/YOU/Android/Sdk
+
+# If Gradle says it cannot run 'node', paste the output of `which node`:
+# node.binary=/usr/bin/node
