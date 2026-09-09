@@ -253,8 +253,8 @@ export function CsvImportPanel({
           skip them.
         </p>
       ) : (
-        <div className="table-wrap">
-          <table className="data-table compact">
+        <div className="table-wrap import-inbox-wrap">
+          <table className="data-table compact import-inbox">
             <thead>
               <tr>
                 <th>Date</th>
@@ -272,19 +272,23 @@ export function CsvImportPanel({
                 return (
                   <tr key={row.id}>
                     <td>{row.trans_date}</td>
-                    <td className="note-cell">
-                      {row.description}
-                      {row.issuer_category && (
-                        <div className="muted">
-                          Bank label: {row.issuer_category}
-                        </div>
-                      )}
+                    <td className="import-desc">
+                      <div className="import-clip">
+                        <span className="import-desc-text" title={row.description}>
+                          {row.description}
+                        </span>
+                        {row.issuer_category && (
+                          <span className="muted import-desc-meta">
+                            Bank label: {row.issuer_category}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className={`num${isCredit ? ' warn-text' : ''}`}>
                       {formatUsd(row.amount)}
                       {isCredit ? ' credit' : ''}
                     </td>
-                    <td>
+                    <td className="import-category">
                       <select
                         value={categoryFor(row.id)}
                         onChange={(e) =>
@@ -307,13 +311,28 @@ export function CsvImportPanel({
                         )}
                       </select>
                     </td>
-                    <td className="note-cell">
+                    <td className="import-match">
                       {match ? (
-                        <span className="soft-warning">
-                          Possible duplicate of {match.category_name}{' '}
-                          {formatUsd(match.amount)} on {match.date}
-                          {match.note ? ` (${match.note})` : ''}
-                        </span>
+                        <div className="import-clip">
+                          <span className="import-dup-label">
+                            Possible duplicate
+                          </span>
+                          <span
+                            className="muted import-dup-detail"
+                            title={[
+                              match.category_name,
+                              formatUsd(match.amount),
+                              match.date,
+                              match.note,
+                            ]
+                              .filter(Boolean)
+                              .join(' · ')}
+                          >
+                            {match.category_name} {formatUsd(match.amount)} on{' '}
+                            {match.date}
+                            {match.note ? ` (${match.note})` : ''}
+                          </span>
+                        </div>
                       ) : (
                         <span className="muted">New</span>
                       )}
