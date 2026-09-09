@@ -388,6 +388,11 @@ async function handle(req, res) {
     return
   }
 
+  if (path === '/api/imports/inbox' && method === 'GET') {
+    json(res, 200, { items: [], total: 0 })
+    return
+  }
+
   if (path === '/api/auth/oauth/providers' && method === 'GET') {
     json(res, 200, [])
     return

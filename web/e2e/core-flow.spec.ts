@@ -67,6 +67,7 @@ test.describe('core smoke: auth → categories → budget → tracker → dashbo
 
     await page.getByRole('link', { name: 'Tracker' }).click()
     await expect(page.getByRole('heading', { name: 'Tracker' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Import statement' })).toBeVisible()
     const logForm = page.locator('form').filter({ hasText: 'Log transaction' })
     await logForm.getByLabel('Kind').selectOption('expense')
     await logForm.getByLabel('Category').selectOption({ label: 'Groceries' })
@@ -144,3 +145,4 @@ test.describe('dashboard grid layout', () => {
     await expect(page.getByRole('heading', { name: 'Categories' })).toHaveCount(0)
   })
 })
+
