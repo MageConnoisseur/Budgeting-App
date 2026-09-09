@@ -357,7 +357,8 @@ All user-owned rows must be scoped by authenticated user.
 10. **No secrets in git.** Use env vars for Neon, Render, and Vercel config.
 11. **Migrate the database** deliberately with Alembic; do not add a parallel SQL-apply schema track.
 12. **Ask before large product pivots** (e.g. switching to YNAB-style rollover, dropping FastAPI, adding bank sync, or starting mobile). If import/bank sync is explicitly requested, follow **§12** rather than inventing a parallel design.
-13. When uncertain, choose the option that keeps **desktop web planning strong**, **logging simple**, and **dashboard insightful**.
+13. **Clarify unclear design before writing code.** If product, UX, layout, copy, or behavior is ambiguous, stop and ask **1–5 design questions** first. Prefer **multiple choice** (2–4 concrete options; mark a recommendation when you have one). Use an open-ended question only when the decision cannot be listed. Do not start implementing until those questions are answered. Skip this when the task is already specific enough.
+14. When uncertain **after** design is clear (or the task is specific enough to skip questions), choose the option that keeps **desktop web planning strong**, **logging simple**, and **dashboard insightful**.
 
 ---
 
@@ -398,7 +399,7 @@ All user-owned rows must be scoped by authenticated user.
 - Monorepo tooling (pnpm/npm workspaces, uv, etc.) — optional; not required to keep shipping
 - Import aggregator and billing (when §12 is built): Plaid vs Teller vs SimpleFIN (user-pays token); whether Setaside hosts connections or users bring their own; whether a subscription is required before offering hosted bank sync to anyone beyond the owner/family
 
-If an agent needs a choice among reasonable options for an open item, pick a conventional secure default, document it briefly in code/README, and continue.
+If an agent needs a choice among reasonable options for an already-listed open item **and the design is already clear**, pick a conventional secure default, document it briefly in code/README, and continue. If the design itself is unclear, ask 1–5 questions first (see §9 rule 13).
 
 ---
 
