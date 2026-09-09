@@ -10,7 +10,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
-from app.enums import CategoryKind, RecurrenceFrequency, ViewMode
+from app.enums import CategoryKind, ImportCandidateStatus, ImportMatchKind, RecurrenceFrequency, ViewMode
 
 
 class ORMModel(BaseModel):
@@ -715,6 +715,102 @@ class DashboardLayoutUpdate(BaseModel):
 
 class MessageOut(BaseModel):
     detail: str
+
+
+# --- CSV / statement import inbox ---
+
+
+class ImportPreviewRowOut(BaseModel):
+    trans_date: date
+    post_date: Optional[date] = None
+    amount: Decimal
+    description: str
+    issuer_category: Optional[str] = None
+    is_credit: bool = False
+
+
+class ImportPreviewOut(BaseModel):
+    source: str
+    filename: str
+    date_min: Optional[date] = None
+    date_max: Optional[date] = None
+    total_rows: int
+    importable_count: int
+    payment_count: int
+    credit_count: int
+    warnings: list[str] = []
+    rows: list[ImportPreviewRowOut] = []
+
+
+class ImportCommitRequest(BaseModel):
+    date_from: date
+    date_to: date
+
+
+class ImportMatchedTransactionOut(BaseModel):
+    id: UUID
+    date: date
+    amount: Decimal
+    note: Optional[str] = None
+    category_id: UUID
+    category_name: str
+
+
+class ImportCandidateOut(ORMModel):
+    id: UUID
+    batch_id: UUID
+    source: str
+    fingerprint: str
+    trans_date: date
+    post_date: Optional[date] = None
+    amount: Decimal
+    description: str
+    merchant_key: str
+    issuer_category: Optional[str] = None
+    status: ImportCandidateStatus
+    match_kind: ImportMatchKind
+    category_id: Optional[UUID] = None
+    matched_transaction_id: Optional[UUID] = None
+    accepted_transaction_id: Optional[UUID] = None
+    created_at: datetime
+    updated_at: datetime
+    category: Optional[CategoryOut] = None
+    matched_transaction: Optional[ImportMatchedTransactionOut] = None
+
+
+class ImportInboxOut(BaseModel):
+    items: list[ImportCandidateOut]
+    total: int
+
+
+class ImportBatchOut(ORMModel):
+    id: UUID
+    source: str
+    filename: str
+    date_from: date
+    date_to: date
+    imported_count: int
+    skipped_payment_count: int
+    skipped_duplicate_count: int
+    skipped_out_of_range_count: int
+    created_at: datetime
+
+
+class ImportCommitOut(BaseModel):
+    batch: ImportBatchOut
+    inbox: ImportInboxOut
+
+
+class ImportCategoryUpdate(BaseModel):
+    category_id: UUID
+
+
+class ImportAcceptRequest(BaseModel):
+    category_id: UUID
+
+
+class ImportMergeRequest(BaseModel):
+    transaction_id: Optional[UUID] = None
 
 
 # --- Recurring schedules (tracker reminders) ---

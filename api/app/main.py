@@ -8,7 +8,15 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.config import get_settings
 from app.database import engine
-from app.routers import auth, budgets, categories, dashboard, recurring_schedules, transactions
+from app.routers import (
+    auth,
+    budgets,
+    categories,
+    dashboard,
+    imports,
+    recurring_schedules,
+    transactions,
+)
 
 settings = get_settings()
 
@@ -16,7 +24,7 @@ app = FastAPI(
     title="Setaside API",
     description=(
         "Phase 1 REST API for personal budgeting: categories, monthly/annual plans, "
-        "transactions (search/sort/filter), and dashboard insights. "
+        "transactions (search/sort/filter), CSV statement inbox, and dashboard insights. "
         "Shared by the desktop web app and the thin Expo expense logger. "
         "USD only. Over-budget is a soft warning — never blocked."
     ),
@@ -42,6 +50,7 @@ app.include_router(auth.router, prefix="/api")
 app.include_router(categories.router, prefix="/api")
 app.include_router(budgets.router, prefix="/api")
 app.include_router(transactions.router, prefix="/api")
+app.include_router(imports.router, prefix="/api")
 app.include_router(recurring_schedules.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
 

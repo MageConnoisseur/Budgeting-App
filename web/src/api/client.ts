@@ -80,3 +80,36 @@ export async function apiFetch<T>(
   }
   return undefined as T
 }
+
+export async function apiUpload<T>(path: string, form: FormData): Promise<T> {
+  const headers = new Headers()
+  const token = getToken()
+  if (token) headers.set('Authorization', `Bearer ${token}`)
+
+  const url = `${apiBaseUrl()}/api${path}`
+  let res: Response
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: form,
+    })
+  } catch {
+    throw new ApiError(
+      0,
+      `Cannot reach API at ${apiBaseUrl()}. Check VITE_API_URL and that the API is running (CORS must allow this site).`,
+    )
+  }
+
+  if (!res.ok) {
+    if (res.status === 401) {
+      setToken(null)
+    }
+    throw await parseError(res)
+  }
+
+  if (res.headers.get('content-type')?.includes('application/json')) {
+    return res.json() as Promise<T>
+  }
+  return undefined as T
+}

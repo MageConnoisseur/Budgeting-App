@@ -3,6 +3,7 @@ import * as budgetsApi from '../api/budgets'
 import * as categoriesApi from '../api/categories'
 import { ApiError } from '../api/client'
 import * as txApi from '../api/transactions'
+import { CsvImportPanel } from '../components/CsvImportPanel'
 import { IncomeEstimatePanel } from '../components/IncomeEstimatePanel'
 import { NoteAutocomplete } from '../components/NoteAutocomplete'
 import { VirtualizedTransactionList } from '../components/VirtualizedTransactionList'
@@ -283,7 +284,7 @@ export function TrackerPage() {
           <h1>Tracker</h1>
           <p className="muted">
             Log actual money movement. Search and filter to confirm what you
-            already entered.
+            already entered, or import a statement CSV into the review inbox.
           </p>
         </div>
       </header>
@@ -417,6 +418,14 @@ export function TrackerPage() {
           onCreated={() => setSchedulesKey((k) => k + 1)}
         />
       )}
+
+      <CsvImportPanel
+        categories={categories}
+        onLedgerChange={() => {
+          setOffset(0)
+          void load()
+        }}
+      />
 
       <IncomeEstimatePanel />
 

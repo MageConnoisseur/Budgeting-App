@@ -254,6 +254,7 @@ def create_transaction(
     date,
     note: str | None,
     withdraw_from_category_id: UUID | None = None,
+    import_fingerprint: str | None = None,
 ) -> Transaction:
     """Create a transaction, optionally pairing an expense with a savings withdrawal."""
     pair_id = None
@@ -295,6 +296,7 @@ def create_transaction(
         date=date,
         note=note,
         pair_id=pair_id,
+        import_fingerprint=import_fingerprint,
     )
     db.add(tx)
     if withdrawal_cat is not None and pair_id is not None:

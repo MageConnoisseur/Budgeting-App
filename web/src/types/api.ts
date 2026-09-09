@@ -553,3 +553,86 @@ export interface IncomeEstimate {
   based_on_history: number
   message: string
 }
+
+export type ImportMatchKind = 'none' | 'fuzzy'
+export type ImportCandidateStatus =
+  | 'pending'
+  | 'accepted'
+  | 'skipped'
+  | 'merged'
+
+export interface ImportPreviewRow {
+  trans_date: string
+  post_date: string | null
+  amount: string
+  description: string
+  issuer_category: string | null
+  is_credit: boolean
+}
+
+export interface ImportPreview {
+  source: string
+  filename: string
+  date_min: string | null
+  date_max: string | null
+  total_rows: number
+  importable_count: number
+  payment_count: number
+  credit_count: number
+  warnings: string[]
+  rows: ImportPreviewRow[]
+}
+
+export interface ImportMatchedTransaction {
+  id: string
+  date: string
+  amount: string
+  note: string | null
+  category_id: string
+  category_name: string
+}
+
+export interface ImportCandidate {
+  id: string
+  batch_id: string
+  source: string
+  fingerprint: string
+  trans_date: string
+  post_date: string | null
+  amount: string
+  description: string
+  merchant_key: string
+  issuer_category: string | null
+  status: ImportCandidateStatus
+  match_kind: ImportMatchKind
+  category_id: string | null
+  matched_transaction_id: string | null
+  accepted_transaction_id: string | null
+  created_at: string
+  updated_at: string
+  category?: Category | null
+  matched_transaction?: ImportMatchedTransaction | null
+}
+
+export interface ImportInbox {
+  items: ImportCandidate[]
+  total: number
+}
+
+export interface ImportBatch {
+  id: string
+  source: string
+  filename: string
+  date_from: string
+  date_to: string
+  imported_count: number
+  skipped_payment_count: number
+  skipped_duplicate_count: number
+  skipped_out_of_range_count: number
+  created_at: string
+}
+
+export interface ImportCommit {
+  batch: ImportBatch
+  inbox: ImportInbox
+}

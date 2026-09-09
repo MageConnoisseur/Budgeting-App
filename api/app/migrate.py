@@ -33,6 +33,8 @@ from app.config import get_settings
 
 # Drop order does not matter with CASCADE; listed for clarity.
 APP_TABLES = (
+    "import_candidates",
+    "import_batches",
     "recurring_schedules",
     "transactions",
     "budget_template_lines",
@@ -58,6 +60,7 @@ SCHEMA_FINGERPRINTS: tuple[tuple[str, str, str], ...] = (
     ("c3d4e5f6a7b8", "recurring_schedules", "next_occurrence"),
     ("d4e5f6a7b8c9", "budget_lines", "funded_by_category_id"),
     ("e5f6a7b8c9d0", "recovery_tokens", "token_hash"),
+    ("f6a7b8c9d0e1", "import_candidates", "fingerprint"),
 )
 
 

@@ -15,6 +15,7 @@ Hosts on **Render**; database is **PostgreSQL on Neon**. Web (Vite/React on Verc
 - **Annual** budget surface (`GET /api/budgets/annual/{year}`, `PUT /api/budgets/annual/cell`)
 - Compact yearly actuals for budget-cell fills (`GET /api/budgets/actuals/{year}`)
 - Transactions with **search, sort, filters**, and pagination
+- **CSV statement inbox** (Discover first): date-range import, fingerprint dedup, rounding-aware possible-duplicate flags, accept / merge / skip
 - **Recurring schedules** for payday / regular expense tracking reminders (manual log/skip)
 - **Income estimate** for a month from tracker patterns + schedules
 - Dashboard monthly/annual insights with **soft** over-budget flags
@@ -101,6 +102,7 @@ All data routes are under `/api` and require auth except `/api/auth/register`, `
 | Categories | `GET/POST /categories`, `GET/PATCH/DELETE /categories/{id}` |
 | Budgets | `GET/PUT /budgets/months/{year}/{month}`, `GET /budgets/annual/{year}`, `PUT /budgets/annual/cell`, copy/template actions |
 | Transactions | `GET/POST /transactions`, `GET/PATCH/DELETE /transactions/{id}` (`q`, `kind`, `category_id`, `date_from`, `date_to`, `sort_by`, `sort_dir`) |
+| Imports | `POST /imports/preview`, `POST /imports` (CSV + date range), `GET /imports/inbox`, accept / skip / merge candidates |
 | Recurring | `GET/POST /recurring-schedules`, due/log/skip, `GET /recurring-schedules/suggestions`, `GET /recurring-schedules/income-estimate` |
 | Dashboard | `GET /dashboard/monthly/{year}/{month}`, `GET /dashboard/annual/{year}`, layout + savings balances |
 
