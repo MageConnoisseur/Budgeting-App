@@ -12,12 +12,14 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -75,6 +77,10 @@ class User(Base):
         back_populates="user"
     )
     dashboard_layouts: Mapped[list[DashboardLayout]] = relationship(back_populates="user")
+    import_batches: Mapped[list[ImportBatch]] = relationship(back_populates="user")
+    import_candidates: Mapped[list[ImportCandidate]] = relationship(
+        back_populates="user"
+    )
 
 
 class OAuthAccount(Base):
@@ -313,6 +319,15 @@ class BudgetTemplateLine(Base):
 
 class Transaction(Base):
     __tablename__ = "transactions"
+    __table_args__ = (
+        Index(
+            "uq_transactions_user_import_fingerprint",
+            "user_id",
+            "import_fingerprint",
+            unique=True,
+            postgresql_where=text("import_fingerprint IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
     user_id: Mapped[uuid.UUID] = mapped_column(
@@ -327,6 +342,11 @@ class Transaction(Base):
     amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
     date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Set when this ledger row was accepted or merged from an import candidate.
+    # Same fingerprint twice (re-upload) is a no-op. NULL for purely manual rows.
+    import_fingerprint: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, index=True, default=None
+    )
     # Shared by an expense and its matching savings withdrawal when logging
     # a bill that is paid from a bucket.
     pair_id: Mapped[Optional[uuid.UUID]] = mapped_column(
@@ -412,3 +432,100 @@ class DashboardLayout(Base):
     )
 
     user: Mapped[User] = relationship(back_populates="dashboard_layouts")
+
+
+class ImportBatch(Base):
+    """One CSV (or later bank-feed) upload into the review inbox."""
+
+    __tablename__ = "import_batches"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    source: Mapped[str] = mapped_column(String(32), nullable=False)  # ImportSource
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    date_from: Mapped[date] = mapped_column(Date, nullable=False)
+    date_to: Mapped[date] = mapped_column(Date, nullable=False)
+    imported_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    skipped_payment_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    skipped_duplicate_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    skipped_out_of_range_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped[User] = relationship(back_populates="import_batches")
+    candidates: Mapped[list[ImportCandidate]] = relationship(
+        back_populates="batch", cascade="all, delete-orphan"
+    )
+
+
+class ImportCandidate(Base):
+    """Staged import row. Not a tracker transaction until the user accepts or merges."""
+
+    __tablename__ = "import_candidates"
+    __table_args__ = (
+        UniqueConstraint("user_id", "fingerprint", name="uq_import_candidates_user_fingerprint"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    batch_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("import_batches.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    source: Mapped[str] = mapped_column(String(32), nullable=False)  # ImportSource
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    trans_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    post_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    description: Mapped[str] = mapped_column(String(512), nullable=False)
+    # Normalized payee key for future merchant → category rules.
+    merchant_key: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    # Bank's own category label (e.g. Discover "Supermarkets"); never auto-mapped today.
+    issuer_category: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="pending", index=True
+    )  # ImportCandidateStatus
+    category_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("categories.id", ondelete="SET NULL"),
+        index=True,
+        nullable=True,
+    )
+    matched_transaction_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("transactions.id", ondelete="SET NULL"),
+        index=True,
+        nullable=True,
+    )
+    match_kind: Mapped[str] = mapped_column(String(16), nullable=False, default="none")
+    accepted_transaction_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("transactions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    user: Mapped[User] = relationship(back_populates="import_candidates")
+    batch: Mapped[ImportBatch] = relationship(back_populates="candidates")
+    category: Mapped[Optional[Category]] = relationship(foreign_keys=[category_id])
+    matched_transaction: Mapped[Optional[Transaction]] = relationship(
+        foreign_keys=[matched_transaction_id]
+    )
+    accepted_transaction: Mapped[Optional[Transaction]] = relationship(
+        foreign_keys=[accepted_transaction_id]
+    )

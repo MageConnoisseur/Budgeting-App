@@ -15,7 +15,7 @@ Pass this file to new coding agents so they share the same product, architecture
 | **Phase 1** | MVP (web + API) | **Done** |
 | **Phase 1.x / v2** | **Desktop web depth** | **Active — prefer this scope** |
 | **Phase 2** | Mobile (Expo) | **Thin expense logger** in `mobile/` — do not grow it unless asked |
-| **Phase 3+** | Growth (CSV, households, multi-currency, …) | Do not build until explicitly asked. CSV/bank import **design** is in §12 |
+| **Phase 3+** | Growth (other banks, households, multi-currency, …) | CSV **Discover inbox** is started (web Tracker). Remaining growth features wait until asked. Design in §12 |
 
 **Keep `mobile/` thin** (sign in + log expenses). Do not add Budget, Dashboard, Categories, or income/savings logging to the phone app unless the task explicitly asks. Phase 3+ still needs an explicit ask. When uncertain, invest in desktop Budget, Tracker, Dashboard, Categories, and auth/account reliability.
 
@@ -31,7 +31,7 @@ A full-stack **personal budgeting app** with:
 
 **Clients:** The **desktop web app is the product** (planning + analysis + full tracking). `mobile/` is a thin Expo client for **on-the-go expense logging** against the same API. New product features go on web, not both clients. All clients use the **same API and database**.
 
-**Not in scope until asked:** bank sync, household sharing, multi-currency, hard spending locks, CSV/bank import. Intended import design (inbox, dedup, categorization, cost) is in **§12** — do not build it unless explicitly asked.
+**Not in scope until asked:** bank sync, household sharing, multi-currency, hard spending locks. CSV **Discover** import (inbox, fingerprints, rounding-aware duplicate flags) is started on desktop Tracker; other issuers and live bank feeds still follow **§12**.
 
 ---
 
@@ -137,7 +137,7 @@ Required:
 - Clear empty states when nothing matches; easy reset of search/filters
 - Performance-minded list UX as history grows (pagination or virtualized list is fine)
 
-**CSV / bank import:** Phase 3+. Do not write imports straight into the tracker. Intended design (review inbox, fingerprints, rounding-aware fuzzy match, merchant rules, bank sync as a later feed) is in **§12**. Until then, tracker search/sort is the mitigation for “did I already log this?”
+**CSV / bank import:** Discover CSV inbox is on desktop Tracker (date range, staging, accept / merge / skip). Auto merchant-category rules and live bank sync are later; design is in **§12**. Tracker search/sort is still the way to find past manual entries.
 
 ### 3.5 Dashboard (high priority, customizable)
 
@@ -288,7 +288,7 @@ Shipped as a **small Expo client** in `mobile/` so someone can log spend away fr
 ### Phase 3+ — Growth (do not build until asked)
 
 - Email verification (beyond reset/recovery if still needed)
-- CSV import with duplicate safeguards (see **§12**; inbox first, not silent insert)
+- CSV import with duplicate safeguards (see **§12**; Discover inbox shipped; other banks later)
 - Bank / card sync as a later feed into that same inbox (see **§12**; ask before adding an aggregator)
 - Multi-currency
 - Custom budget periods (non-calendar)
@@ -337,7 +337,7 @@ Stay close to these concepts (implemented under `api/` with Alembic):
   (amount sign/convention documented in `api/README.md`)
 - **DashboardLayout** — per-user widget order / layout for monthly vs annual
 - **SavingsBalance** — derived from transactions (prefer compute from ledger; materialize only if needed for performance)
-- **Import (Phase 3+, not built):** staging candidates, fingerprints, merchant rules, optional account/transfer rows — see **§12**. Do not add these tables unless that work is explicitly requested.
+- **Import:** staging `import_candidates` + `import_batches`, fingerprints, rounding-aware fuzzy match. Merchant auto-rules and bank sync later — see **§12**.
 
 All user-owned rows must be scoped by authenticated user.
 
@@ -369,8 +369,8 @@ All user-owned rows must be scoped by authenticated user.
 | Month model | Copy-forward auto-seed from latest planned month + copy/template tools |
 | Periods | Calendar months now; custom ranges later |
 | Savings | Buckets with allocated balances, optional target goals + projected hit month, and monthly contribution plans. Expense lines may be **paid from** a bucket for a given month (planned use). Auto-seed does not copy those links; copy-from and templates do. Paycheck leftover ignores funded expenses. |
-| Tracker | Manual transactions first; note memory autocomplete; CSV/bank import later per **§12** (inbox, fingerprints, rounding-aware fuzzy match, merchant rules) |
-| CSV / bank import | **Phase 3+, not built.** Staging inbox (not silent ledger insert); fingerprints; rounding-aware fuzzy match (±$1 default); merge keeps category / note / paid-from and replaces rounded amount with posted; merchant rules from history; bank sync is a later feed into the same inbox; hosted aggregator billing is per institution login — see **§12** |
+| Tracker | Manual transactions first; note memory autocomplete; Discover CSV inbox per **§12** (staging, fingerprints, rounding-aware fuzzy match). Merchant auto-rules later |
+| CSV / bank import | **Discover CSV inbox shipped** (not silent ledger insert). Fingerprints; amount ±$1 and date ±2 days for possible duplicates; merge keeps category / note / paid-from and replaces rounded amount with posted. Auto category suggestion and bank sync later — see **§12** |
 | Over budget | Soft warnings; emphasize multi-month trends |
 | Plan coaching | After 3+ expense/savings overruns in a year: suggest raising the apply-month plan by the median overrun, or tip “looks seasonal” for a short contiguous cluster; one-click apply via annual budget cell; dismissals local-only |
 | Budget coach | Deterministic leftover coach (Phase 1.x): unassigned plan leftover → fund a savings bucket (prefer unmet targets); plan shortfall → optional trim of **flexible** spend (skip rent/mortgage/dominant housing-sized lines); income under-plan is only flagged after paydays or the month are due; plus existing raise/seasonal tips and spending-pace warnings. Dedicated **Coach** page + compact Dashboard widget. Apply is optional; dismissals local-only. |
@@ -402,9 +402,9 @@ If an agent needs a choice among reasonable options for an open item, pick a con
 
 ---
 
-## 12. Deferred: CSV / bank import (Phase 3+ — do not build yet)
+## 12. CSV / bank import (Discover inbox started)
 
-Design intent if/when import is explicitly requested. **Do not implement this section during desktop-depth work.** CSV and bank sync share one pipeline. Mixing manual entry with import is allowed; **silent insert is not.**
+CSV and bank sync share one pipeline. Mixing manual entry with import is allowed; **silent insert is not.** Discover CSV import (date range + inbox) is the first slice. Other issuers, merchant auto-rules, and live bank feeds are later.
 
 ### 12.1 Why this exists
 

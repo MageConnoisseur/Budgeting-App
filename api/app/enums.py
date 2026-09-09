@@ -23,6 +23,24 @@ class RecurrenceFrequency(str, enum.Enum):
     monthly = "monthly"
 
 
+class ImportSource(str, enum.Enum):
+    """Statement parser id. Add a parser module when a new bank CSV is supported."""
+
+    discover = "discover"
+
+
+class ImportCandidateStatus(str, enum.Enum):
+    pending = "pending"
+    accepted = "accepted"
+    skipped = "skipped"
+    merged = "merged"
+
+
+class ImportMatchKind(str, enum.Enum):
+    none = "none"
+    fuzzy = "fuzzy"
+
+
 # Amount convention (documented for clients):
 # - Amounts are Decimal with 2 fractional digits, USD only in v1.
 # - Income / expense transactions: amount is always > 0 (money received / spent).

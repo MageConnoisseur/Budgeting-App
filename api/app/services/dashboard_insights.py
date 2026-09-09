@@ -82,7 +82,7 @@ def _kind_totals_point(
             continue
         p = planned.get(cid, ZERO)
         a = actuals.get(cid, ZERO)
-        if cat.kind in (CategoryKind.income.value, CategoryKind.expense.value):
+        if cat.kind == CategoryKind.income.value:
             a = abs(a)
         if cat.kind == CategoryKind.income.value:
             income_p += p

@@ -109,12 +109,16 @@ def _actuals_by_category(
 def _fill_actual(kind: str, amount: Decimal) -> Decimal | None:
     """Amount that should grow a budget-cell fill for this category kind.
 
-    Income/expense use absolute logged amounts. Savings uses contributions
+    Income uses absolute logged amounts. Expense uses the signed total so
+    imported merchant refunds reduce spend. Savings uses contributions
     (positive) only — withdrawals are bucket *use*, not progress vs the
     contribution plan.
     """
     if kind == CategoryKind.savings.value:
         return amount if amount > ZERO else None
+    if kind == CategoryKind.expense.value:
+        # Signed: merchant refunds (negative expenses) reduce the fill.
+        return amount if amount != ZERO else None
     return abs(amount) if amount != ZERO else None
 
 
@@ -664,7 +668,7 @@ def _assemble_spending_pace(
             if window_start <= tx.date <= window_end:
                 daily[tx.date]["income"] += amount
         elif kind == CategoryKind.expense.value:
-            amount = abs(tx.amount)
+            amount = tx.amount
             if window_start <= tx.date <= window_end:
                 daily[tx.date]["expense"] += amount
         elif kind == CategoryKind.savings.value:
@@ -861,7 +865,7 @@ def _monthly_from_ledger(
     for cat in categories:
         p = planned.get(cat.id, ZERO)
         a = actuals.get(cat.id, ZERO)
-        if cat.kind in (CategoryKind.income.value, CategoryKind.expense.value):
+        if cat.kind == CategoryKind.income.value:
             a = abs(a)
         remaining = p - a
         if cat.kind == CategoryKind.income.value:

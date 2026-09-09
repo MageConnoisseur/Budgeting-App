@@ -8,8 +8,8 @@ That file is the source of truth for:
 - Budget copy-forward behavior and Monthly/Annual views
 - Savings buckets, tracker search/sort, soft over-budget rules
 - Stack and hosting (React/Vercel, FastAPI/Render, Postgres/Neon)
-- **Current focus: robust desktop web (Phase 1.x / v2)** — Phase 1 MVP is done; `mobile/` is a thin expense logger (do not grow it unless asked); growth features are deferred
-- Deferred CSV/bank import design (`instructions.md` §12) — inbox, rounding-aware dedup, merchant rules, aggregator cost; do not build unless asked
+- **Current focus: robust desktop web (Phase 1.x / v2)** — Phase 1 MVP is done; `mobile/` is a thin expense logger (do not grow it unless asked)
+- CSV **Discover inbox** is started on desktop Tracker; other banks, merchant auto-rules, and bank sync still follow `instructions.md` §12
 - Coding-agent rules and decision log
 
 Do not invent conflicting product or architecture choices. If something is unclear, prefer the guidance in `instructions.md`.
