@@ -549,6 +549,138 @@ a.btn {
   min-width: 10rem;
 }
 
+.import-inbox-wrap {
+  overflow-x: auto;
+}
+
+.import-inbox {
+  table-layout: fixed;
+  min-width: 52rem;
+}
+
+.import-inbox th,
+.import-inbox td {
+  vertical-align: top;
+  overflow: hidden;
+}
+
+.import-inbox .import-desc {
+  padding-right: 1.5rem;
+}
+
+.import-inbox .num {
+  padding-left: 1rem;
+}
+
+.import-inbox .import-match {
+  padding-right: 1.1rem;
+}
+
+.import-inbox .actions {
+  padding-left: 0.75rem;
+  position: relative;
+  z-index: 1;
+  background: var(--panel-solid);
+}
+
+.import-inbox th:nth-child(1),
+.import-inbox td:nth-child(1) {
+  width: 7.25rem;
+}
+
+.import-inbox th:nth-child(2),
+.import-inbox td:nth-child(2) {
+  width: 28%;
+}
+
+.import-inbox th:nth-child(3),
+.import-inbox td:nth-child(3) {
+  width: 6.75rem;
+}
+
+.import-inbox th:nth-child(4),
+.import-inbox td:nth-child(4) {
+  width: 9.5rem;
+}
+
+.import-inbox th:nth-child(5),
+.import-inbox td:nth-child(5) {
+  width: 11.5rem;
+}
+
+.import-inbox th:nth-child(6),
+.import-inbox td:nth-child(6) {
+  width: 8.25rem;
+}
+
+.import-desc,
+.import-match {
+  white-space: normal;
+}
+
+.import-clip {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.import-desc-text {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.import-desc-meta {
+  display: block;
+  margin-top: 0.2rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.import-category select {
+  width: 100%;
+  max-width: 100%;
+}
+
+.import-match {
+  white-space: normal;
+}
+
+.import-dup-label {
+  display: inline-block;
+  padding: 0.12rem 0.45rem;
+  border-radius: 6px;
+  background: var(--warn-bg);
+  color: var(--warn);
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.import-dup-detail {
+  display: block;
+  margin-top: 0.3rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.import-inbox .actions .inline-edit {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 0.35rem;
+}
+
+.import-inbox .actions .btn {
+  width: 100%;
+  text-align: center;
+}
+
 .row-muted {
   opacity: 0.65;
 }
