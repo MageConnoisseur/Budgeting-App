@@ -770,6 +770,7 @@ class ImportCandidateOut(ORMModel):
     status: ImportCandidateStatus
     match_kind: ImportMatchKind
     category_id: Optional[UUID] = None
+    category_source: Optional[str] = None
     matched_transaction_id: Optional[UUID] = None
     accepted_transaction_id: Optional[UUID] = None
     created_at: datetime

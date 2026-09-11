@@ -194,10 +194,11 @@ def test_repeat_merchant_prefills_last_category(auth_headers: dict[str, str]) ->
     costco = next(i for i in inbox if i["description"].startswith("COSTCO"))
     starbucks = next(i for i in inbox if i["description"].startswith("STARBUCKS"))
     trader = next(i for i in inbox if i["description"].startswith("TRADER"))
-    assert costco["category_id"] is None
+    assert costco["category_id"] == groceries["id"]
+    assert costco["category_source"] == "label"
     assert starbucks["category_id"] is None
-    # Same Discover "Supermarkets" label as Costco — still unguessed.
-    assert trader["category_id"] is None
+    assert trader["category_id"] == groceries["id"]
+    assert trader["category_source"] == "label"
 
     accepted = client.post(
         f"/api/imports/candidates/{costco['id']}/accept",
@@ -211,7 +212,7 @@ def test_repeat_merchant_prefills_last_category(auth_headers: dict[str, str]) ->
     leftover_starbucks = next(
         i for i in leftover if i["description"].startswith("STARBUCKS")
     )
-    assert leftover_trader["category_id"] is None
+    assert leftover_trader["category_id"] == groceries["id"]
     assert leftover_starbucks["category_id"] is None
 
     later = b"""Trans. Date,Post Date,Description,Amount,Category
@@ -229,10 +230,12 @@ def test_repeat_merchant_prefills_last_category(auth_headers: dict[str, str]) ->
     items = again.json()["inbox"]["items"]
     costco2 = next(i for i in items if i["description"].startswith("COSTCO"))
     peets = next(i for i in items if "PEET" in i["description"])
-    trader2 = next(i for i in items if i["description"].startswith("TRADER"))
     assert costco2["category_id"] == groceries["id"]
+    assert costco2["category_source"] == "merchant"
     assert peets["category_id"] is None
-    assert trader2["category_id"] is None
+    traders = [i for i in items if i["description"].startswith("TRADER")]
+    assert traders
+    assert all(i["category_id"] == groceries["id"] for i in traders)
 
     changed = client.post(
         f"/api/imports/candidates/{costco2['id']}/accept",
@@ -280,7 +283,7 @@ def test_same_batch_repeat_picks_up_accepted_category(
     costcos = [i for i in inbox if i["description"].startswith("COSTCO")]
     starbucks = next(i for i in inbox if i["description"].startswith("STARBUCKS"))
     assert len(costcos) == 2
-    assert all(i["category_id"] is None for i in costcos)
+    assert all(i["category_id"] == groceries["id"] for i in costcos)
     assert starbucks["category_id"] is None
 
     first = next(i for i in costcos if i["description"].endswith("#123"))
@@ -339,3 +342,118 @@ def test_tracker_note_suggests_import_category(auth_headers: dict[str, str]) -> 
     sb = starbucks_range.json()["inbox"]["items"]
     starbucks = next(i for i in sb if i["description"].startswith("STARBUCKS"))
     assert starbucks["category_id"] is None
+
+
+def test_issuer_category_history_prefills_new_merchant(
+    auth_headers: dict[str, str],
+) -> None:
+    """A new supermarket inherits Food after Costco was accepted there.
+
+    'Food' does not name-match Discover's Supermarkets label, so this is
+    history from other merchants — not a synonym guess.
+    """
+    h = auth_headers
+    food = client.post(
+        "/api/categories",
+        headers=h,
+        json={"kind": "expense", "name": "Food"},
+    ).json()
+
+    first = client.post(
+        "/api/imports",
+        headers=h,
+        files=_csv_file(),
+        data={"date_from": "2026-08-02", "date_to": "2026-08-02"},
+    )
+    assert first.status_code == 200, first.text
+    costco = first.json()["inbox"]["items"][0]
+    assert costco["description"].startswith("COSTCO")
+    assert costco["category_id"] is None
+
+    client.post(
+        f"/api/imports/candidates/{costco['id']}/accept",
+        headers=h,
+        json={"category_id": food["id"]},
+    )
+
+    later = b"""Trans. Date,Post Date,Description,Amount,Category
+09/08/2026,09/09/2026,TRADER JOE'S #789,22.10,Supermarkets
+09/09/2026,09/10/2026,PEET'S COFFEE 12,4.50,Restaurants
+"""
+    again = client.post(
+        "/api/imports",
+        headers=h,
+        files={"file": ("Discover-tj.csv", BytesIO(later), "text/csv")},
+        data={"date_from": "2026-09-01", "date_to": "2026-09-30"},
+    )
+    assert again.status_code == 200, again.text
+    items = again.json()["inbox"]["items"]
+    trader = next(i for i in items if i["description"].startswith("TRADER"))
+    peets = next(i for i in items if "PEET" in i["description"])
+    assert trader["category_id"] == food["id"]
+    assert trader["category_source"] == "issuer"
+    assert peets["category_id"] is None
+
+
+def test_gasoline_issuer_follows_other_fuel_merchants(
+    auth_headers: dict[str, str],
+) -> None:
+    h = auth_headers
+    gas = client.post(
+        "/api/categories",
+        headers=h,
+        json={"kind": "expense", "name": "Car"},
+    ).json()
+    csv = b"""Trans. Date,Post Date,Description,Amount,Category
+08/20/2026,08/21/2026,SHELL OIL 123,38.40,Gasoline
+"""
+    first = client.post(
+        "/api/imports",
+        headers=h,
+        files={"file": ("Discover-shell.csv", BytesIO(csv), "text/csv")},
+        data={"date_from": "2026-08-01", "date_to": "2026-08-31"},
+    )
+    shell = first.json()["inbox"]["items"][0]
+    assert shell["category_id"] is None
+    client.post(
+        f"/api/imports/candidates/{shell['id']}/accept",
+        headers=h,
+        json={"category_id": gas["id"]},
+    )
+
+    later = b"""Trans. Date,Post Date,Description,Amount,Category
+09/20/2026,09/21/2026,CHEVRON 88,44.10,Gasoline
+"""
+    again = client.post(
+        "/api/imports",
+        headers=h,
+        files={"file": ("Discover-chevron.csv", BytesIO(later), "text/csv")},
+        data={"date_from": "2026-09-01", "date_to": "2026-09-30"},
+    )
+    chevron = again.json()["inbox"]["items"][0]
+    assert chevron["description"].startswith("CHEVRON")
+    assert chevron["category_id"] == gas["id"]
+    assert chevron["category_source"] == "issuer"
+
+
+def test_gas_category_name_guesses_gasoline_label(
+    auth_headers: dict[str, str],
+) -> None:
+    h = auth_headers
+    gas = client.post(
+        "/api/categories",
+        headers=h,
+        json={"kind": "expense", "name": "Gas"},
+    ).json()
+    csv = b"""Trans. Date,Post Date,Description,Amount,Category
+08/20/2026,08/21/2026,SHELL OIL 123,38.40,Gasoline
+"""
+    first = client.post(
+        "/api/imports",
+        headers=h,
+        files={"file": ("Discover-shell.csv", BytesIO(csv), "text/csv")},
+        data={"date_from": "2026-08-01", "date_to": "2026-08-31"},
+    )
+    shell = first.json()["inbox"]["items"][0]
+    assert shell["category_id"] == gas["id"]
+    assert shell["category_source"] == "label"

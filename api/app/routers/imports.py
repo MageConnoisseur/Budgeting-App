@@ -54,6 +54,7 @@ def _candidate_out(row) -> ImportCandidateOut:
         status=row.status,
         match_kind=row.match_kind,
         category_id=row.category_id,
+        category_source=getattr(row, "category_source", None),
         matched_transaction_id=row.matched_transaction_id,
         accepted_transaction_id=row.accepted_transaction_id,
         created_at=row.created_at,

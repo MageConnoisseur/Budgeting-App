@@ -88,6 +88,37 @@ def test_merchant_keys_related_same_chain() -> None:
     assert not merchant_keys_related("", "COSTCO")
 
 
+def test_issuer_label_matches_user_category_names() -> None:
+    from app.services.imports.labels import (
+        best_category_for_issuer_label,
+        issuer_label_matches_category,
+    )
+
+    assert issuer_label_matches_category("Supermarkets", "Groceries")
+    assert issuer_label_matches_category("Gasoline", "Gas")
+    assert issuer_label_matches_category("Fuel", "Gas")
+    assert issuer_label_matches_category("Restaurants", "Dining")
+    assert not issuer_label_matches_category("Merchandise", "Groceries")
+    assert not issuer_label_matches_category("Supermarkets", "Household")
+
+    groceries = uuid4()
+    household = uuid4()
+    assert (
+        best_category_for_issuer_label(
+            "Supermarkets",
+            [(household, "Household"), (groceries, "Groceries")],
+        )
+        == groceries
+    )
+    assert (
+        best_category_for_issuer_label(
+            "Merchandise",
+            [(groceries, "Groceries")],
+        )
+        is None
+    )
+
+
 def test_payment_detector() -> None:
     assert is_card_payment("INTERNET PAYMENT - THANK YOU", "Payments and Credits")
     assert is_card_payment("AUTOMATIC PAYMENT", None)

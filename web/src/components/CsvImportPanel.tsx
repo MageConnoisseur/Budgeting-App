@@ -4,6 +4,13 @@ import { ApiError } from '../api/client'
 import { formatUsd } from '../lib/format'
 import type { Category, ImportCandidate, ImportPreview } from '../types/api'
 
+function suggestionHint(row: ImportCandidate, selectedId: string) {
+  if (!row.category_id || selectedId !== row.category_id) return null
+  if (row.category_source === 'issuer') return 'From similar purchases'
+  if (row.category_source === 'label') return 'Guess from bank label'
+  return 'From last time'
+}
+
 function inRange(iso: string, from: string, to: string) {
   if (from && iso < from) return false
   if (to && iso > to) return false
@@ -203,9 +210,10 @@ export function CsvImportPanel({
       <p className="muted">
         Upload a Discover CSV, pick the transaction dates to bring in, then
         review each charge. Repeat merchants start in the category you used last
-        time — change it if this one is different. Card payments are skipped
-        (those are transfers). Nothing hits the tracker until you accept or
-        merge it.
+        time. New payees can pick up that category from similar Discover labels
+        (Supermarkets → Groceries, Fuel → Gas) — change it if this one is
+        different. Card payments are skipped (those are transfers). Nothing hits
+        the tracker until you accept or merge it.
       </p>
 
       <div className="inline-form wrap">
@@ -296,6 +304,7 @@ export function CsvImportPanel({
               {inbox.map((row) => {
                 const match = row.matched_transaction
                 const isCredit = Number(row.amount) < 0
+                const hint = suggestionHint(row, categoryFor(row.id))
                 return (
                   <tr key={row.id}>
                     <td>{row.trans_date}</td>
@@ -338,10 +347,9 @@ export function CsvImportPanel({
                           ))
                         )}
                       </select>
-                      {row.category_id &&
-                      categoryFor(row.id) === row.category_id ? (
+                      {hint ? (
                         <span className="muted import-category-hint">
-                          From last time
+                          {hint}
                         </span>
                       ) : null}
                     </td>
