@@ -337,7 +337,7 @@ Stay close to these concepts (implemented under `api/` with Alembic):
   (amount sign/convention documented in `api/README.md`)
 - **DashboardLayout** — per-user widget order / layout for monthly vs annual
 - **SavingsBalance** — derived from transactions (prefer compute from ledger; materialize only if needed for performance)
-- **Import:** staging `import_candidates` + `import_batches`, fingerprints, rounding-aware fuzzy match. Merchant auto-rules and bank sync later — see **§12**.
+- **Import:** staging `import_candidates` + `import_batches` + `merchant_rules`, fingerprints, rounding-aware fuzzy match, category memory (prefill, still require Accept). Other issuers and bank sync later — see **§12**.
 
 All user-owned rows must be scoped by authenticated user.
 
@@ -465,7 +465,7 @@ Inbox actions:
 
 Banks will not know Setaside’s user-defined categories. MCC codes are too coarse. Use a ladder:
 
-1. **Payee / merchant rules** — e.g. `COSTCO` → Groceries. User confirms once; later imports apply automatically.
+1. **Payee / merchant rules** — e.g. `COSTCO` → Groceries. User confirms once; later imports of that payee **prefill** that category. Still require Accept; do not auto-insert.
 2. **Learn from note memory / history** — if `STARBUCKS` was Dining eight times, suggest Dining the ninth. Rules can be seeded from that history.
 3. **First-time merchants go to the inbox** — never silently guess a new payee into a budget category.
 4. **Savings “paid from” is never fully automatic** — the bank does not know a repair should withdraw from a bucket. Suggest it if that merchant was funded that way before; confirm at least the first time.

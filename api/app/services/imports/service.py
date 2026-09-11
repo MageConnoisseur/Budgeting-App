@@ -10,7 +10,9 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.enums import CategoryKind, ImportCandidateStatus, ImportMatchKind
-from app.models import Category, ImportBatch, ImportCandidate, Transaction, User
+from app.models import Category, ImportBatch, ImportCandidate, MerchantRule, Transaction, User
+from app.services.imports.fingerprints import merchant_key as fingerprint_merchant_key
+from app.services.imports.fingerprints import merchant_keys_related
 from app.services.imports.matching import (
     TIGHT_DATE_WINDOW_DAYS,
     LedgerRow,
@@ -23,21 +25,161 @@ MAX_CSV_BYTES = 2 * 1024 * 1024
 MAX_ROWS = 5000
 
 
+def _usable_expense_id(
+    db: Session, user: User, category_id: UUID | None
+) -> UUID | None:
+    if category_id is None:
+        return None
+    cat = db.scalar(
+        select(Category).where(Category.id == category_id, Category.user_id == user.id)
+    )
+    if cat is None or cat.archived or cat.kind != CategoryKind.expense.value:
+        return None
+    return cat.id
+
+
+def _like_prefix(token: str) -> str:
+    escaped = (
+        token.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    )
+    return escaped + "%"
+
+
+def _suggest_from_tracker(db: Session, user: User, key: str) -> UUID | None:
+    token = key.split()[0] if key else ""
+    if len(token) < 4:
+        return None
+    rows = db.scalars(
+        select(Transaction)
+        .join(Category)
+        .where(
+            Transaction.user_id == user.id,
+            Category.kind == CategoryKind.expense.value,
+            Category.archived.is_(False),
+            Transaction.note.is_not(None),
+            func.lower(Transaction.note).like(_like_prefix(token), escape="\\"),
+        )
+        .order_by(Transaction.date.desc(), Transaction.created_at.desc())
+        .limit(40)
+    ).all()
+    for tx in rows:
+        note_key = fingerprint_merchant_key(tx.note or "")
+        if merchant_keys_related(key, note_key):
+            return tx.category_id
+    return None
+
+
 def suggest_category_id(
-    _db: Session,
-    _user: User,
+    db: Session,
+    user: User,
     *,
     merchant_key: str,
     issuer_category: str | None,
 ) -> UUID | None:
-    """Future hook: merchant rules, then note/category history.
+    """Prefill from a saved merchant rule, then import/tracker history.
 
-    Returns None so first-time merchants never silently land in a budget
-    category. Callers still persist ``merchant_key`` and ``issuer_category``
-    so rules can be seeded later without a schema change.
+    Never maps the issuer's Category column. First-time merchants return None
+    so the inbox does not silently guess.
     """
-    _ = (merchant_key, issuer_category)
-    return None
+    _ = issuer_category
+    key = (merchant_key or "").strip()
+    if not key:
+        return None
+
+    rule = db.scalar(
+        select(MerchantRule).where(
+            MerchantRule.user_id == user.id,
+            MerchantRule.merchant_key == key,
+        )
+    )
+    found = _usable_expense_id(db, user, rule.category_id if rule else None)
+    if found:
+        return found
+
+    prev = db.scalar(
+        select(ImportCandidate)
+        .where(
+            ImportCandidate.user_id == user.id,
+            ImportCandidate.merchant_key == key,
+            ImportCandidate.status.in_(
+                [
+                    ImportCandidateStatus.accepted.value,
+                    ImportCandidateStatus.merged.value,
+                ]
+            ),
+            ImportCandidate.category_id.is_not(None),
+        )
+        .order_by(ImportCandidate.updated_at.desc())
+        .limit(1)
+    )
+    found = _usable_expense_id(db, user, prev.category_id if prev else None)
+    if found:
+        return found
+
+    return _usable_expense_id(db, user, _suggest_from_tracker(db, user, key))
+
+
+def remember_merchant_category(
+    db: Session,
+    user: User,
+    *,
+    merchant_key: str,
+    category_id: UUID,
+) -> None:
+    """Save the confirmed category and prefill other pending rows for this payee."""
+    key = (merchant_key or "").strip()
+    if not key:
+        return
+    existing = db.scalar(
+        select(MerchantRule).where(
+            MerchantRule.user_id == user.id,
+            MerchantRule.merchant_key == key,
+        )
+    )
+    if existing is None:
+        db.add(
+            MerchantRule(
+                user_id=user.id,
+                merchant_key=key,
+                category_id=category_id,
+            )
+        )
+    elif existing.category_id != category_id:
+        existing.category_id = category_id
+        db.add(existing)
+
+    pending = db.scalars(
+        select(ImportCandidate).where(
+            ImportCandidate.user_id == user.id,
+            ImportCandidate.merchant_key == key,
+            ImportCandidate.status == ImportCandidateStatus.pending.value,
+        )
+    ).all()
+    for cand in pending:
+        if cand.category_id != category_id:
+            cand.category_id = category_id
+            db.add(cand)
+
+
+def _fill_suggested_categories(
+    db: Session, user: User, items: list[ImportCandidate]
+) -> None:
+    cache: dict[str, UUID | None] = {}
+    for cand in items:
+        if cand.category_id is not None:
+            continue
+        key = cand.merchant_key
+        if key not in cache:
+            cache[key] = suggest_category_id(
+                db,
+                user,
+                merchant_key=key,
+                issuer_category=cand.issuer_category,
+            )
+        suggested = cache[key]
+        if suggested is not None:
+            cand.category_id = suggested
+            db.add(cand)
 
 
 def read_csv_upload(file: UploadFile) -> tuple[str, str]:
@@ -206,13 +348,17 @@ def commit_import(
     db.flush()
 
     created: list[ImportCandidate] = []
+    suggestion_cache: dict[str, UUID | None] = {}
     for row in new_rows:
-        suggested = suggest_category_id(
-            db,
-            user,
-            merchant_key=row.merchant_key,
-            issuer_category=row.issuer_category,
-        )
+        key = row.merchant_key
+        if key not in suggestion_cache:
+            suggestion_cache[key] = suggest_category_id(
+                db,
+                user,
+                merchant_key=key,
+                issuer_category=row.issuer_category,
+            )
+        suggested = suggestion_cache[key]
         cand = ImportCandidate(
             user_id=user.id,
             batch_id=batch.id,
@@ -257,6 +403,7 @@ def list_pending(db: Session, user: User) -> list[ImportCandidate]:
     )
     if items:
         _apply_matches(db, user, items)
+        _fill_suggested_categories(db, user, items)
         db.commit()
         items = list(
             db.scalars(
@@ -359,6 +506,10 @@ def accept_candidate(
     cand.category_id = cat.id
     cand.accepted_transaction_id = tx.id
     db.add(cand)
+    db.flush()
+    remember_merchant_category(
+        db, user, merchant_key=cand.merchant_key, category_id=cat.id
+    )
     db.commit()
     return db.scalar(
         select(ImportCandidate)
@@ -418,6 +569,10 @@ def merge_candidate(
     cand.category_id = tx.category_id
     db.add(tx)
     db.add(cand)
+    db.flush()
+    remember_merchant_category(
+        db, user, merchant_key=cand.merchant_key, category_id=tx.category_id
+    )
     db.commit()
     return db.scalar(
         select(ImportCandidate)

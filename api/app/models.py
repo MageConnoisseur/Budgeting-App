@@ -81,6 +81,9 @@ class User(Base):
     import_candidates: Mapped[list[ImportCandidate]] = relationship(
         back_populates="user"
     )
+    merchant_rules: Mapped[list[MerchantRule]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
 
 
 class OAuthAccount(Base):
@@ -172,6 +175,7 @@ class Category(Base):
     recurring_schedules: Mapped[list[RecurringSchedule]] = relationship(
         back_populates="category"
     )
+    merchant_rules: Mapped[list[MerchantRule]] = relationship(back_populates="category")
 
 
 class BudgetMonth(Base):
@@ -485,7 +489,7 @@ class ImportCandidate(Base):
     post_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     amount: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
     description: Mapped[str] = mapped_column(String(512), nullable=False)
-    # Normalized payee key for future merchant → category rules.
+    # Normalized payee key shared with merchant_rules for category memory.
     merchant_key: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     # Bank's own category label (e.g. Discover "Supermarkets"); never auto-mapped today.
     issuer_category: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
@@ -529,3 +533,42 @@ class ImportCandidate(Base):
     accepted_transaction: Mapped[Optional[Transaction]] = relationship(
         foreign_keys=[accepted_transaction_id]
     )
+
+
+class MerchantRule(Base):
+    """Last confirmed expense category for a normalized payee key.
+
+    Accept/merge on an import row upserts this. Later inbox rows for the same
+    merchant prefill the category; the user still has to Accept.
+    """
+
+    __tablename__ = "merchant_rules"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "merchant_key", name="uq_merchant_rules_user_merchant"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    merchant_key: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    category_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("categories.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    user: Mapped[User] = relationship(back_populates="merchant_rules")
+    category: Mapped[Category] = relationship(back_populates="merchant_rules")

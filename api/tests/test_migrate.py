@@ -114,6 +114,7 @@ def test_full_known_chain_infers_latest_fingerprint() -> None:
             "budget_lines",
             "recovery_tokens",
             "import_candidates",
+            "merchant_rules",
         },
         columns={
             "users": {
@@ -127,6 +128,7 @@ def test_full_known_chain_infers_latest_fingerprint() -> None:
             "budget_lines": {"funded_by_category_id"},
             "recovery_tokens": {"token_hash"},
             "import_candidates": {"fingerprint"},
+            "merchant_rules": {"merchant_key"},
         },
     )
     assert infer_applied_revision(snap) == SCHEMA_FINGERPRINTS[-1][0]
