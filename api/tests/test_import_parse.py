@@ -6,7 +6,11 @@ from datetime import date
 from decimal import Decimal
 from uuid import uuid4
 
-from app.services.imports.fingerprints import merchant_key, row_fingerprint
+from app.services.imports.fingerprints import (
+    merchant_key,
+    merchant_keys_related,
+    row_fingerprint,
+)
 from app.services.imports.matching import LedgerRow, assign_fuzzy_matches, score_match
 from app.services.imports.parsers import is_card_payment, parse_discover, parse_statement
 
@@ -72,6 +76,47 @@ def test_fingerprint_stable_and_changes_with_amount() -> None:
     assert a == b
     assert a != c
     assert merchant_key("COSTCO WHSE #123") == "COSTCO WHSE"
+
+
+def test_merchant_keys_related_same_chain() -> None:
+    assert merchant_keys_related("COSTCO WHSE", "COSTCO WHSE")
+    assert merchant_keys_related("COSTCO", "COSTCO WHSE")
+    assert merchant_keys_related("SHELL", "SHELL OIL 123")
+    assert merchant_keys_related("AMAZON", "AMAZON.COM*REFUND")
+    assert not merchant_keys_related("COSTCO WHSE", "COSTCO GAS")
+    assert not merchant_keys_related("BP", "BP STATION 12")
+    assert not merchant_keys_related("", "COSTCO")
+
+
+def test_issuer_label_matches_user_category_names() -> None:
+    from app.services.imports.labels import (
+        best_category_for_issuer_label,
+        issuer_label_matches_category,
+    )
+
+    assert issuer_label_matches_category("Supermarkets", "Groceries")
+    assert issuer_label_matches_category("Gasoline", "Gas")
+    assert issuer_label_matches_category("Fuel", "Gas")
+    assert issuer_label_matches_category("Restaurants", "Dining")
+    assert not issuer_label_matches_category("Merchandise", "Groceries")
+    assert not issuer_label_matches_category("Supermarkets", "Household")
+
+    groceries = uuid4()
+    household = uuid4()
+    assert (
+        best_category_for_issuer_label(
+            "Supermarkets",
+            [(household, "Household"), (groceries, "Groceries")],
+        )
+        == groceries
+    )
+    assert (
+        best_category_for_issuer_label(
+            "Merchandise",
+            [(groceries, "Groceries")],
+        )
+        is None
+    )
 
 
 def test_payment_detector() -> None:

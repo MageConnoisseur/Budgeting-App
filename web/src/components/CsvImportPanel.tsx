@@ -1,8 +1,15 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as importApi from '../api/imports'
 import { ApiError } from '../api/client'
 import { formatUsd } from '../lib/format'
 import type { Category, ImportCandidate, ImportPreview } from '../types/api'
+
+function suggestionHint(row: ImportCandidate, selectedId: string) {
+  if (!row.category_id || selectedId !== row.category_id) return null
+  if (row.category_source === 'issuer') return 'From similar purchases'
+  if (row.category_source === 'label') return 'Guess from bank label'
+  return 'From last time'
+}
 
 function inRange(iso: string, from: string, to: string) {
   if (from && iso < from) return false
@@ -30,29 +37,50 @@ export function CsvImportPanel({
   const [inbox, setInbox] = useState<ImportCandidate[]>([])
   const [categoryById, setCategoryById] = useState<Record<string, string>>({})
   const [lastCategory, setLastCategory] = useState('')
+  const touchedIds = useRef(new Set<string>())
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [rowBusy, setRowBusy] = useState<string | null>(null)
+
+  const seedCategories = useCallback(
+    (items: ImportCandidate[]) => {
+      setCategoryById((prev) => {
+        const keep = new Set(items.map((item) => item.id))
+        const next: Record<string, string> = {}
+        for (const [id, value] of Object.entries(prev)) {
+          if (keep.has(id)) next[id] = value
+        }
+        for (const item of items) {
+          if (touchedIds.current.has(item.id)) {
+            if (!next[item.id]) {
+              next[item.id] =
+                item.category_id || lastCategory || expenseCats[0]?.id || ''
+            }
+            continue
+          }
+          if (item.category_id) {
+            next[item.id] = item.category_id
+          } else if (!next[item.id]) {
+            next[item.id] = lastCategory || expenseCats[0]?.id || ''
+          }
+        }
+        return next
+      })
+    },
+    [expenseCats, lastCategory],
+  )
 
   const loadInbox = useCallback(async () => {
     try {
       const list = await importApi.listImportInbox()
       setError(null)
       setInbox(list.items)
-      setCategoryById((prev) => {
-        const next = { ...prev }
-        for (const item of list.items) {
-          if (!next[item.id]) {
-            next[item.id] = item.category_id || lastCategory || expenseCats[0]?.id || ''
-          }
-        }
-        return next
-      })
+      seedCategories(list.items)
     } catch (e) {
       setError(e instanceof ApiError ? e.detail : 'Failed to load import inbox')
     }
-  }, [expenseCats, lastCategory])
+  }, [seedCategories])
 
   useEffect(() => {
     void loadInbox()
@@ -89,6 +117,7 @@ export function CsvImportPanel({
     try {
       const result = await importApi.commitImport(file, dateFrom, dateTo)
       setInbox(result.inbox.items)
+      seedCategories(result.inbox.items)
       const batch = result.batch
       const bits = [
         `${batch.imported_count} row${batch.imported_count === 1 ? '' : 's'} added to the inbox`,
@@ -128,8 +157,9 @@ export function CsvImportPanel({
     setError(null)
     try {
       await importApi.acceptImport(row.id, categoryId)
+      touchedIds.current.delete(row.id)
       setLastCategory(categoryId)
-      setInbox((items) => items.filter((i) => i.id !== row.id))
+      await loadInbox()
       onLedgerChange()
     } catch (e) {
       setError(e instanceof ApiError ? e.detail : 'Could not accept that row')
@@ -143,6 +173,7 @@ export function CsvImportPanel({
     setError(null)
     try {
       await importApi.skipImport(row.id)
+      touchedIds.current.delete(row.id)
       setInbox((items) => items.filter((i) => i.id !== row.id))
     } catch (e) {
       setError(e instanceof ApiError ? e.detail : 'Could not skip that row')
@@ -156,7 +187,8 @@ export function CsvImportPanel({
     setError(null)
     try {
       await importApi.mergeImport(row.id, row.matched_transaction?.id)
-      setInbox((items) => items.filter((i) => i.id !== row.id))
+      touchedIds.current.delete(row.id)
+      await loadInbox()
       onLedgerChange()
     } catch (e) {
       setError(e instanceof ApiError ? e.detail : 'Could not merge that row')
@@ -177,8 +209,11 @@ export function CsvImportPanel({
       <h3 className="section-title">Import statement</h3>
       <p className="muted">
         Upload a Discover CSV, pick the transaction dates to bring in, then
-        review each charge. Card payments are skipped (those are transfers).
-        Nothing hits the tracker until you accept or merge it.
+        review each charge. Repeat merchants start in the category you used last
+        time. New payees can pick up that category from similar Discover labels
+        (Supermarkets → Groceries, Fuel → Gas) — change it if this one is
+        different. Card payments are skipped (those are transfers). Nothing hits
+        the tracker until you accept or merge it.
       </p>
 
       <div className="inline-form wrap">
@@ -269,6 +304,7 @@ export function CsvImportPanel({
               {inbox.map((row) => {
                 const match = row.matched_transaction
                 const isCredit = Number(row.amount) < 0
+                const hint = suggestionHint(row, categoryFor(row.id))
                 return (
                   <tr key={row.id}>
                     <td>{row.trans_date}</td>
@@ -291,12 +327,13 @@ export function CsvImportPanel({
                     <td className="import-category">
                       <select
                         value={categoryFor(row.id)}
-                        onChange={(e) =>
+                        onChange={(e) => {
+                          touchedIds.current.add(row.id)
                           setCategoryById((m) => ({
                             ...m,
                             [row.id]: e.target.value,
                           }))
-                        }
+                        }}
                         disabled={expenseCats.length === 0}
                         aria-label={`Category for ${row.description}`}
                       >
@@ -310,6 +347,11 @@ export function CsvImportPanel({
                           ))
                         )}
                       </select>
+                      {hint ? (
+                        <span className="muted import-category-hint">
+                          {hint}
+                        </span>
+                      ) : null}
                     </td>
                     <td className="import-match">
                       {match ? (

@@ -645,6 +645,14 @@ a.btn {
   max-width: 100%;
 }
 
+.import-category-hint {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.75rem;
+  line-height: 1.2;
+  white-space: normal;
+}
+
 .import-match {
   white-space: normal;
 }

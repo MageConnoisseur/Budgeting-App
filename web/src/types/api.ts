@@ -606,6 +606,8 @@ export interface ImportCandidate {
   status: ImportCandidateStatus
   match_kind: ImportMatchKind
   category_id: string | null
+  /** merchant = this payee; issuer = same bank label; label = name match */
+  category_source?: 'merchant' | 'issuer' | 'label' | null
   matched_transaction_id: string | null
   accepted_transaction_id: string | null
   created_at: string

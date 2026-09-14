@@ -17,11 +17,11 @@ def normalize_description(description: str) -> str:
 
 
 def merchant_key(description: str) -> str:
-    """Collapse issuer payee text into a stable key for future merchant rules.
+    """Collapse issuer payee text into a stable key for merchant category rules.
 
     Strips store numbers (``COSTCO WHSE #123`` → ``COSTCO WHSE``) so later
-    imports of the same chain can share a rule. Not used for auto-categorization
-    yet — first-time merchants stay in the inbox.
+    imports of the same chain share a remembered category. First-time merchants
+    still stay unguessed until the user Accepts once.
     """
     text = normalize_description(description)
     text = _STORE_NUM.sub("", text)
@@ -58,3 +58,25 @@ def row_fingerprint(
 def merchant_tokens(key: str) -> set[str]:
     parts = _NON_ALNUM.split(key.upper())
     return {p for p in parts if len(p) >= 3}
+
+
+def merchant_keys_related(left: str, right: str) -> bool:
+    """True when two payee keys are the same chain.
+
+    ``COSTCO`` matches ``COSTCO WHSE``; ``COSTCO WHSE`` does not match
+    ``COSTCO GAS``. Short tokens (under 5 characters) never prefix-match.
+    """
+    a = (left or "").strip()
+    b = (right or "").strip()
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    shorter, longer = (a, b) if len(a) <= len(b) else (b, a)
+    if len(shorter) < 5:
+        return False
+    if longer.startswith(shorter + " "):
+        return True
+    if longer.startswith(shorter):
+        return longer[len(shorter)] in " .*-#/"
+    return False
