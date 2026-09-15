@@ -939,10 +939,19 @@ a.btn {
     overflow-x: auto;
     gap: 0.35rem;
     -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
+    scrollbar-width: thin;
+    mask-image: linear-gradient(
+      90deg,
+      #000 0,
+      #000 calc(100% - 1.15rem),
+      transparent
+    );
   }
 
   .page-budget-annual .month-balance-cell {
     flex: 0 0 4.6rem;
+    scroll-snap-align: start;
   }
 
   .shell:has(.page-budget) {
@@ -2472,10 +2481,30 @@ button.month-balance-cell:focus-visible {
 }
 
 @media (max-width: 720px) {
+  .topbar {
+    gap: 0.5rem 0.65rem;
+    padding: 0.5rem 0.65rem;
+  }
+
+  .brand-tag {
+    display: none;
+  }
+
+  .brand-block {
+    min-width: 0;
+  }
+
+  .nav {
+    flex: 1 1 100%;
+  }
+
+  .nav-link {
+    padding: 0.32rem 0.55rem;
+    font-size: 0.82rem;
+  }
+
   .topbar-user {
-    width: 100%;
-    justify-content: space-between;
-    margin-left: 0;
+    margin-left: auto;
   }
 
   .stat-grid {

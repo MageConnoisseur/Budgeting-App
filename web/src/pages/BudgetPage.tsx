@@ -54,17 +54,32 @@ function scrollBehavior(): ScrollBehavior {
 
 /** Keep the sticky category column in view while jumping to a month. */
 function scrollMonthColumnIntoView(wrap: HTMLElement, monthNum: number) {
+  const behavior = scrollBehavior()
   const col = wrap.querySelector<HTMLElement>(
     `thead .annual-month-col[data-month="${monthNum}"]`,
   )
   const sticky = wrap.querySelector<HTMLElement>('thead .annual-cat-col')
-  if (!col) return
-  const wrapRect = wrap.getBoundingClientRect()
-  const colRect = col.getBoundingClientRect()
-  const stickyWidth = sticky?.getBoundingClientRect().width ?? 0
-  const nextLeft =
-    wrap.scrollLeft + (colRect.left - wrapRect.left) - stickyWidth - 8
-  wrap.scrollTo({ left: Math.max(0, nextLeft), behavior: scrollBehavior() })
+  if (col) {
+    const wrapRect = wrap.getBoundingClientRect()
+    const colRect = col.getBoundingClientRect()
+    const stickyWidth = sticky?.getBoundingClientRect().width ?? 0
+    const nextLeft =
+      wrap.scrollLeft + (colRect.left - wrapRect.left) - stickyWidth - 8
+    wrap.scrollTo({ left: Math.max(0, nextLeft), behavior })
+  }
+
+  const strip = wrap.parentElement?.querySelector<HTMLElement>(
+    '.month-balance-grid',
+  )
+  const chip = strip?.querySelector<HTMLElement>(
+    `button[aria-label="Show ${MONTH_SHORT[monthNum - 1]} in the year grid"]`,
+  )
+  if (strip && chip) {
+    const stripRect = strip.getBoundingClientRect()
+    const chipRect = chip.getBoundingClientRect()
+    const nextLeft = strip.scrollLeft + (chipRect.left - stripRect.left) - 8
+    strip.scrollTo({ left: Math.max(0, nextLeft), behavior })
+  }
 }
 
 function draftFromAnnual(cats: Category[], months: BudgetMonth[]) {
