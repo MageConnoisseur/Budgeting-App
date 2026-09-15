@@ -25,6 +25,8 @@ from app.schemas import (
     CategoryProgress,
     CategoryTrend,
     KindTotals,
+    MobileGlanceCategoryOut,
+    MobileGlanceOut,
     MonthlyDashboardOut,
     MonthlyTrendPoint,
     MonthActualsOut,
@@ -1044,6 +1046,51 @@ def _monthly_from_ledger(
         last_month=last_month,
         same_month_last_year=same_month_last_year,
     )
+
+
+def build_mobile_glance(
+    db: Session, user: User, year: int, month: int
+) -> MobileGlanceOut:
+    """Leftover per active category for the phone logger.
+
+    Does not auto-seed a budget month and does not return dashboard widgets.
+    """
+    start, end = _month_date_range(year, month)
+    ledger = load_user_ledger(db, user)
+    planned = _planned_by_category(ledger.budget_months.get((year, month)))
+    actuals = ledger.actuals_between(start, end)
+    deposits, _withdrawals = ledger.savings_flows_between(start, end)
+    balances = ledger.savings_balances_as_of(end)
+
+    rows: list[MobileGlanceCategoryOut] = []
+    for cat in ledger.categories:
+        p = _money(planned.get(cat.id, ZERO))
+        if cat.kind == CategoryKind.income.value:
+            a = _money(abs(actuals.get(cat.id, ZERO)))
+            over_budget = False
+            balance = None
+        elif cat.kind == CategoryKind.savings.value:
+            a = _money(deposits.get(cat.id, ZERO))
+            over_budget = a > p and (p > ZERO or a > ZERO)
+            balance = _money(balances.get(cat.id, ZERO))
+        else:
+            a = _money(actuals.get(cat.id, ZERO))
+            over_budget = a > p and (p > ZERO or a > ZERO)
+            balance = None
+        remaining = _money(p - a)
+        rows.append(
+            MobileGlanceCategoryOut(
+                category_id=cat.id,
+                category_name=cat.name,
+                kind=CategoryKind(cat.kind),
+                planned=p,
+                actual=a,
+                remaining=remaining,
+                over_budget=over_budget,
+                balance=balance,
+            )
+        )
+    return MobileGlanceOut(year=year, month=month, categories=rows)
 
 
 def build_monthly_dashboard(

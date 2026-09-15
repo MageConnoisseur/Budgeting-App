@@ -16,8 +16,10 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import * as budgetsApi from '../api/budgets'
 import * as categoriesApi from '../api/categories'
 import { ApiError } from '../api/client'
+import * as glanceApi from '../api/glance'
 import * as txApi from '../api/transactions'
 import { CategoryPicker } from '../components/CategoryPicker'
+import { LeftoverGlance } from '../components/LeftoverGlance'
 import { NoteField } from '../components/NoteField'
 import { useAuth } from '../context/AuthContext'
 import {
@@ -27,11 +29,39 @@ import {
   shiftDate,
   todayISO,
   toMoneyString,
+  yearMonthFromISO,
 } from '../lib/format'
 import { colors, radius } from '../theme'
-import type { Category, NoteSuggestion, Transaction } from '../types'
+import type {
+  Category,
+  CategoryKind,
+  MobileGlance,
+  NoteSuggestion,
+  Transaction,
+} from '../types'
 
 const PAGE_SIZE = 40
+const KINDS: CategoryKind[] = ['income', 'expense', 'savings']
+const KIND_TITLE: Record<CategoryKind, string> = {
+  income: 'Income',
+  expense: 'Expense',
+  savings: 'Savings',
+}
+
+function kindNoun(kind: CategoryKind): string {
+  return kind
+}
+
+function logCardTitle(kind: CategoryKind, editing: boolean): string {
+  if (editing) return `Edit ${kindNoun(kind)}`
+  if (kind === 'expense') return 'Log an expense'
+  return `Log ${kindNoun(kind)}`
+}
+
+function logButtonLabel(kind: CategoryKind, editing: boolean): string {
+  if (editing) return 'Save changes'
+  return `Log ${kindNoun(kind)}`
+}
 
 export function TrackerScreen() {
   const { user, logout } = useAuth()
@@ -45,6 +75,7 @@ export function TrackerScreen() {
   const [q, setQ] = useState('')
   const [search, setSearch] = useState('')
 
+  const [formKind, setFormKind] = useState<CategoryKind>('expense')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [formCategory, setFormCategory] = useState('')
   const [formAmount, setFormAmount] = useState('')
@@ -56,18 +87,17 @@ export function TrackerScreen() {
     name: string
   } | null>(null)
   const [withdrawFromBucket, setWithdrawFromBucket] = useState(true)
+  const [glance, setGlance] = useState<MobileGlance | null>(null)
+  const [glanceError, setGlanceError] = useState<string | null>(null)
 
-  const expenseCats = useMemo(
-    () => {
-      const active = categories.filter((c) => c.kind === 'expense' && !c.archived)
-      if (formCategory && !active.some((c) => c.id === formCategory)) {
-        const current = categories.find((c) => c.id === formCategory)
-        if (current && current.kind === 'expense') return [current, ...active]
-      }
-      return active
-    },
-    [categories, formCategory],
-  )
+  const kindCats = useMemo(() => {
+    const active = categories.filter((c) => c.kind === formKind && !c.archived)
+    if (formCategory && !active.some((c) => c.id === formCategory)) {
+      const current = categories.find((c) => c.id === formCategory)
+      if (current && current.kind === formKind) return [current, ...active]
+    }
+    return active
+  }, [categories, formCategory, formKind])
 
   const loadCategories = useCallback(async () => {
     const list = await categoriesApi.listCategories({ include_archived: true })
@@ -77,7 +107,7 @@ export function TrackerScreen() {
   const loadTransactions = useCallback(async () => {
     const list = await txApi.listTransactions({
       q: search || undefined,
-      kind: 'expense',
+      kind: formKind,
       sort_by: 'date',
       sort_dir: 'desc',
       limit: PAGE_SIZE,
@@ -85,14 +115,30 @@ export function TrackerScreen() {
     })
     setItems(list.items)
     setTotal(list.total)
-  }, [search])
+  }, [search, formKind])
+
+  const loadGlance = useCallback(async () => {
+    const ym = yearMonthFromISO(formDate)
+    if (!ym) return
+    try {
+      const data = await glanceApi.getGlance(ym.year, ym.month)
+      setGlance(data)
+      setGlanceError(null)
+    } catch (err) {
+      setGlanceError(
+        err instanceof ApiError ? err.detail : 'Could not load leftover',
+      )
+    }
+  }, [formDate])
 
   const loadAll = useCallback(async () => {
     setError(null)
     try {
       await Promise.all([loadCategories(), loadTransactions()])
     } catch (err) {
-      setError(err instanceof ApiError ? err.detail : 'Could not load expenses')
+      setError(
+        err instanceof ApiError ? err.detail : 'Could not load transactions',
+      )
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -102,6 +148,10 @@ export function TrackerScreen() {
   useEffect(() => {
     void loadAll()
   }, [loadAll])
+
+  useEffect(() => {
+    void loadGlance()
+  }, [loadGlance])
 
   useEffect(() => {
     const handle = setTimeout(() => setSearch(q.trim()), 250)
@@ -115,13 +165,14 @@ export function TrackerScreen() {
   }, [banner])
 
   useEffect(() => {
-    if (expenseCats.length && !expenseCats.some((c) => c.id === formCategory)) {
-      setFormCategory(expenseCats[0].id)
+    if (kindCats.length && !kindCats.some((c) => c.id === formCategory)) {
+      setFormCategory(kindCats[0].id)
     }
-  }, [expenseCats, formCategory])
+    if (!kindCats.length) setFormCategory('')
+  }, [kindCats, formCategory])
 
   useEffect(() => {
-    if (!formCategory || !formDate) {
+    if (formKind !== 'expense' || !formCategory || !formDate) {
       setPlanFunding(null)
       return
     }
@@ -151,19 +202,28 @@ export function TrackerScreen() {
     return () => {
       cancelled = true
     }
-  }, [formCategory, formDate])
+  }, [formKind, formCategory, formDate])
+
+  function chooseKind(next: CategoryKind) {
+    if (next === formKind) return
+    setFormKind(next)
+    setPlanFunding(null)
+    setError(null)
+  }
 
   function resetForm() {
     setEditingId(null)
     setFormAmount('')
     setFormNote('')
     setFormDate(todayISO())
-    if (expenseCats[0] && !expenseCats.some((c) => c.id === formCategory)) {
-      setFormCategory(expenseCats[0].id)
+    if (kindCats[0] && !kindCats.some((c) => c.id === formCategory)) {
+      setFormCategory(kindCats[0].id)
     }
   }
 
   function startEdit(tx: Transaction) {
+    const kind = tx.category?.kind ?? formKind
+    setFormKind(kind)
     setEditingId(tx.id)
     setFormCategory(tx.category_id)
     setFormAmount(tx.amount)
@@ -174,7 +234,7 @@ export function TrackerScreen() {
   }
 
   function onNotePick(suggestion: NoteSuggestion) {
-    if (suggestion.last_kind === 'expense' && suggestion.last_category_id) {
+    if (suggestion.last_kind === formKind && suggestion.last_category_id) {
       setFormCategory(suggestion.last_category_id)
     }
     if (!formAmount) setFormAmount(suggestion.last_amount)
@@ -182,7 +242,9 @@ export function TrackerScreen() {
 
   async function onSubmit() {
     if (!formCategory) {
-      setError('Select a category. Create expense categories on the website first.')
+      setError(
+        `Select a category. Create ${kindNoun(formKind)} categories on the website first.`,
+      )
       return
     }
     const amount = toMoneyString(formAmount)
@@ -198,12 +260,15 @@ export function TrackerScreen() {
         amount,
         date: formDate,
         note: formNote.trim() || null,
-        ...(!editingId && withdrawFromBucket && planFunding
+        ...(!editingId &&
+        formKind === 'expense' &&
+        withdrawFromBucket &&
+        planFunding
           ? { withdraw_from_category_id: planFunding.id }
           : {}),
       }
       const catName =
-        categories.find((c) => c.id === formCategory)?.name ?? 'expense'
+        categories.find((c) => c.id === formCategory)?.name ?? kindNoun(formKind)
       if (editingId) {
         await txApi.updateTransaction(editingId, payload)
         setBanner(`Updated ${formatUsd(amount)} · ${catName}`)
@@ -212,14 +277,14 @@ export function TrackerScreen() {
         setBanner(`Logged ${formatUsd(amount)} · ${catName}`)
       }
       resetForm()
-      await loadTransactions()
+      await Promise.all([loadTransactions(), loadGlance()])
     } catch (err) {
       setError(
         err instanceof ApiError
           ? err.detail
           : editingId
-            ? 'Could not update expense'
-            : 'Could not log expense',
+            ? `Could not update ${kindNoun(formKind)}`
+            : `Could not log ${kindNoun(formKind)}`,
       )
     } finally {
       setSaving(false)
@@ -230,23 +295,23 @@ export function TrackerScreen() {
     try {
       await txApi.deleteTransaction(tx.id)
       if (editingId === tx.id) resetForm()
-      await loadTransactions()
+      await Promise.all([loadTransactions(), loadGlance()])
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : 'Delete failed')
     }
   }
 
   function confirmDelete(tx: Transaction) {
-    const name = tx.category?.name ?? 'this expense'
+    const name = tx.category?.name ?? `this ${kindNoun(formKind)}`
     const message = `${formatUsd(tx.amount)} · ${name}`
     if (Platform.OS === 'web') {
       const ok =
         typeof globalThis.confirm === 'function' &&
-        globalThis.confirm(`Delete expense?\n${message}`)
+        globalThis.confirm(`Delete ${kindNoun(formKind)}?\n${message}`)
       if (ok) void doDelete(tx)
       return
     }
-    Alert.alert('Delete expense?', message, [
+    Alert.alert(`Delete ${kindNoun(formKind)}?`, message, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -275,10 +340,36 @@ export function TrackerScreen() {
         </Pressable>
       </View>
 
+      <LeftoverGlance data={glance} error={glanceError} />
+
       <View style={styles.card}>
         <Text style={styles.cardTitle}>
-          {editingId ? 'Edit expense' : 'Log an expense'}
+          {logCardTitle(formKind, Boolean(editingId))}
         </Text>
+
+        <View
+          style={styles.kindRow}
+          accessibilityRole="tablist"
+          accessibilityLabel="Transaction kind"
+        >
+          {KINDS.map((kind) => {
+            const on = kind === formKind
+            return (
+              <Pressable
+                key={kind}
+                onPress={() => chooseKind(kind)}
+                style={[styles.kindPill, on && styles.kindPillOn]}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: on }}
+                accessibilityLabel={KIND_TITLE[kind]}
+              >
+                <Text style={[styles.kindPillText, on && styles.kindPillTextOn]}>
+                  {KIND_TITLE[kind]}
+                </Text>
+              </Pressable>
+            )
+          })}
+        </View>
 
         <Text style={styles.label}>Amount</Text>
         <TextInput
@@ -293,15 +384,16 @@ export function TrackerScreen() {
         />
 
         <CategoryPicker
-          categories={expenseCats}
+          categories={kindCats}
           value={formCategory}
           onChange={setFormCategory}
+          kindLabel={KIND_TITLE[formKind]}
         />
 
-        {expenseCats.length === 0 ? (
+        {kindCats.length === 0 ? (
           <Text style={styles.warn}>
-            No expense categories yet. Add them on the website, then pull to
-            refresh.
+            No {kindNoun(formKind)} categories yet. Add them on the website,
+            then pull to refresh.
           </Text>
         ) : null}
 
@@ -342,7 +434,7 @@ export function TrackerScreen() {
           onPick={onNotePick}
         />
 
-        {planFunding && !editingId ? (
+        {formKind === 'expense' && planFunding && !editingId ? (
           <Pressable
             onPress={() => setWithdrawFromBucket((v) => !v)}
             style={styles.checkRow}
@@ -365,17 +457,19 @@ export function TrackerScreen() {
 
         <Pressable
           onPress={() => void onSubmit()}
-          disabled={saving || expenseCats.length === 0}
+          disabled={saving || kindCats.length === 0}
           style={({ pressed }) => [
             styles.button,
             pressed && styles.pressed,
-            (saving || expenseCats.length === 0) && styles.disabled,
+            (saving || kindCats.length === 0) && styles.disabled,
           ]}
           accessibilityRole="button"
-          accessibilityLabel={editingId ? 'Save changes' : 'Log expense'}
+          accessibilityLabel={logButtonLabel(formKind, Boolean(editingId))}
         >
           <Text style={styles.buttonText}>
-            {saving ? 'Saving…' : editingId ? 'Save changes' : 'Log expense'}
+            {saving
+              ? 'Saving…'
+              : logButtonLabel(formKind, Boolean(editingId))}
           </Text>
         </Pressable>
         {editingId ? (
@@ -391,14 +485,15 @@ export function TrackerScreen() {
       </View>
 
       <Text style={styles.section}>
-        Recent expenses{total ? ` · ${total}` : ''}
+        Recent {kindNoun(formKind)}
+        {total ? ` · ${total}` : ''}
       </Text>
       <TextInput
         value={q}
         onChangeText={setQ}
         placeholder="Search notes, categories, amounts"
         placeholderTextColor={colors.muted}
-        accessibilityLabel="Search expenses"
+        accessibilityLabel={`Search ${kindNoun(formKind)}`}
         style={styles.search}
         autoCorrect={false}
         autoCapitalize="none"
@@ -428,7 +523,7 @@ export function TrackerScreen() {
                 refreshing={refreshing}
                 onRefresh={() => {
                   setRefreshing(true)
-                  void loadAll()
+                  void Promise.all([loadAll(), loadGlance()])
                 }}
                 tintColor={colors.pine}
               />
@@ -436,41 +531,46 @@ export function TrackerScreen() {
             ListEmptyComponent={
               <Text style={styles.empty}>
                 {search
-                  ? 'No expenses match that search.'
+                  ? `No ${kindNoun(formKind)} matches that search.`
                   : 'Nothing logged yet. Add one above.'}
               </Text>
             }
-            renderItem={({ item }) => (
-              <View style={styles.row}>
-                <Pressable
-                  onPress={() => startEdit(item)}
-                  style={({ pressed }) => [
-                    styles.rowMain,
-                    pressed && styles.pressed,
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${item.category?.name ?? 'Expense'}, ${formatUsd(item.amount)}, edit`}
-                >
-                  <Text style={styles.rowCat}>
-                    {item.category?.name ?? 'Expense'}
-                  </Text>
-                  <Text style={styles.rowNote} numberOfLines={1}>
-                    {item.note || formatShortDate(item.date)}
-                  </Text>
-                </Pressable>
-                <View style={styles.rowRight}>
-                  <Text style={styles.rowAmt}>{formatUsd(item.amount)}</Text>
+            renderItem={({ item }) => {
+              const kind = item.category?.kind ?? formKind
+              return (
+                <View style={styles.row}>
                   <Pressable
-                    onPress={() => confirmDelete(item)}
-                    hitSlop={8}
+                    onPress={() => startEdit(item)}
+                    style={({ pressed }) => [
+                      styles.rowMain,
+                      pressed && styles.pressed,
+                    ]}
                     accessibilityRole="button"
-                    accessibilityLabel="Delete expense"
+                    accessibilityLabel={`${item.category?.name ?? KIND_TITLE[kind]}, ${formatUsd(item.amount)}, edit`}
                   >
-                    <Text style={styles.delete}>Delete</Text>
+                    <Text style={styles.rowCat}>
+                      {item.category?.name ?? KIND_TITLE[kind]}
+                    </Text>
+                    <Text style={styles.rowNote} numberOfLines={1}>
+                      {item.note || formatShortDate(item.date)}
+                    </Text>
                   </Pressable>
+                  <View style={styles.rowRight}>
+                    <Text style={[styles.rowAmt, { color: colors[kind] }]}>
+                      {formatUsd(item.amount)}
+                    </Text>
+                    <Pressable
+                      onPress={() => confirmDelete(item)}
+                      hitSlop={8}
+                      accessibilityRole="button"
+                      accessibilityLabel="Delete"
+                    >
+                      <Text style={styles.delete}>Delete</Text>
+                    </Pressable>
+                  </View>
                 </View>
-              </View>
-            )}
+              )
+            }}
           />
         )}
       </KeyboardAvoidingView>
@@ -537,6 +637,33 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
     marginBottom: 4,
+  },
+  kindRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  kindPill: {
+    flex: 1,
+    minHeight: 40,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  kindPillOn: {
+    backgroundColor: colors.pine,
+    borderColor: colors.pine,
+  },
+  kindPillText: {
+    color: colors.inkSoft,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  kindPillTextOn: {
+    color: colors.white,
   },
   label: {
     color: colors.muted,
@@ -713,7 +840,6 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   rowAmt: {
-    color: colors.expense,
     fontSize: 16,
     fontWeight: '700',
   },

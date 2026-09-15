@@ -1,10 +1,12 @@
 # Setaside — Android
 
-Standalone phone app for logging expenses. It is a real Android APK: install it, put the phone in your pocket, and it talks to the same live API as the website. Your computer does not need to stay on.
+Standalone phone app for leftover glance and logging. It is a real Android APK: install it, put the phone in your pocket, and it talks to the same live API as the website. Your computer does not need to stay on.
 
-**Fast path:** open Setaside → sign in → amount + category → Log expense.
+**Fast path:** open Setaside → sign in → scan leftover → amount + category → log.
 
-Planning, categories, budgets, and the dashboard stay on the website. This app does not reimplement them.
+Planning, category setup, budgets, dashboard, and coach stay on the website. This app does not reimplement them.
+
+Leftover comes from `GET /api/mobile/glance` (server-owned `planned − actual`; savings also show bucket balance). You can log income, expense, and savings against existing categories. Paid-from withdrawals still apply only to expenses.
 
 ## Install on your phone (sideload)
 
@@ -69,4 +71,4 @@ npm test
 npm run typecheck
 ```
 
-`npx expo prebuild --platform android` regenerates `android/` from `app.config.ts`. Do not add Budget/Dashboard screens here; keep this client a logger.
+`npx expo prebuild --platform android` regenerates `android/` from `app.config.ts`. Keep this client a leftover glance + logger; do not add Budget/Dashboard/Coach screens.

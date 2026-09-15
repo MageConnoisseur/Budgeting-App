@@ -57,6 +57,14 @@ export function isToday(iso: string, now: Date = new Date()): boolean {
   return iso === todayISO(now)
 }
 
+export function yearMonthFromISO(
+  iso: string,
+): { year: number; month: number } | null {
+  const match = /^(\d{4})-(\d{2})/.exec(iso)
+  if (!match) return null
+  return { year: Number(match[1]), month: Number(match[2]) }
+}
+
 /**
  * Rewrite loopback hosts so the Android emulator can reach the host machine.
  * Physical devices still need a LAN IP or the production API URL.

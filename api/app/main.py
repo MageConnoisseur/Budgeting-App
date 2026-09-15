@@ -14,6 +14,7 @@ from app.routers import (
     categories,
     dashboard,
     imports,
+    mobile,
     recurring_schedules,
     transactions,
 )
@@ -25,7 +26,8 @@ app = FastAPI(
     description=(
         "Phase 1 REST API for personal budgeting: categories, monthly/annual plans, "
         "transactions (search/sort/filter), CSV statement inbox, and dashboard insights. "
-        "Shared by the desktop web app and the thin Expo expense logger. "
+        "Shared by the desktop web app and the thin Expo logger "
+        "(leftover glance + income/expense/savings logging). "
         "USD only. Over-budget is a soft warning — never blocked."
     ),
     version="0.1.0",
@@ -53,6 +55,7 @@ app.include_router(transactions.router, prefix="/api")
 app.include_router(imports.router, prefix="/api")
 app.include_router(recurring_schedules.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
+app.include_router(mobile.router, prefix="/api")
 
 
 @app.exception_handler(SQLAlchemyError)

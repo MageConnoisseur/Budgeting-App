@@ -3,7 +3,7 @@
 
 FastAPI backend for Setaside (desktop web + shared API).
 
-Hosts on **Render**; database is **PostgreSQL on Neon**. Web (Vite/React on Vercel) and the thin Expo expense-logging client (`mobile/`) share this API.
+Hosts on **Render**; database is **PostgreSQL on Neon**. Web (Vite/React on Vercel) and the thin Expo leftover-glance + logging client (`mobile/`) share this API.
 
 ## Features
 
@@ -105,6 +105,19 @@ All data routes are under `/api` and require auth except `/api/auth/register`, `
 | Imports | `POST /imports/preview`, `POST /imports` (CSV + date range), `GET /imports/inbox`, accept / skip / merge candidates |
 | Recurring | `GET/POST /recurring-schedules`, due/log/skip, `GET /recurring-schedules/suggestions`, `GET /recurring-schedules/income-estimate` |
 | Dashboard | `GET /dashboard/monthly/{year}/{month}`, `GET /dashboard/annual/{year}`, layout + savings balances |
+| Mobile glance | `GET /mobile/glance?year=&month=` (leftover per category; savings include bucket balance). Does not seed months or return dashboard widgets. |
+
+### Phone APK contract (additive)
+
+The sideloaded Android app reads only:
+
+- `POST /auth/login`, `GET /auth/me`
+- `GET /categories`
+- `GET/POST/PATCH/DELETE /transactions` and `GET /transactions/note-suggestions`
+- `GET /budgets/months/{year}/{month}/expense-funding/{category_id}`
+- `GET /mobile/glance`
+
+New fields on those responses are fine. Renaming or removing keys the APK already reads needs a new path (for glance, `/mobile/glance` v2). Desktop dashboard and budget JSON may change freely.
 
 ## Migrations
 

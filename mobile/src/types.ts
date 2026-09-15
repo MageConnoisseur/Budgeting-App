@@ -1,4 +1,4 @@
-/** Subset of the FastAPI schemas used by the expense-logging client. */
+/** Subset of the FastAPI schemas used by the phone logger. */
 
 export type CategoryKind = 'income' | 'expense' | 'savings'
 
@@ -58,4 +58,21 @@ export interface ExpenseFunding {
   category_id: string
   funded_by_category_id: string | null
   funded_by_category_name: string | null
+}
+
+export interface GlanceCategory {
+  category_id: string
+  category_name: string
+  kind: CategoryKind
+  planned: string
+  actual: string
+  remaining: string
+  over_budget: boolean
+  balance: string | null
+}
+
+export interface MobileGlance {
+  year: number
+  month: number
+  categories: GlanceCategory[]
 }
