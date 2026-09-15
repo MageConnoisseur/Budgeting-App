@@ -894,10 +894,6 @@ a.btn {
 }
 
 @media (max-width: 720px) {
-  .page-budget-annual .month-balance-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
   .page-budget .page-header .muted {
     display: none;
   }
@@ -909,6 +905,44 @@ a.btn {
 
   .page-budget-annual .month-balance-strip > .muted {
     display: none;
+  }
+
+  .page-budget-annual .month-balance-strip .section-title {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+  }
+
+  .page-budget-annual .month-balance-strip {
+    position: relative;
+    padding: 0.5rem 0.6rem;
+  }
+
+  .page-budget-annual > .annual-form {
+    order: 1;
+  }
+
+  .page-budget-annual > .budget-balance,
+  .page-budget-annual > .savings-guide {
+    order: 2;
+  }
+
+  .page-budget .budget-balance .muted,
+  .page-budget .balance-hint {
+    display: none;
+  }
+
+  .page-budget-annual .month-balance-grid {
+    display: flex;
+    overflow-x: auto;
+    gap: 0.35rem;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .page-budget-annual .month-balance-cell {
+    flex: 0 0 4.6rem;
   }
 
   .shell:has(.page-budget) {

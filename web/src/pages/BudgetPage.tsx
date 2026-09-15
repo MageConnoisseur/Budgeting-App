@@ -708,43 +708,43 @@ export function BudgetPage() {
             <SavingsBucketsGuide variant="budget" className="compact" />
           )}
 
-          <div className="panel month-balance-strip">
-            <h3 className="section-title">Monthly remainder</h3>
-            <p className="muted compact">
-              Each month’s planned income − expenses paid from that month −
-              savings as you edit.
-              Save the year to keep changes.
-            </p>
-            <div className="month-balance-grid">
-              {annualBalance.byMonth.map((t, i) => {
-                const tone =
-                  Math.abs(t.balance) < 0.005
-                    ? 'balanced'
-                    : t.balance > 0
-                      ? 'surplus'
-                      : 'deficit'
-                const monthNum = i + 1
-                return (
-                  <button
-                    key={MONTH_SHORT[i]}
-                    type="button"
-                    className={`month-balance-cell tone-${tone}`}
-                    onClick={() => revealAnnualMonth(monthNum)}
-                    aria-label={`Show ${MONTH_SHORT[i]} in the year grid`}
-                  >
-                    <span>{MONTH_SHORT[i]}</span>
-                    <strong>{formatUsd(t.balance)}</strong>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
           <form
             id="annual-save-form"
             className="annual-form"
             onSubmit={(e) => void saveAnnual(e)}
           >
+            <div className="panel month-balance-strip">
+              <h3 className="section-title">Monthly remainder</h3>
+              <p className="muted compact">
+                Each month’s planned income − expenses paid from that month −
+                savings as you edit.
+                Save the year to keep changes.
+              </p>
+              <div className="month-balance-grid">
+                {annualBalance.byMonth.map((t, i) => {
+                  const tone =
+                    Math.abs(t.balance) < 0.005
+                      ? 'balanced'
+                      : t.balance > 0
+                        ? 'surplus'
+                        : 'deficit'
+                  const monthNum = i + 1
+                  return (
+                    <button
+                      key={MONTH_SHORT[i]}
+                      type="button"
+                      className={`month-balance-cell tone-${tone}`}
+                      onClick={() => revealAnnualMonth(monthNum)}
+                      aria-label={`Show ${MONTH_SHORT[i]} in the year grid`}
+                    >
+                      <span>{MONTH_SHORT[i]}</span>
+                      <strong>{formatUsd(t.balance)}</strong>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
             <p className="annual-scroll-hint muted compact">
               Swipe or scroll sideways for all 12 months. Category names stay
               in view.

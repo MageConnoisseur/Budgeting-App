@@ -67,6 +67,7 @@ test.describe('budget layout on a phone-sized screen', () => {
     await page.getByRole('button', { name: 'Annual' }).click()
     await expect(page.locator('.annual-grid')).toBeVisible()
     await expect(page.getByText(/Swipe or scroll sideways/)).toBeVisible()
+    await page.locator('.annual-wrap').scrollIntoViewIfNeeded()
 
     const wrap = page.locator('.annual-wrap')
     const scroll = await wrap.evaluate((el) => ({
