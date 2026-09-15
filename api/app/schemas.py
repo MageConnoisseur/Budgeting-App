@@ -104,6 +104,9 @@ class CategoryCreate(BaseModel):
     target_amount: Optional[Decimal] = Field(
         default=None, max_digits=14, decimal_places=2
     )
+    # Savings only. True (default) = spendable bucket; False = counts as
+    # savings without a pile (e.g. extra loan payments).
+    is_bucket: bool = True
 
     @field_validator("target_amount")
     @classmethod
@@ -124,6 +127,7 @@ class CategoryUpdate(BaseModel):
     target_amount: Optional[Decimal] = Field(
         default=None, max_digits=14, decimal_places=2
     )
+    is_bucket: Optional[bool] = None
 
     @field_validator("target_amount")
     @classmethod
@@ -143,6 +147,10 @@ class CategoryOut(ORMModel):
     archived: bool
     sort_order: int
     target_amount: Optional[Decimal] = None
+    is_bucket: bool = True
+    # Lifetime net tracker total for savings (contributions minus withdrawals).
+    # Null on nested category payloads and for income/expense.
+    paid_toward: Optional[Decimal] = None
     created_at: datetime
     updated_at: datetime
 
@@ -357,6 +365,8 @@ class CategoryProgress(BaseModel):
     funded_by_category_id: Optional[UUID] = None
     funded_by_category_name: Optional[str] = None
     committed: bool = False  # rent/mortgage-like; not first to reallocate
+    # Savings only: False means counts in the mix without a spendable pile.
+    is_bucket: Optional[bool] = None
 
 
 class KindTotals(BaseModel):
@@ -488,6 +498,8 @@ class SavingsBucketOut(BaseModel):
     actual_use_this_period: Decimal = Decimal("0.00")
     # Soft warning: planned use exceeds current bucket balance.
     use_over_balance: bool = False
+    # False = savings allocation that is not a spendable pile.
+    is_bucket: bool = True
 
 
 class SpendingPaceDay(BaseModel):

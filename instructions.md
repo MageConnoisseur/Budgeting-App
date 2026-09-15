@@ -59,7 +59,7 @@ Three category kinds:
 |------|---------|
 | **Income** | Paychecks, side income, etc. |
 | **Expense** | Spending categories (rent, groceries, dining, …) |
-| **Savings** | Named **buckets** the user allocates money into |
+| **Savings** | Named **buckets** the user allocates money into, or **non-bucket** savings lines that count in leftover and the savings mix without a spendable pile (e.g. extra loan payments) |
 
 Categories are user-defined. They persist across months; **monthly planned amounts** are per month.
 
@@ -103,7 +103,9 @@ Only **planned amounts** copy — never transactions.
 
 ### 3.3 Savings buckets
 
-Savings categories are **buckets** that accumulate:
+Savings categories are **buckets that accumulate by default**. On Categories, a savings line may be marked **not a bucket**.
+
+**Buckets:**
 
 - **Plan:** how much to contribute to the bucket this month (always ≥ 0)
 - **Paid from (expenses):** an expense line may be marked **paid from** a savings bucket for that month. That is the planned *use* of the bucket — not a negative contribution. Paycheck leftover is `income − expenses paid from this month’s income − savings contributions`. Funded expenses stay visible on the budget but do not make the month look overcommitted.
@@ -112,6 +114,13 @@ Savings categories are **buckets** that accumulate:
 - **Target (optional):** goal amount on the bucket; dashboard projects the **hit month** from balance + monthly contribution rate
 - **Dashboard:** show balance, contribution progress vs plan, planned use, target + projected hit month, and history
 - **Copy-forward:** auto-seed copies contribution amounts only — not “paid from” links — so a one-off shop month is not repeated. Explicit **Copy from month** and templates do copy the links.
+
+**Not a bucket** (still kind = savings):
+
+- Counts in leftover and the income / expense / savings mix the same as other savings
+- Tracks how much was paid toward it (plan vs actual, and a lifetime total on Categories)
+- Does **not** show a spendable balance, does **not** appear on bucket / balance charts, cannot fund expenses, and does not take a target
+- Use for extra loan payments and similar net-worth outflows that are not a pile you will spend later
 
 ### 3.4 Transaction tracker (manual)
 
@@ -353,7 +362,7 @@ All user-owned rows must be scoped by authenticated user.
 4. **Preserve copy-forward semantics** when touching budget months.
 5. **Budget and Dashboard must support Monthly and Annual views** with easy switching; annual budget view remains editable.
 6. **Tracker must support solid search, sort, and filter** so users can find past entries.
-7. **Savings = buckets with balances**; do not flatten them into normal expenses without discussion.
+7. **Savings = buckets with balances by default.** A savings category may be marked **not a bucket**; those lines still count as savings in leftover and mix but must not appear on bucket/balance charts or fund expenses. Do not flatten savings into normal expenses without discussion.
 8. **Over-budget = soft warning**, never a hard block. Plan coaching and the budget coach stay optional/advisory. The coach must not prescribe a generic 50/30/20 split; it assigns leftover using the user’s categories and savings targets.
 9. **USD-only** until multi-currency is explicitly requested — still keep amounts as proper decimal/money types, not floats.
 10. **No secrets in git.** Use env vars for Neon, Render, and Vercel config.
@@ -371,7 +380,7 @@ All user-owned rows must be scoped by authenticated user.
 | Current product bet | **Desktop web depth (v2 / Phase 1.x)** — robust desktop app before mobile or growth features |
 | Month model | Copy-forward auto-seed from latest planned month + copy/template tools |
 | Periods | Calendar months now; custom ranges later |
-| Savings | Buckets with allocated balances, optional target goals + projected hit month, and monthly contribution plans. Expense lines may be **paid from** a bucket for a given month (planned use). Auto-seed does not copy those links; copy-from and templates do. Paycheck leftover ignores funded expenses. |
+| Savings | Buckets with allocated balances, optional target goals + projected hit month, and monthly contribution plans. A savings category may be **not a bucket** (Categories): it still counts in leftover and the savings mix, and paid-toward is tracked, but it has no spendable balance, stays off bucket/balance charts, cannot fund expenses, and has no target. Expense lines may be **paid from** a *bucket* for a given month (planned use). Auto-seed does not copy those links; copy-from and templates do. Paycheck leftover ignores funded expenses. |
 | Tracker | Manual transactions first; note memory autocomplete; Discover CSV inbox per **§12** (staging, fingerprints, rounding-aware fuzzy match). Merchant auto-rules later |
 | CSV / bank import | **Discover CSV inbox shipped** (not silent ledger insert). Fingerprints; amount ±$1 and date ±2 days for possible duplicates; merge keeps category / note / paid-from and replaces rounded amount with posted. Auto category suggestion and bank sync later — see **§12** |
 | Over budget | Soft warnings; emphasize multi-month trends |
