@@ -32,7 +32,20 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
+      # ubuntu-latest already ships an Android SDK. android-actions/setup-android
+      # currently fails on sdkmanager --licenses (interactive y/N, exit 1).
+      - name: Accept Android SDK licenses
+        run: |
+          SDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          echo "Using Android SDK at $SDK"
+          test -d "$SDK"
+          mkdir -p "$SDK/licenses"
+          printf '24333f8a63b6825ea9c5514f83c2829b004d1fee\n' > "$SDK/licenses/android-sdk-license"
+          printf '84831b9409646161cecb9b9ca2956b8728bee6eb\n' > "$SDK/licenses/android-sdk-preview-license"
+          SM="$SDK/cmdline-tools/latest/bin/sdkmanager"
+          if [[ -x "$SM" ]]; then
+            yes | "$SM" --sdk_root="$SDK" --licenses >/dev/null || true
+          fi
       - run: npm ci
       - run: node ./scripts/patch-expo-node.js
       - run: bash ./scripts/build-apk.sh
@@ -57,7 +70,7 @@ jobs:
           tag_name: setaside-android-latest
           name: Setaside Android APK
           body: |
-            Sideloadable Setaside expense logger for Android.
+            Sideloadable Setaside leftover glance + logger for Android.
 
             1. Download **Setaside.apk** below
             2. Copy it to your phone
