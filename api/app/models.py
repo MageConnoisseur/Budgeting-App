@@ -152,6 +152,11 @@ class Category(Base):
     target_amount: Mapped[Optional[Decimal]] = mapped_column(
         Numeric(14, 2), nullable=True, default=None
     )
+    # Savings only: True = spendable pile with a balance; False = counts as
+    # savings (leftover / mix) without a bucket. Ignored for income/expense.
+    is_bucket: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

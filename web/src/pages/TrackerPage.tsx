@@ -14,6 +14,7 @@ import {
 import { RecurringSchedulesPanel } from '../components/RecurringSchedulesPanel'
 import { SavingsBucketsGuide } from '../components/SavingsBucketsGuide'
 import { formatUsd, todayISO, toMoneyString } from '../lib/format'
+import { isSavingsBucket } from '../lib/savings'
 import type {
   Category,
   CategoryKind,
@@ -77,6 +78,13 @@ export function TrackerPage() {
         : categories,
     [categories, kind],
   )
+
+  const selectedSavings = useMemo(
+    () => categories.find((c) => c.id === formCategory && c.kind === 'savings'),
+    [categories, formCategory],
+  )
+  const selectedSavingsIsBucket =
+    !selectedSavings || isSavingsBucket(selectedSavings)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -324,13 +332,19 @@ export function TrackerPage() {
             </select>
           </label>
           <label>
-            {formKind === 'savings' ? 'Amount (+ in / − out)' : 'Amount'}
+            {formKind === 'savings' && selectedSavingsIsBucket
+              ? 'Amount (+ in / − out)'
+              : 'Amount'}
             <input
               inputMode="decimal"
               value={formAmount}
               onChange={(e) => setFormAmount(e.target.value)}
               required
-              placeholder={formKind === 'savings' ? 'e.g. 200 or -150' : '0.00'}
+              placeholder={
+                formKind === 'savings' && selectedSavingsIsBucket
+                  ? 'e.g. 200 or -150'
+                  : '0.00'
+              }
               aria-describedby={
                 formKind === 'savings' ? 'savings-amount-hint' : undefined
               }
@@ -406,7 +420,14 @@ export function TrackerPage() {
         )}
         {formKind === 'savings' && (
           <div id="savings-amount-hint">
-            <SavingsBucketsGuide variant="tracker" defaultOpen />
+            {selectedSavings && !isSavingsBucket(selectedSavings) ? (
+              <p className="muted compact">
+                Log what you paid toward {selectedSavings.name}. This counts as
+                savings, not a spendable bucket.
+              </p>
+            ) : (
+              <SavingsBucketsGuide variant="tracker" defaultOpen />
+            )}
           </div>
         )}
       </form>

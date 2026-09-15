@@ -4,6 +4,7 @@ import { ApiError } from '../api/client'
 import { KindBadge } from '../components/KindBadge'
 import { SavingsBucketsGuide } from '../components/SavingsBucketsGuide'
 import { formatUsd, parseMoneyInput } from '../lib/format'
+import { isSavingsBucket } from '../lib/savings'
 import type { Category, CategoryKind } from '../types/api'
 
 const KINDS: CategoryKind[] = ['income', 'expense', 'savings']
@@ -15,11 +16,13 @@ export function CategoriesPage() {
   const [name, setName] = useState('')
   const [kind, setKind] = useState<CategoryKind>('expense')
   const [targetAmount, setTargetAmount] = useState('')
+  const [isBucket, setIsBucket] = useState(true)
   const [showArchived, setShowArchived] = useState(false)
   const [saving, setSaving] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
   const [editTarget, setEditTarget] = useState('')
+  const [editIsBucket, setEditIsBucket] = useState(true)
   const [renaming, setRenaming] = useState(false)
 
   const load = useCallback(async () => {
@@ -50,10 +53,12 @@ export function CategoriesPage() {
         kind: CategoryKind
         name: string
         target_amount?: string | null
+        is_bucket?: boolean
       } = { kind, name: name.trim() }
       if (kind === 'savings') {
+        body.is_bucket = isBucket
         const trimmed = targetAmount.trim()
-        if (trimmed) {
+        if (isBucket && trimmed) {
           const parsed = parseMoneyInput(trimmed)
           if (parsed == null || Number(parsed) <= 0) {
             setError('Target amount must be a positive dollar amount')
@@ -66,6 +71,7 @@ export function CategoriesPage() {
       await categoriesApi.createCategory(body)
       setName('')
       setTargetAmount('')
+      setIsBucket(true)
       await load()
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : 'Could not create')
@@ -78,8 +84,11 @@ export function CategoriesPage() {
     setEditingId(c.id)
     setEditName(c.name)
     setEditTarget(
-      c.kind === 'savings' && c.target_amount != null ? c.target_amount : '',
+      c.kind === 'savings' && isSavingsBucket(c) && c.target_amount != null
+        ? c.target_amount
+        : '',
     )
+    setEditIsBucket(c.kind !== 'savings' || isSavingsBucket(c))
     setError(null)
   }
 
@@ -87,6 +96,7 @@ export function CategoriesPage() {
     setEditingId(null)
     setEditName('')
     setEditTarget('')
+    setEditIsBucket(true)
   }
 
   async function onSaveEdit(e: FormEvent) {
@@ -103,11 +113,13 @@ export function CategoriesPage() {
     const body: {
       name: string
       target_amount?: string | null
+      is_bucket?: boolean
     } = { name: trimmed }
 
     if (current.kind === 'savings') {
+      body.is_bucket = editIsBucket
       const t = editTarget.trim()
-      if (!t) {
+      if (!editIsBucket || !t) {
         body.target_amount = null
       } else {
         const parsed = parseMoneyInput(t)
@@ -157,15 +169,16 @@ export function CategoriesPage() {
         <div>
           <h1>Categories</h1>
           <p className="muted">
-            Income, expense, and savings buckets used across plans and the
-            tracker.
+            Income, expense, and savings lines used across plans and the
+            tracker. Savings can be a spendable bucket or a mix-only line
+            (extra loan payments, and similar).
           </p>
         </div>
       </header>
 
       <SavingsBucketsGuide variant="full" />
 
-      <form className="panel inline-form" onSubmit={onCreate}>
+      <form className="panel inline-form wrap" onSubmit={onCreate}>
         <label>
           Kind
           <select
@@ -173,7 +186,10 @@ export function CategoriesPage() {
             onChange={(e) => {
               const next = e.target.value as CategoryKind
               setKind(next)
-              if (next !== 'savings') setTargetAmount('')
+              if (next !== 'savings') {
+                setTargetAmount('')
+                setIsBucket(true)
+              }
             }}
           >
             {KINDS.map((k) => (
@@ -192,7 +208,9 @@ export function CategoriesPage() {
             maxLength={128}
             placeholder={
               kind === 'savings'
-                ? 'e.g. Emergency fund'
+                ? isBucket
+                  ? 'e.g. Emergency fund'
+                  : 'e.g. Extra loan payments'
                 : kind === 'income'
                   ? 'e.g. Paycheck'
                   : 'e.g. Groceries'
@@ -200,6 +218,23 @@ export function CategoriesPage() {
           />
         </label>
         {kind === 'savings' && (
+          <label>
+            Savings type
+            <select
+              value={isBucket ? 'bucket' : 'allocation'}
+              onChange={(e) => {
+                const next = e.target.value === 'bucket'
+                setIsBucket(next)
+                if (!next) setTargetAmount('')
+              }}
+              aria-label="Savings type"
+            >
+              <option value="bucket">Bucket</option>
+              <option value="allocation">Not a bucket</option>
+            </select>
+          </label>
+        )}
+        {kind === 'savings' && isBucket && (
           <label>
             Target
             <input
@@ -218,11 +253,21 @@ export function CategoriesPage() {
 
       {kind === 'savings' && (
         <p className="muted compact">
-          Tip: set an optional target goal here, plan a monthly contribution on
-          Budget, and mark big bills as <strong>paid from</strong> that bucket
-          so those months stay manageable. Log deposits (+) and withdrawals (−)
-          in Tracker (the expense form offers to withdraw when the plan is
-          funded). The dashboard projects when you&apos;ll hit the target.
+          {isBucket ? (
+            <>
+              Tip: a <strong>bucket</strong> is money you can use later. Set an
+              optional target, plan a monthly contribution on Budget, and mark
+              big bills as <strong>paid from</strong> that bucket. Log deposits
+              (+) and withdrawals (−) in Tracker.
+            </>
+          ) : (
+            <>
+              <strong>Not a bucket</strong> still counts in leftover and the
+              savings mix (net worth), but it has no spendable balance and stays
+              off bucket charts. Use this for extra loan payments. Tracker
+              logs how much you paid toward it.
+            </>
+          )}
         </p>
       )}
 
@@ -249,7 +294,9 @@ export function CategoriesPage() {
               <tr>
                 <th>Kind</th>
                 <th>Name</th>
+                <th>Type</th>
                 <th>Target</th>
+                <th>Paid toward</th>
                 <th>Status</th>
                 <th />
               </tr>
@@ -272,13 +319,29 @@ export function CategoriesPage() {
                           autoFocus
                         />
                         {c.kind === 'savings' && (
-                          <input
-                            value={editTarget}
-                            onChange={(e) => setEditTarget(e.target.value)}
-                            inputMode="decimal"
-                            placeholder="Target (blank = none)"
-                            aria-label="Savings target amount"
-                          />
+                          <>
+                            <select
+                              value={editIsBucket ? 'bucket' : 'allocation'}
+                              onChange={(e) => {
+                                const next = e.target.value === 'bucket'
+                                setEditIsBucket(next)
+                                if (!next) setEditTarget('')
+                              }}
+                              aria-label="Savings type"
+                            >
+                              <option value="bucket">Bucket</option>
+                              <option value="allocation">Not a bucket</option>
+                            </select>
+                            {editIsBucket && (
+                              <input
+                                value={editTarget}
+                                onChange={(e) => setEditTarget(e.target.value)}
+                                inputMode="decimal"
+                                placeholder="Target (blank = none)"
+                                aria-label="Savings target amount"
+                              />
+                            )}
+                          </>
                         )}
                         <button
                           className="btn tiny primary"
@@ -303,9 +366,21 @@ export function CategoriesPage() {
                   <td>
                     {c.kind !== 'savings'
                       ? '—'
+                      : isSavingsBucket(c)
+                        ? 'Bucket'
+                        : 'Not a bucket'}
+                  </td>
+                  <td>
+                    {c.kind !== 'savings' || !isSavingsBucket(c)
+                      ? '—'
                       : c.target_amount != null
                         ? formatUsd(c.target_amount)
                         : '—'}
+                  </td>
+                  <td>
+                    {c.kind === 'savings' && !isSavingsBucket(c)
+                      ? formatUsd(c.paid_toward ?? '0.00')
+                      : '—'}
                   </td>
                   <td>{c.archived ? 'Archived' : 'Active'}</td>
                   <td className="actions">

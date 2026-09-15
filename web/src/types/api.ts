@@ -42,6 +42,13 @@ export interface Category {
   sort_order: number
   /** Optional savings goal amount; null when unset or non-savings. */
   target_amount: string | null
+  /**
+   * Savings only. True (default) = spendable bucket with a balance.
+   * False = counts in leftover / savings mix without a pile.
+   */
+  is_bucket: boolean
+  /** Lifetime net tracker total for savings; null for income/expense. */
+  paid_toward?: string | null
   created_at: string
   updated_at: string
 }
@@ -147,6 +154,8 @@ export interface CategoryProgress {
   funded_by_category_id?: string | null
   funded_by_category_name?: string | null
   committed?: boolean
+  /** Savings only: false means mix-only, not a spendable pile. */
+  is_bucket?: boolean | null
 }
 
 export interface SavingsBucket {
@@ -164,6 +173,7 @@ export interface SavingsBucket {
   planned_use_this_period?: string
   actual_use_this_period?: string
   use_over_balance?: boolean
+  is_bucket?: boolean
 }
 
 export interface SpendingPaceDay {

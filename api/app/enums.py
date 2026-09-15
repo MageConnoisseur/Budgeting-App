@@ -44,5 +44,6 @@ class ImportMatchKind(str, enum.Enum):
 # Amount convention (documented for clients):
 # - Amounts are Decimal with 2 fractional digits, USD only in v1.
 # - Income / expense transactions: amount is always > 0 (money received / spent).
-# - Savings transactions: amount > 0 contributes to the bucket; amount < 0
-#   withdraws from the bucket. Zero is rejected.
+# - Savings transactions: amount > 0 contributes (to a bucket, or toward a
+#   non-bucket savings line such as extra loan payments); amount < 0 withdraws
+#   from a bucket. Zero is rejected.

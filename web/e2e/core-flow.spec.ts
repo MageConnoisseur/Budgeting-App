@@ -59,11 +59,25 @@ test.describe('core smoke: auth → categories → budget → tracker → dashbo
     await page.getByRole('button', { name: 'Add' }).click()
     await expect(page.getByRole('cell', { name: 'Groceries' })).toBeVisible()
 
+    await page.getByLabel('Kind').selectOption('savings')
+    await expect(page.getByLabel('Savings type')).toBeVisible()
+    await page.getByLabel('Savings type').selectOption('allocation')
+    await page.getByLabel('Name').fill('Extra loan payments')
+    await page.getByRole('button', { name: 'Add' }).click()
+    await expect(
+      page.getByRole('cell', { name: 'Extra loan payments' }),
+    ).toBeVisible()
+    await expect(page.getByRole('cell', { name: 'Not a bucket' })).toBeVisible()
+
     await page.getByRole('link', { name: 'Budget' }).click()
     await expect(page.getByRole('heading', { name: 'Budget' })).toBeVisible()
     await page.getByLabel('Groceries planned amount').fill('400')
+    await page.getByLabel('Extra loan payments planned amount').fill('150')
     await page.getByRole('button', { name: 'Save month' }).click()
     await expect(page.getByText('Saved')).toBeVisible()
+    await expect(
+      page.getByText('Counts as savings — not a spendable bucket'),
+    ).toBeVisible()
 
     await page.getByRole('link', { name: 'Tracker' }).click()
     await expect(page.getByRole('heading', { name: 'Tracker' })).toBeVisible()
@@ -76,6 +90,25 @@ test.describe('core smoke: auth → categories → budget → tracker → dashbo
     await expect(page.getByRole('row').filter({ hasText: 'Groceries' })).toBeVisible()
     await expect(page.getByText('$12.50').first()).toBeVisible()
     await page.getByRole('button', { name: 'Not now' }).click()
+
+    await logForm.getByLabel('Kind').selectOption('savings')
+    await logForm.getByLabel('Category').selectOption({
+      label: 'Extra loan payments',
+    })
+    await expect(
+      page.getByText('Log what you paid toward Extra loan payments'),
+    ).toBeVisible()
+    await logForm.getByLabel('Amount').fill('150')
+    await logForm.getByRole('button', { name: 'Add' }).click()
+    await expect(
+      page.getByRole('row').filter({ hasText: 'Extra loan payments' }),
+    ).toBeVisible()
+
+    await page.getByRole('link', { name: 'Categories' }).click()
+    const extraRow = page.getByRole('row').filter({
+      hasText: 'Extra loan payments',
+    })
+    await expect(extraRow).toContainText('$150.00')
 
     await page.getByRole('link', { name: 'Budget' }).click()
     await expect(page.getByRole('heading', { name: 'Budget' })).toBeVisible()
@@ -92,6 +125,22 @@ test.describe('core smoke: auth → categories → budget → tracker → dashbo
     await expect(page.locator('.plan-vs-actual-table')).toContainText('$400.00')
     await expect(page.locator('.plan-vs-actual-table')).toContainText('$12.50')
     await expect(page.getByText('Groceries').first()).toBeVisible()
+    await expect(page.locator('.plan-vs-actual-table')).toContainText(
+      'Extra loan payments',
+    )
+    await expect(page.locator('.plan-vs-actual-table')).toContainText(
+      'not a bucket',
+    )
+    await page.getByRole('button', { name: 'Customize layout' }).click()
+    await page
+      .getByRole('checkbox', { name: /Savings buckets/ })
+      .check()
+    const bucketsWidget = page.locator('.widget').filter({
+      has: page.getByRole('heading', { name: 'Savings buckets' }),
+    })
+    await expect(bucketsWidget).toBeVisible()
+    await expect(bucketsWidget).toContainText('No savings buckets yet.')
+    await expect(bucketsWidget).not.toContainText('Extra loan payments')
   })
 })
 
