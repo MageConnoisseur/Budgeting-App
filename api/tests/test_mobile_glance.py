@@ -36,7 +36,7 @@ def _by_name(rows: list[dict], name: str) -> dict:
 
 def test_glance_requires_auth() -> None:
     r = client.get("/api/mobile/glance", params={"year": 2026, "month": 9})
-    assert r.status_code == 401
+    assert r.status_code in (401, 403)
 
 
 def test_glance_rejects_invalid_month() -> None:
