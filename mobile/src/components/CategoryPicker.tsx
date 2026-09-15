@@ -9,9 +9,16 @@ interface Props {
   value: string
   onChange: (id: string) => void
   disabled?: boolean
+  kindLabel?: string
 }
 
-export function CategoryPicker({ categories, value, onChange, disabled }: Props) {
+export function CategoryPicker({
+  categories,
+  value,
+  onChange,
+  disabled,
+  kindLabel = 'Expense',
+}: Props) {
   const [open, setOpen] = useState(false)
   const selected = categories.find((c) => c.id === value)
 
@@ -45,7 +52,7 @@ export function CategoryPicker({ categories, value, onChange, disabled }: Props)
       >
         <SafeAreaView style={styles.modal} edges={['top', 'bottom']}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Expense category</Text>
+            <Text style={styles.modalTitle}>{kindLabel} category</Text>
             <Pressable
               onPress={() => setOpen(false)}
               accessibilityRole="button"

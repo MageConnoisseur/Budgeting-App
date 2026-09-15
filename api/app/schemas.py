@@ -577,6 +577,27 @@ class ExpenseFundingOut(BaseModel):
     funded_by_category_name: Optional[str] = None
 
 
+class MobileGlanceCategoryOut(BaseModel):
+    """One leftover row for the phone glance. Additive contract — do not rename."""
+
+    category_id: UUID
+    category_name: str
+    kind: CategoryKind
+    planned: Decimal
+    actual: Decimal
+    remaining: Decimal
+    over_budget: bool
+    balance: Optional[Decimal] = None
+
+
+class MobileGlanceOut(BaseModel):
+    """Compact leftover snapshot for the phone logger. Not the dashboard payload."""
+
+    year: int
+    month: int
+    categories: list[MobileGlanceCategoryOut] = Field(default_factory=list)
+
+
 class BudgetCoachOut(BaseModel):
     """Deterministic leftover / plan-balance coach for a month or year."""
 

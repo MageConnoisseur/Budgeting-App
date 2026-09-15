@@ -9,6 +9,7 @@ import {
   shiftDate,
   todayISO,
   toMoneyString,
+  yearMonthFromISO,
 } from './format.ts'
 
 test('formatUsd formats decimal strings', () => {
@@ -31,6 +32,11 @@ test('shiftDate and isToday', () => {
   assert.equal(shiftDate('2026-08-01', -1), '2026-07-31')
   assert.equal(isToday('2026-08-24', new Date(2026, 7, 24)), true)
   assert.equal(formatShortDate('2026-08-24').includes('24'), true)
+})
+
+test('yearMonthFromISO reads calendar year and month', () => {
+  assert.deepEqual(yearMonthFromISO('2026-09-15'), { year: 2026, month: 9 })
+  assert.equal(yearMonthFromISO('nope'), null)
 })
 
 test('resolveApiBaseUrl rewrites Android emulator loopback', () => {

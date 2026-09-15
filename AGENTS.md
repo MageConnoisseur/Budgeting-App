@@ -8,7 +8,7 @@ That file is the source of truth for:
 - Budget copy-forward behavior and Monthly/Annual views
 - Savings buckets, tracker search/sort, soft over-budget rules
 - Stack and hosting (React/Vercel, FastAPI/Render, Postgres/Neon)
-- **Current focus: robust desktop web (Phase 1.x / v2)** — Phase 1 MVP is done; `mobile/` is a thin expense logger (do not grow it unless asked)
+- **Current focus: robust desktop web (Phase 1.x / v2)** — Phase 1 MVP is done; `mobile/` is a thin leftover glance + logger (do not grow it into a planner unless asked)
 - CSV **Discover inbox** is started on desktop Tracker; other banks, merchant auto-rules, and bank sync still follow `instructions.md` §12
 - Coding-agent rules and decision log
 - **Clarify unclear design first** — 1–5 questions (prefer multiple choice) before writing code
@@ -26,4 +26,4 @@ If anything about the task is unclear — especially product, UX, layout, copy, 
 
 ## Cursor Cloud
 
-Cloud agents should treat `instructions.md` as required project context for every task in this repo. Prefer **desktop web depth** work. Keep `mobile/` a thin expense logger; do not add Budget/Dashboard/Categories there, or Phase 3+ growth features, unless the user explicitly asks.
+Cloud agents should treat `instructions.md` as required project context for every task in this repo. Prefer **desktop web depth** work. Keep `mobile/` a thin leftover glance + logger; do not add Budget/Dashboard/Categories/Coach there, or Phase 3+ growth features, unless the user explicitly asks.
