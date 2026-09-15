@@ -1,4 +1,11 @@
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  type FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import * as budgetsApi from '../api/budgets'
 import * as categoriesApi from '../api/categories'
 import { ApiError } from '../api/client'
@@ -33,6 +40,31 @@ const KIND_ORDER: CategoryKind[] = ['income', 'expense', 'savings']
 
 function annualCellKey(categoryId: string, month: number) {
   return `${categoryId}:${month}`
+}
+
+function scrollBehavior(): ScrollBehavior {
+  if (
+    typeof window !== 'undefined' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  ) {
+    return 'auto'
+  }
+  return 'smooth'
+}
+
+/** Keep the sticky category column in view while jumping to a month. */
+function scrollMonthColumnIntoView(wrap: HTMLElement, monthNum: number) {
+  const col = wrap.querySelector<HTMLElement>(
+    `thead .annual-month-col[data-month="${monthNum}"]`,
+  )
+  const sticky = wrap.querySelector<HTMLElement>('thead .annual-cat-col')
+  if (!col) return
+  const wrapRect = wrap.getBoundingClientRect()
+  const colRect = col.getBoundingClientRect()
+  const stickyWidth = sticky?.getBoundingClientRect().width ?? 0
+  const nextLeft =
+    wrap.scrollLeft + (colRect.left - wrapRect.left) - stickyWidth - 8
+  wrap.scrollTo({ left: Math.max(0, nextLeft), behavior: scrollBehavior() })
 }
 
 function draftFromAnnual(cats: Category[], months: BudgetMonth[]) {
@@ -90,6 +122,12 @@ export function BudgetPage() {
   )
   const [templateName, setTemplateName] = useState('')
   const [selectedTemplate, setSelectedTemplate] = useState('')
+  const annualWrapRef = useRef<HTMLDivElement>(null)
+
+  const revealAnnualMonth = useCallback((monthNum: number) => {
+    const wrap = annualWrapRef.current
+    if (wrap) scrollMonthColumnIntoView(wrap, monthNum)
+  }, [])
 
   useEffect(() => {
     if (user?.preferred_budget_view) setView(user.preferred_budget_view)
@@ -169,6 +207,12 @@ export function BudgetPage() {
   useEffect(() => {
     void load()
   }, [load])
+
+  useEffect(() => {
+    if (view !== 'annual' || loading || categories.length === 0) return
+    const frame = window.requestAnimationFrame(() => revealAnnualMonth(month))
+    return () => window.cancelAnimationFrame(frame)
+  }, [view, loading, categories.length, year, month, revealAnnualMonth])
 
   async function onViewChange(mode: ViewMode) {
     setView(mode)
@@ -440,7 +484,9 @@ export function BudgetPage() {
   }
 
   return (
-    <div className={`page${view === 'annual' ? ' page-budget-annual' : ''}`}>
+    <div
+      className={`page page-budget${view === 'annual' ? ' page-budget-annual' : ''}`}
+    >
       <header className="page-header">
         <div>
           <h1>Budget</h1>
@@ -514,7 +560,7 @@ export function BudgetPage() {
                   <div className="budget-lines">
                     {grouped[kind].map((c) => (
                       <div key={c.id} className="budget-line">
-                        <span>{c.name}</span>
+                        <span className="budget-line-name">{c.name}</span>
                         <BudgetFillInput
                           kind={kind}
                           actual={yearActuals[month]?.[c.id] ?? 0}
@@ -677,11 +723,18 @@ export function BudgetPage() {
                     : t.balance > 0
                       ? 'surplus'
                       : 'deficit'
+                const monthNum = i + 1
                 return (
-                  <div key={MONTH_SHORT[i]} className={`month-balance-cell tone-${tone}`}>
+                  <button
+                    key={MONTH_SHORT[i]}
+                    type="button"
+                    className={`month-balance-cell tone-${tone}`}
+                    onClick={() => revealAnnualMonth(monthNum)}
+                    aria-label={`Show ${MONTH_SHORT[i]} in the year grid`}
+                  >
                     <span>{MONTH_SHORT[i]}</span>
                     <strong>{formatUsd(t.balance)}</strong>
-                  </div>
+                  </button>
                 )
               })}
             </div>
@@ -692,7 +745,11 @@ export function BudgetPage() {
             className="annual-form"
             onSubmit={(e) => void saveAnnual(e)}
           >
-            <div className="table-wrap annual-wrap">
+            <p className="annual-scroll-hint muted compact">
+              Swipe or scroll sideways for all 12 months. Category names stay
+              in view.
+            </p>
+            <div ref={annualWrapRef} className="table-wrap annual-wrap">
               <table className="data-table annual-grid">
                 <colgroup>
                   <col className="annual-cat-col" />
@@ -705,8 +762,13 @@ export function BudgetPage() {
                     <th className="annual-cat-col" scope="col">
                       Category
                     </th>
-                    {MONTH_SHORT.map((m) => (
-                      <th key={m} className="annual-month-col" scope="col">
+                    {MONTH_SHORT.map((m, i) => (
+                      <th
+                        key={m}
+                        className="annual-month-col"
+                        scope="col"
+                        data-month={i + 1}
+                      >
                         {m}
                       </th>
                     ))}
@@ -719,7 +781,8 @@ export function BudgetPage() {
                         <th className="annual-cat-col" scope="row" title={c.name}>
                           {idx === 0 && (
                             <span className="kind-inline">
-                              {kind.charAt(0).toUpperCase() + kind.slice(1)} ·{' '}
+                              {kind.charAt(0).toUpperCase() + kind.slice(1)}
+                              <span className="kind-inline-sep"> · </span>
                             </span>
                           )}
                           {c.name}
