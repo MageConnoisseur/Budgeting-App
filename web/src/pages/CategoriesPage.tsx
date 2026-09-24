@@ -220,9 +220,10 @@ export function CategoriesPage() {
         <p className="muted compact">
           Tip: set an optional target goal here, plan a monthly contribution on
           Budget, and mark big bills as <strong>paid from</strong> that bucket
-          so those months stay manageable. Log deposits (+) and withdrawals (−)
-          in Tracker (the expense form offers to withdraw when the plan is
-          funded). The dashboard projects when you&apos;ll hit the target.
+          so those months stay manageable. In Tracker, set <strong>Pay from</strong>{' '}
+          on an expense to take that whole entry from the bucket — or log the
+          paycheck part and the bucket part as two expenses. The dashboard
+          projects when you&apos;ll hit the target.
         </p>
       )}
 
