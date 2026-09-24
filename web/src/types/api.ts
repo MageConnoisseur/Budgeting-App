@@ -103,6 +103,9 @@ export interface Transaction {
   date: string
   note: string | null
   pair_id?: string | null
+  covered_amount?: string | null
+  covered_by_category_id?: string | null
+  covered_by_category_name?: string | null
   created_at: string
   updated_at: string
   category?: Category | null

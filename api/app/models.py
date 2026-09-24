@@ -351,8 +351,8 @@ class Transaction(Base):
     import_fingerprint: Mapped[Optional[str]] = mapped_column(
         String(64), nullable=True, index=True, default=None
     )
-    # Shared by an expense and its matching savings withdrawal when logging
-    # a bill that is paid from a bucket.
+    # Shared by an expense and its savings withdrawal. The withdrawal amount
+    # may be the full charge or only the part covered by the bucket.
     pair_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True), index=True, nullable=True
     )

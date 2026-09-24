@@ -166,6 +166,45 @@ def build_year_actuals(db: Session, user: User, year: int) -> YearActualsOut:
     )
 
 
+def _paired_expense_covers(
+    transactions: list[Transaction],
+) -> list[tuple[date, UUID, Decimal]]:
+    """One row per expense that has a paired savings withdrawal."""
+    grouped: dict[UUID, list[Transaction]] = {}
+    for tx in transactions:
+        if tx.pair_id is None or tx.category is None:
+            continue
+        grouped.setdefault(tx.pair_id, []).append(tx)
+    covers: list[tuple[date, UUID, Decimal]] = []
+    for group in grouped.values():
+        expense = next(
+            (
+                tx
+                for tx in group
+                if tx.category is not None
+                and tx.category.kind == CategoryKind.expense.value
+                and tx.amount > ZERO
+            ),
+            None,
+        )
+        withdrawal = next(
+            (
+                tx
+                for tx in group
+                if tx.category is not None
+                and tx.category.kind == CategoryKind.savings.value
+                and tx.amount < ZERO
+            ),
+            None,
+        )
+        if expense is None or withdrawal is None:
+            continue
+        covered = min(expense.amount, abs(withdrawal.amount))
+        if covered > ZERO:
+            covers.append((expense.date, expense.category_id, covered))
+    return covers
+
+
 def _planned_by_category(budget_month: BudgetMonth | None) -> dict[UUID, Decimal]:
     if budget_month is None:
         return {}
@@ -205,6 +244,8 @@ class UserLedger:
     recurring: list[RecurringSchedule]
     _actuals_by_month: dict[tuple[int, int], dict[UUID, Decimal]] = field(init=False)
     _savings_by_date: list[tuple[date, UUID, Decimal]] = field(init=False)
+    # Expense date, expense category, dollars covered by the paired withdrawal.
+    _expense_covers: list[tuple[date, UUID, Decimal]] = field(init=False)
 
     def __post_init__(self) -> None:
         actuals: dict[tuple[int, int], dict[UUID, Decimal]] = {}
@@ -217,6 +258,7 @@ class UserLedger:
                 savings.append((tx.date, tx.category_id, tx.amount))
         self._actuals_by_month = actuals
         self._savings_by_date = savings
+        self._expense_covers = _paired_expense_covers(self.transactions)
 
     def actuals_between(self, start: date, end: date) -> dict[UUID, Decimal]:
         last = monthrange(start.year, start.month)[1]
@@ -254,6 +296,23 @@ class UserLedger:
             elif amount < ZERO:
                 withdrawals[cid] = withdrawals.get(cid, ZERO) + (-amount)
         return deposits, withdrawals
+
+    def expense_covered_between(
+        self, start: date, end: date
+    ) -> tuple[Decimal, dict[UUID, Decimal]]:
+        """Dollars of expenses in range that a paired bucket withdrawal covered.
+
+        Keyed by expense category. A partial cover counts only the withdrawn
+        amount; the rest of the charge stays on that month's paycheck.
+        """
+        total = ZERO
+        by_category: dict[UUID, Decimal] = {}
+        for tx_date, category_id, covered in self._expense_covers:
+            if tx_date < start or tx_date > end:
+                continue
+            total += covered
+            by_category[category_id] = by_category.get(category_id, ZERO) + covered
+        return total, by_category
 
     def income_paydays(self, year: int, month: int) -> dict[UUID, list[date]]:
         out: dict[UUID, list[date]] = {}
@@ -862,6 +921,7 @@ def _monthly_from_ledger(
     funding = funding_by_expense(budget_month)
     use_by_bucket = planned_use_by_bucket(budget_month)
     deposits, withdrawals = ledger.savings_flows_between(start, end)
+    covered_total, covered_by_cat = ledger.expense_covered_between(start, end)
 
     progress: list[CategoryProgress] = []
     for cat in categories:
@@ -939,10 +999,10 @@ def _monthly_from_ledger(
         (r.planned for r in by_kind[CategoryKind.expense] if r.funded_by_category_id),
         ZERO,
     )
-    funded_actual = sum(
-        (r.actual for r in by_kind[CategoryKind.expense] if r.funded_by_category_id),
-        ZERO,
-    )
+    # Plan leftover still treats a whole "paid from" category as bucket use.
+    # Actual leftover follows the dollars actually withdrawn, so a partial
+    # cover leaves the rest of the charge on this month's paycheck.
+    covered_for_leftover = min(covered_total, max(expense_totals.actual, ZERO))
     leftover_planned = paycheck_leftover(
         income=income_totals.planned,
         expense_from_income=expense_totals.planned - funded_planned,
@@ -951,9 +1011,9 @@ def _monthly_from_ledger(
     )
     leftover_actual = paycheck_leftover(
         income=income_totals.actual,
-        expense_from_income=expense_totals.actual - funded_actual,
+        expense_from_income=expense_totals.actual - covered_for_leftover,
         savings_contributions=sum(deposits.values(), ZERO),
-        expense_from_savings=funded_actual,
+        expense_from_savings=covered_for_leftover,
     )
     expense_for_coach = expense_totals.model_copy(
         update={
@@ -1015,7 +1075,12 @@ def _monthly_from_ledger(
             expense_planned=expense_totals.planned,
             expense_actual=expense_totals.actual,
         )
-        flexible = build_flexible_split(progress, leftover_planned, leftover_actual)
+        flexible = build_flexible_split(
+            progress,
+            leftover_planned,
+            leftover_actual,
+            covered_by_category=covered_by_cat,
+        )
         tradeoffs = build_tradeoffs(
             progress,
             buckets,
@@ -1359,6 +1424,9 @@ def build_annual_dashboard(
             ),
             leftover_planned,
             leftover_actual,
+            covered_by_category=ledger.expense_covered_between(
+                date(year, 1, 1), date(year, 12, 31)
+            )[1],
         ),
         tradeoffs=build_tradeoffs(
             mark_committed(

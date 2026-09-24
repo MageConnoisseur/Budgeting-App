@@ -107,7 +107,7 @@ Savings categories are **buckets** that accumulate:
 
 - **Plan:** how much to contribute to the bucket this month (always ≥ 0)
 - **Paid from (expenses):** an expense line may be marked **paid from** a savings bucket for that month. That is the planned *use* of the bucket — not a negative contribution. Paycheck leftover is `income − expenses paid from this month’s income − savings contributions`. Funded expenses stay visible on the budget but do not make the month look overcommitted.
-- **Actual:** transfers in/out logged in the tracker. Logging an expense that is paid from a bucket should also withdraw from that bucket (paired entries).
+- **Actual:** transfers in/out logged in the tracker. Any expense entry can be **paid from** a savings bucket (the whole entry), even when the plan does not mark that category as bucket-funded. To split a bill, log two expenses — the paycheck part and the bucket part. Actual leftover ignores entries paid from a bucket. The category still shows **both** against its plan, so an unexpected overrun stays visible. The plan’s “paid from” link remains whole-category for **planned** leftover.
 - **Balance:** running total allocated to that bucket over time
 - **Target (optional):** goal amount on the bucket; dashboard projects the **hit month** from balance + monthly contribution rate
 - **Dashboard:** show balance, contribution progress vs plan, planned use, target + projected hit month, and history
@@ -371,7 +371,7 @@ All user-owned rows must be scoped by authenticated user.
 | Current product bet | **Desktop web depth (v2 / Phase 1.x)** — robust desktop app before mobile or growth features |
 | Month model | Copy-forward auto-seed from latest planned month + copy/template tools |
 | Periods | Calendar months now; custom ranges later |
-| Savings | Buckets with allocated balances, optional target goals + projected hit month, and monthly contribution plans. Expense lines may be **paid from** a bucket for a given month (planned use). Auto-seed does not copy those links; copy-from and templates do. Paycheck leftover ignores funded expenses. |
+| Savings | Buckets with allocated balances, optional target goals + projected hit month, and monthly contribution plans. Expense lines may be **paid from** a bucket for a given month (planned use, whole category). A logged expense may be paid entirely from a bucket even when the plan does not; split a bill by logging the paycheck part and the bucket part as two expenses. Actual leftover ignores bucket-paid entries. Auto-seed does not copy paid-from links; copy-from and templates do. |
 | Tracker | Manual transactions first; note memory autocomplete; Discover CSV inbox per **§12** (staging, fingerprints, rounding-aware fuzzy match). Merchant auto-rules later |
 | CSV / bank import | **Discover CSV inbox shipped** (not silent ledger insert). Fingerprints; amount ±$1 and date ±2 days for possible duplicates; merge keeps category / note / paid-from and replaces rounded amount with posted. Auto category suggestion and bank sync later — see **§12** |
 | Over budget | Soft warnings; emphasize multi-month trends |

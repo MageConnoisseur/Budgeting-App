@@ -244,7 +244,16 @@ def build_flexible_split(
     rows: list[CategoryProgress],
     leftover_planned: PaycheckLeftoverOut,
     leftover_actual: PaycheckLeftoverOut,
+    covered_by_category: dict[UUID, Decimal] | None = None,
 ) -> FlexibleSplitOut:
+    """Split spending into committed, flexible, and bucket-covered dollars.
+
+    ``covered_by_category`` is the actual withdrawal against each expense
+    category. Only that portion counts as funded actual; the rest stays in
+    committed or flexible spending even when the plan marks the whole line
+    as paid from a bucket.
+    """
+    covers = covered_by_category or {}
     committed_p = committed_a = flexible_p = flexible_a = funded_p = funded_a = ZERO
     savings_p = savings_a = ZERO
     for row in rows:
@@ -254,15 +263,25 @@ def build_flexible_split(
             continue
         if row.kind != CategoryKind.expense:
             continue
+        covered = covers.get(row.category_id, ZERO)
+        if row.actual > ZERO:
+            covered = min(covered, row.actual)
+        else:
+            covered = ZERO
+        paycheck_actual = row.actual - covered
+        funded_a += covered
         if row.funded_by_category_id:
             funded_p += row.planned
-            funded_a += row.actual
+            if row.committed:
+                committed_a += paycheck_actual
+            else:
+                flexible_a += paycheck_actual
         elif row.committed:
             committed_p += row.planned
-            committed_a += row.actual
+            committed_a += paycheck_actual
         else:
             flexible_p += row.planned
-            flexible_a += row.actual
+            flexible_a += paycheck_actual
     return FlexibleSplitOut(
         committed_planned=_money(committed_p),
         committed_actual=_money(committed_a),

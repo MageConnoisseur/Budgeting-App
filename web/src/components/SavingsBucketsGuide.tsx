@@ -74,10 +74,11 @@ export function SavingsBucketsGuide({
             </ul>
             <p className="savings-guide-example">
               Example: you contribute $200 to a Car fund (<code>+200</code>).
-              In September you take the car in — plan $500 Car maintenance
-              paid from Car fund, then log the $500 expense and check{' '}
-              <strong>Also withdraw from Car fund</strong> so the bucket drops
-              to match.
+              Log the shop bill as an expense and set <strong>Pay from</strong>{' '}
+              to Car fund so the bucket drops by that whole entry. If only the
+              extra came from savings — $500 from this month’s income and $300
+              from the bucket — log those as two expenses. Both show on the
+              category. Leftover counts only the paycheck one.
             </p>
           </>
         )}
@@ -86,8 +87,8 @@ export function SavingsBucketsGuide({
           <p>
             The dashboard shows each bucket’s <strong>balance</strong> (all
             deposits minus withdrawals over time) and this period’s progress vs
-            your contribution plan. If expenses are marked paid from a bucket,
-            leftover ignores those bills. Soft warnings appear if you put in
+            your contribution plan. Leftover ignores expenses paid from a
+            bucket. Soft warnings appear if you put in
             more than planned — they never block logging.
           </p>
         )}

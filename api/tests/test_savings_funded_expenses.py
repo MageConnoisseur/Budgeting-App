@@ -246,3 +246,213 @@ def test_paired_expense_creates_matching_withdrawal() -> None:
     client.delete(f"/api/transactions/{expense['id']}", headers=h)
     after = client.get("/api/transactions", headers=h)
     assert after.json()["total"] == 0
+    assert Decimal(expense["covered_amount"]) == Decimal("500.00")
+    assert expense["covered_by_category_id"] == c["fund"]["id"]
+
+
+def _tx(h: dict[str, str], **body: object) -> dict:
+    created = client.post("/api/transactions", headers=h, json=body)
+    assert created.status_code == 201, created.text
+    return created.json()
+
+
+def test_partial_cover_leaves_the_rest_on_the_paycheck() -> None:
+    """$800 expense, $500 planned from income, $300 from the bucket."""
+    h = _auth()
+    c = _cats(h)
+    planned = client.put(
+        "/api/budgets/months/2026/9",
+        headers=h,
+        json={
+            "replace_all": True,
+            "lines": [
+                {"category_id": c["income"]["id"], "planned_amount": "4000.00"},
+                {"category_id": c["car"]["id"], "planned_amount": "500.00"},
+                {"category_id": c["fund"]["id"], "planned_amount": "0.00"},
+            ],
+        },
+    )
+    assert planned.status_code == 200, planned.text
+    _tx(
+        h,
+        category_id=c["income"]["id"],
+        amount="4000.00",
+        date="2026-09-01",
+        note="Paycheck",
+    )
+    expense = _tx(
+        h,
+        category_id=c["car"]["id"],
+        amount="800.00",
+        date="2026-09-12",
+        note="Unexpected repair",
+        withdraw_from_category_id=c["fund"]["id"],
+        withdraw_amount="300.00",
+    )
+    assert Decimal(expense["covered_amount"]) == Decimal("300.00")
+    assert expense["covered_by_category_name"] == "Car fund"
+
+    listing = client.get("/api/transactions", headers=h).json()["items"]
+    amounts = sorted(Decimal(i["amount"]) for i in listing)
+    assert amounts == [Decimal("-300.00"), Decimal("800.00"), Decimal("4000.00")]
+
+    dash = client.get("/api/dashboard/monthly/2026/9", headers=h)
+    assert dash.status_code == 200, dash.text
+    body = dash.json()
+    leftover = body["leftover_actual"]
+    # Paycheck covers $500. The extra $300 is the bucket, not new savings.
+    assert Decimal(leftover["expense_from_income"]) == Decimal("500.00")
+    assert Decimal(leftover["expense_from_savings"]) == Decimal("300.00")
+    assert Decimal(leftover["savings_contributions"]) == Decimal("0.00")
+    assert Decimal(leftover["leftover"]) == Decimal("3500.00")
+    assert Decimal(body["savings"]["actual"]) == Decimal("-300.00")
+    car = next(row for row in body["categories"] if row["category_id"] == c["car"]["id"])
+    assert Decimal(car["actual"]) == Decimal("800.00")
+    assert car["over_budget"] is True
+    bucket = next(
+        b for b in body["savings_buckets"] if b["category_id"] == c["fund"]["id"]
+    )
+    assert Decimal(bucket["balance"]) == Decimal("-300.00")
+    assert Decimal(bucket["actual_use_this_period"]) == Decimal("300.00")
+    split = body["flexible_split"]
+    assert Decimal(split["funded_actual"]) == Decimal("300.00")
+    paycheck_spend = Decimal(split["flexible_actual"]) + Decimal(split["committed_actual"])
+    assert paycheck_spend == Decimal("500.00")
+
+
+def test_split_bill_is_two_expenses_one_from_the_bucket() -> None:
+    """$500 from income plus $300 paid entirely from the bucket."""
+    h = _auth()
+    c = _cats(h)
+    client.put(
+        "/api/budgets/months/2026/9",
+        headers=h,
+        json={
+            "replace_all": True,
+            "lines": [
+                {"category_id": c["income"]["id"], "planned_amount": "4000.00"},
+                {"category_id": c["car"]["id"], "planned_amount": "500.00"},
+            ],
+        },
+    )
+    _tx(
+        h,
+        category_id=c["income"]["id"],
+        amount="4000.00",
+        date="2026-09-01",
+    )
+    paycheck_part = _tx(
+        h,
+        category_id=c["car"]["id"],
+        amount="500.00",
+        date="2026-09-12",
+        note="Planned repair",
+    )
+    assert paycheck_part["covered_amount"] is None
+    bucket_part = _tx(
+        h,
+        category_id=c["car"]["id"],
+        amount="300.00",
+        date="2026-09-12",
+        note="Unexpected extra",
+        withdraw_from_category_id=c["fund"]["id"],
+    )
+    assert Decimal(bucket_part["covered_amount"]) == Decimal("300.00")
+
+    dash = client.get("/api/dashboard/monthly/2026/9", headers=h).json()
+    leftover = dash["leftover_actual"]
+    assert Decimal(leftover["expense_from_income"]) == Decimal("500.00")
+    assert Decimal(leftover["expense_from_savings"]) == Decimal("300.00")
+    assert Decimal(leftover["savings_contributions"]) == Decimal("0.00")
+    assert Decimal(leftover["leftover"]) == Decimal("3500.00")
+    assert Decimal(dash["savings"]["actual"]) == Decimal("-300.00")
+    car = next(row for row in dash["categories"] if row["category_id"] == c["car"]["id"])
+    assert Decimal(car["actual"]) == Decimal("800.00")
+    assert car["over_budget"] is True
+    bucket = next(b for b in dash["savings_buckets"] if b["category_id"] == c["fund"]["id"])
+    assert Decimal(bucket["balance"]) == Decimal("-300.00")
+
+
+def test_withdraw_amount_cannot_exceed_the_expense() -> None:
+    h = _auth()
+    c = _cats(h)
+    created = client.post(
+        "/api/transactions",
+        headers=h,
+        json={
+            "category_id": c["car"]["id"],
+            "amount": "800.00",
+            "date": "2026-09-12",
+            "withdraw_from_category_id": c["fund"]["id"],
+            "withdraw_amount": "801.00",
+        },
+    )
+    assert created.status_code == 400, created.text
+
+
+def test_editing_keeps_a_partial_cover_and_can_change_it() -> None:
+    h = _auth()
+    c = _cats(h)
+    expense = _tx(
+        h,
+        category_id=c["car"]["id"],
+        amount="800.00",
+        date="2026-09-12",
+        note="Repair",
+        withdraw_from_category_id=c["fund"]["id"],
+        withdraw_amount="300.00",
+    )
+    noted = client.patch(
+        f"/api/transactions/{expense['id']}",
+        headers=h,
+        json={"note": "Repair, brakes"},
+    )
+    assert noted.status_code == 200, noted.text
+    assert Decimal(noted.json()["covered_amount"]) == Decimal("300.00")
+
+    widened = client.patch(
+        f"/api/transactions/{expense['id']}",
+        headers=h,
+        json={"amount": "900.00"},
+    )
+    assert widened.status_code == 200, widened.text
+    assert Decimal(widened.json()["amount"]) == Decimal("900.00")
+    assert Decimal(widened.json()["covered_amount"]) == Decimal("300.00")
+
+    raised = client.patch(
+        f"/api/transactions/{expense['id']}",
+        headers=h,
+        json={"withdraw_amount": "450.00"},
+    )
+    assert raised.status_code == 200, raised.text
+    assert Decimal(raised.json()["covered_amount"]) == Decimal("450.00")
+
+    cleared = client.patch(
+        f"/api/transactions/{expense['id']}",
+        headers=h,
+        json={"withdraw_from_category_id": None},
+    )
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["covered_amount"] is None
+    assert cleared.json()["pair_id"] is None
+    listing = client.get("/api/transactions", headers=h).json()
+    assert listing["total"] == 1
+
+
+def test_full_cover_follows_an_edited_expense_amount() -> None:
+    h = _auth()
+    c = _cats(h)
+    expense = _tx(
+        h,
+        category_id=c["car"]["id"],
+        amount="500.00",
+        date="2026-09-12",
+        withdraw_from_category_id=c["fund"]["id"],
+    )
+    updated = client.patch(
+        f"/api/transactions/{expense['id']}",
+        headers=h,
+        json={"amount": "520.00"},
+    )
+    assert updated.status_code == 200, updated.text
+    assert Decimal(updated.json()["covered_amount"]) == Decimal("520.00")

@@ -280,8 +280,12 @@ class TransactionCreate(BaseModel):
     amount: Decimal = Field(..., max_digits=14, decimal_places=2)
     date: date
     note: Optional[str] = Field(default=None, max_length=2000)
-    # When set on an expense, also log a matching savings withdrawal.
+    # When set on an expense, also log a savings withdrawal for this charge.
     withdraw_from_category_id: Optional[UUID] = None
+    # Dollars to withdraw. Omit to cover the full expense (existing behavior).
+    withdraw_amount: Optional[Decimal] = Field(
+        default=None, max_digits=14, decimal_places=2
+    )
 
     @field_validator("amount")
     @classmethod
@@ -291,6 +295,16 @@ class TransactionCreate(BaseModel):
             raise ValueError("amount must not be zero")
         return q
 
+    @field_validator("withdraw_amount")
+    @classmethod
+    def quantize_withdraw(cls, v: Optional[Decimal]) -> Optional[Decimal]:
+        if v is None:
+            return v
+        q = v.quantize(Decimal("0.01"))
+        if q <= 0:
+            raise ValueError("withdraw_amount must be greater than zero")
+        return q
+
 
 class TransactionUpdate(BaseModel):
     category_id: Optional[UUID] = None
@@ -298,6 +312,12 @@ class TransactionUpdate(BaseModel):
     # Use Date alias: `date: Optional[date] = None` shadows the type under PEP563.
     date: Optional[Date] = None
     note: Optional[str] = Field(default=None, max_length=2000)
+    # Set on an expense to add, change, or clear a bucket cover.
+    # null withdraw_from_category_id removes the paired withdrawal.
+    withdraw_from_category_id: Optional[UUID] = None
+    withdraw_amount: Optional[Decimal] = Field(
+        default=None, max_digits=14, decimal_places=2
+    )
 
     @field_validator("amount")
     @classmethod
@@ -309,6 +329,16 @@ class TransactionUpdate(BaseModel):
             raise ValueError("amount must not be zero")
         return q
 
+    @field_validator("withdraw_amount")
+    @classmethod
+    def quantize_withdraw(cls, v: Optional[Decimal]) -> Optional[Decimal]:
+        if v is None:
+            return v
+        q = v.quantize(Decimal("0.01"))
+        if q <= 0:
+            raise ValueError("withdraw_amount must be greater than zero")
+        return q
+
 
 class TransactionOut(ORMModel):
     id: UUID
@@ -317,6 +347,10 @@ class TransactionOut(ORMModel):
     date: date
     note: Optional[str]
     pair_id: Optional[UUID] = None
+    # Set on the expense side of a pair: how much of this charge came from a bucket.
+    covered_amount: Optional[Decimal] = None
+    covered_by_category_id: Optional[UUID] = None
+    covered_by_category_name: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     category: Optional[CategoryOut] = None

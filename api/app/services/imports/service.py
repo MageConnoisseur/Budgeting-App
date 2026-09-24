@@ -671,7 +671,9 @@ def merge_candidate(
             status_code=400,
             detail="Can only merge card charges into an expense tracker entry",
         )
-    # Keep category, note, paid-from pair; replace rounded amount with posted.
+    # Keep category, note, and paid-from pair; replace rounded amount with posted.
+    # A full-bucket cover follows the posted amount. A partial cover stays put.
+    previous_amount = tx.amount
     tx.amount = cand.amount
     if not (tx.note or "").strip():
         tx.note = cand.description[:2000]
@@ -681,7 +683,7 @@ def merge_candidate(
             detail="That tracker entry is already linked to a different imported row",
         )
     tx.import_fingerprint = cand.fingerprint
-    sync_pair_from(db, user, tx)
+    sync_pair_from(db, user, tx, previous_amount=previous_amount)
     cand.status = ImportCandidateStatus.merged.value
     cand.matched_transaction_id = tx.id
     cand.accepted_transaction_id = tx.id

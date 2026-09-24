@@ -55,7 +55,8 @@ the provider from **Account** so budget data stays on one user id.
 - **Income / expense** transaction amounts must be **> 0**
 - **Savings** amounts may be **positive** (contribution in) or **negative** (withdrawal out)
 - An expense budget line may be **paid from** a savings bucket (`funded_by_category_id`); planned contributions stay **≥ 0**
-- Paycheck leftover is **income − expenses paid from income − savings contributions** (funded expenses are visible but excluded)
+- Logging an expense may withdraw from a bucket (`withdraw_from_category_id` withdraws the whole entry; optional `withdraw_amount` if a caller needs less). The tracker **Pay from** control uses the whole entry. Split a bill by logging two expenses.
+- Paycheck leftover is **income − expenses paid from income − savings contributions**. Planned leftover excludes a whole paid-from category. Actual leftover excludes only the dollars withdrawn for an expense
 - Planned budget amounts are always **≥ 0**
 - Going over budget is **allowed**; dashboard sets `over_budget: true` as a soft warning only
 

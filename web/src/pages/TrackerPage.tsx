@@ -1,4 +1,4 @@
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as budgetsApi from '../api/budgets'
 import * as categoriesApi from '../api/categories'
 import { ApiError } from '../api/client'
@@ -52,11 +52,9 @@ export function TrackerPage() {
   const [recurringPrompt, setRecurringPrompt] =
     useState<RecurringPromptDraft | null>(null)
   const [schedulesKey, setSchedulesKey] = useState(0)
-  const [planFunding, setPlanFunding] = useState<{
-    id: string
-    name: string
-  } | null>(null)
-  const [withdrawFromBucket, setWithdrawFromBucket] = useState(true)
+  /** Savings category id, or empty when this expense is paid from income. */
+  const [payFromId, setPayFromId] = useState('')
+  const payFromTouchedRef = useRef(false)
 
   const filteredCats = useMemo(() => {
     const active = categories.filter((c) => c.kind === formKind && !c.archived)
@@ -69,6 +67,15 @@ export function TrackerPage() {
     }
     return active
   }, [categories, formKind, formCategory])
+
+  const savingsBuckets = useMemo(() => {
+    const active = categories.filter((c) => c.kind === 'savings' && !c.archived)
+    if (payFromId && !active.some((c) => c.id === payFromId)) {
+      const current = categories.find((c) => c.id === payFromId)
+      if (current) return [current, ...active]
+    }
+    return active
+  }, [categories, payFromId])
 
   const filterCats = useMemo(
     () =>
@@ -111,37 +118,25 @@ export function TrackerPage() {
   }, [load])
 
   useEffect(() => {
-    if (formKind !== 'expense' || !formCategory || !formDate) {
-      setPlanFunding(null)
+    if (formKind !== 'expense' || !formCategory || !formDate || editingId) {
       return
     }
     const match = /^(\d{4})-(\d{2})/.exec(formDate)
-    if (!match) {
-      setPlanFunding(null)
-      return
-    }
+    if (!match) return
     let cancelled = false
     void budgetsApi
       .getExpenseFunding(Number(match[1]), Number(match[2]), formCategory)
       .then((row) => {
-        if (cancelled) return
-        if (row.funded_by_category_id && row.funded_by_category_name) {
-          setPlanFunding({
-            id: row.funded_by_category_id,
-            name: row.funded_by_category_name,
-          })
-          setWithdrawFromBucket(true)
-        } else {
-          setPlanFunding(null)
-        }
+        if (cancelled || payFromTouchedRef.current) return
+        setPayFromId(row.funded_by_category_id ?? '')
       })
       .catch(() => {
-        if (!cancelled) setPlanFunding(null)
+        if (!cancelled && !payFromTouchedRef.current) setPayFromId('')
       })
     return () => {
       cancelled = true
     }
-  }, [formKind, formCategory, formDate])
+  }, [formKind, formCategory, formDate, editingId])
 
   useEffect(() => {
     if (filteredCats.length && !filteredCats.some((c) => c.id === formCategory)) {
@@ -169,6 +164,8 @@ export function TrackerPage() {
     setFormDate(todayISO())
     const expenseCats = categories.filter((c) => c.kind === 'expense' && !c.archived)
     setFormCategory(expenseCats[0]?.id ?? '')
+    payFromTouchedRef.current = false
+    setPayFromId('')
   }
 
   function startEdit(tx: Transaction) {
@@ -181,6 +178,10 @@ export function TrackerPage() {
     setFormNote(tx.note ?? '')
     setNoteHint(null)
     setError(null)
+    payFromTouchedRef.current = true
+    setPayFromId(
+      txKind === 'expense' && tx.covered_by_category_id ? tx.covered_by_category_id : '',
+    )
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
@@ -208,17 +209,22 @@ export function TrackerPage() {
     setError(null)
     try {
       const creating = !editingId
-      const payload = {
+      const payload: {
+        category_id: string
+        amount: string
+        date: string
+        note: string | null
+        withdraw_from_category_id?: string | null
+      } = {
         category_id: formCategory,
         amount: toMoneyString(formAmount),
         date: formDate,
         note: formNote.trim() || null,
-        ...(creating &&
-        withdrawFromBucket &&
-        planFunding &&
-        formKind === 'expense'
-          ? { withdraw_from_category_id: planFunding.id }
-          : {}),
+      }
+      if (formKind === 'expense' && payFromId) {
+        payload.withdraw_from_category_id = payFromId
+      } else if (formKind === 'expense' && editingId) {
+        payload.withdraw_from_category_id = null
       }
       const promptKind = formKind
       const promptCat = categories.find((c) => c.id === formCategory)
@@ -309,7 +315,10 @@ export function TrackerPage() {
             Category
             <select
               value={formCategory}
-              onChange={(e) => setFormCategory(e.target.value)}
+              onChange={(e) => {
+                payFromTouchedRef.current = false
+                setFormCategory(e.target.value)
+              }}
               required
             >
               {filteredCats.length === 0 ? (
@@ -345,6 +354,25 @@ export function TrackerPage() {
               required
             />
           </label>
+          {formKind === 'expense' && savingsBuckets.length > 0 && (
+            <label>
+              Pay from
+              <select
+                value={payFromId}
+                onChange={(e) => {
+                  payFromTouchedRef.current = true
+                  setPayFromId(e.target.value)
+                }}
+              >
+                <option value="">This month’s income</option>
+                {savingsBuckets.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <label className="grow note-field">
             Note
             <NoteAutocomplete
@@ -392,17 +420,6 @@ export function TrackerPage() {
               </>
             )}
           </p>
-        )}
-        {formKind === 'expense' && planFunding && !editingId && (
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={withdrawFromBucket}
-              onChange={(e) => setWithdrawFromBucket(e.target.checked)}
-            />
-            Also withdraw {formAmount || 'this amount'} from {planFunding.name}.
-            This month’s plan pays this bill from that bucket.
-          </label>
         )}
         {formKind === 'savings' && (
           <div id="savings-amount-hint">

@@ -21,6 +21,8 @@ from app.schemas import (
     TransactionUpdate,
 )
 from app.services.transactions import (
+    apply_expense_cover,
+    covers_for_expenses,
     create_transaction as create_ledger_transaction,
     delete_transaction_and_pair,
     list_transactions,
@@ -30,6 +32,24 @@ from app.services.transactions import (
 )
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
+
+
+def _outs(db: Session, user: User, txs: list[Transaction]) -> list[TransactionOut]:
+    covers = covers_for_expenses(db, user, txs)
+    outs: list[TransactionOut] = []
+    for tx in txs:
+        out = TransactionOut.model_validate(tx)
+        cover = covers.get(tx.id)
+        if cover is not None:
+            out = out.model_copy(
+                update={
+                    "covered_amount": cover.amount,
+                    "covered_by_category_id": cover.category_id,
+                    "covered_by_category_name": cover.category_name,
+                }
+            )
+        outs.append(out)
+    return outs
 
 
 def _validate_amount_for_kind(kind: str, amount) -> None:
@@ -68,7 +88,7 @@ def search_transactions(
         offset=offset,
     )
     return TransactionListOut(
-        items=[TransactionOut.model_validate(i) for i in items],
+        items=_outs(db, user, items),
         total=total,
         limit=limit,
         offset=offset,
@@ -120,7 +140,7 @@ def create_transaction(
     body: TransactionCreate,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> Transaction:
+) -> TransactionOut:
     cat = db.scalar(
         select(Category).where(Category.id == body.category_id, Category.user_id == user.id)
     )
@@ -130,7 +150,7 @@ def create_transaction(
         raise HTTPException(status_code=400, detail="Cannot log against an archived category")
     _validate_amount_for_kind(cat.kind, body.amount)
 
-    return create_ledger_transaction(
+    created = create_ledger_transaction(
         db,
         user,
         category=cat,
@@ -138,7 +158,9 @@ def create_transaction(
         date=body.date,
         note=body.note,
         withdraw_from_category_id=body.withdraw_from_category_id,
+        withdraw_amount=body.withdraw_amount,
     )
+    return _outs(db, user, [created])[0]
 
 
 @router.get("/{transaction_id}", response_model=TransactionOut)
@@ -146,7 +168,7 @@ def get_transaction(
     transaction_id: UUID,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> Transaction:
+) -> TransactionOut:
     tx = db.scalar(
         select(Transaction)
         .options(joinedload(Transaction.category))
@@ -154,7 +176,7 @@ def get_transaction(
     )
     if tx is None:
         raise HTTPException(status_code=404, detail="Transaction not found")
-    return tx
+    return _outs(db, user, [tx])[0]
 
 
 @router.patch("/{transaction_id}", response_model=TransactionOut)
@@ -163,7 +185,7 @@ def update_transaction(
     body: TransactionUpdate,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> Transaction:
+) -> TransactionOut:
     tx = db.scalar(
         select(Transaction).where(
             Transaction.id == transaction_id, Transaction.user_id == user.id
@@ -183,6 +205,7 @@ def update_transaction(
     amount = updates.get("amount", tx.amount)
     _validate_amount_for_kind(cat.kind, amount)
 
+    previous_amount = tx.amount
     original_category_id = tx.category_id
     tx.category_id = category_id
     tx.amount = amount
@@ -191,20 +214,30 @@ def update_transaction(
     if "note" in updates:
         tx.note = updates["note"]
     db.add(tx)
-    if "category_id" in updates and category_id != original_category_id:
+    cover_requested = "withdraw_from_category_id" in updates or "withdraw_amount" in updates
+    if cover_requested:
+        if cat.kind != CategoryKind.expense.value:
+            raise HTTPException(
+                status_code=400,
+                detail="Only expenses can be covered from a savings bucket",
+            )
+        apply_expense_cover(db, user, tx, updates)
+    elif "category_id" in updates and category_id != original_category_id:
         sibling = paired_sibling(db, user, tx)
         tx.pair_id = None
         if sibling is not None:
             sibling.pair_id = None
             db.add(sibling)
     else:
-        sync_pair_from(db, user, tx)
+        sync_pair_from(db, user, tx, previous_amount=previous_amount)
     db.commit()
-    return db.scalar(
+    loaded = db.scalar(
         select(Transaction)
         .options(joinedload(Transaction.category))
         .where(Transaction.id == tx.id)
     )
+    assert loaded is not None
+    return _outs(db, user, [loaded])[0]
 
 
 @router.delete("/{transaction_id}", response_model=MessageOut)

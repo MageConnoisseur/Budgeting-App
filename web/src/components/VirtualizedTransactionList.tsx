@@ -154,7 +154,12 @@ export function VirtualizedTransactionList({
                     </div>
                     <div role="cell">
                       {tx.category?.name ?? '—'}
-                      {tx.pair_id ? (
+                      {tx.category?.kind === 'expense' && tx.covered_by_category_name ? (
+                        <span className="muted compact">
+                          {' '}
+                          · from {tx.covered_by_category_name}
+                        </span>
+                      ) : tx.pair_id ? (
                         <span className="muted compact"> · from savings</span>
                       ) : null}
                     </div>
