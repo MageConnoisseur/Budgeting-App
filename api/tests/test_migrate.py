@@ -123,7 +123,7 @@ def test_full_known_chain_infers_latest_fingerprint() -> None:
                 "preferred_dashboard_view",
             },
             "oauth_accounts": {"provider"},
-            "categories": {"target_amount"},
+            "categories": {"target_amount", "is_bucket"},
             "recurring_schedules": {"next_occurrence"},
             "budget_lines": {"funded_by_category_id"},
             "recovery_tokens": {"token_hash"},

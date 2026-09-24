@@ -126,7 +126,8 @@ def _pick_savings_destination(
     open_targets = [
         b
         for b in buckets
-        if b.target_amount is not None
+        if b.is_bucket
+        and b.target_amount is not None
         and not b.target_reached
         and b.target_amount > (b.balance or ZERO)
     ]
@@ -144,7 +145,8 @@ def _pick_savings_destination(
             )
         )
         return open_targets[0]
-    return sorted(buckets, key=lambda b: b.category_name)[0]
+    pool = [b for b in buckets if b.is_bucket] or list(buckets)
+    return sorted(pool, key=lambda b: b.category_name)[0]
 
 
 def _current_savings_plan(
@@ -399,7 +401,7 @@ def _surplus_tip(
     current = _current_savings_plan(dest, lines, month=month)
     suggested = _money(current + extra)
     remaining = None
-    if dest.target_amount is not None and not dest.target_reached:
+    if dest.is_bucket and dest.target_amount is not None and not dest.target_reached:
         remaining = _money(dest.target_amount - dest.balance)
     if remaining is not None and remaining > ZERO:
         message = (
@@ -410,6 +412,15 @@ def _surplus_tip(
         )
         title = f"Put leftover toward {dest.category_name}"
         tip_kind: CoachTipKind = "fund_savings"
+    elif not dest.is_bucket:
+        message = (
+            f"{_usd(extra_total)} is still unassigned for {scope}.{year_note} "
+            f"Adding {_usd(extra)} to {dest.category_name} for {apply_when} "
+            f"(→ {_usd(suggested)}) counts toward savings without treating it "
+            "as a spendable pile."
+        )
+        title = f"Assign leftover to {dest.category_name}"
+        tip_kind = "allocate_surplus"
     else:
         message = (
             f"{_usd(extra_total)} is still unassigned for {scope}.{year_note} "

@@ -17,6 +17,7 @@ from app.services.funding import (
     MONTH_LOAD_OPTIONS,
     add_leftovers,
     funding_by_expense,
+    is_savings_bucket,
     paycheck_leftover,
     planned_use_by_bucket,
 )
@@ -466,6 +467,7 @@ def build_savings_bucket(
         planned_use_this_period=use,
         actual_use_this_period=_money(actual_use_this_period),
         use_over_balance=use > _money(balance) and use > ZERO,
+        is_bucket=is_savings_bucket(category),
     )
 
 
@@ -892,6 +894,7 @@ def _monthly_from_ledger(
                 over_budget=over_budget,
                 funded_by_category_id=fund.id if fund else None,
                 funded_by_category_name=fund.name if fund else None,
+                is_bucket=is_savings_bucket(cat) if cat.kind == CategoryKind.savings.value else None,
             )
         )
     progress = mark_committed(progress)
@@ -904,7 +907,7 @@ def _monthly_from_ledger(
 
     balances = ledger.savings_balances_as_of(end)
     savings_cats = [c for c in categories if c.kind == CategoryKind.savings.value]
-    buckets = [
+    all_savings = [
         build_savings_bucket(
             category=c,
             balance=balances.get(c.id, ZERO),
@@ -919,6 +922,7 @@ def _monthly_from_ledger(
         )
         for c in savings_cats
     ]
+    buckets = [b for b in all_savings if b.is_bucket]
 
     if include_pace:
         spending_pace = _assemble_spending_pace(
@@ -988,7 +992,7 @@ def _monthly_from_ledger(
             )
             for c in progress
         ],
-        buckets=buckets,
+        buckets=all_savings,
         pace_overspending=bool(spending_pace.has_data and spending_pace.overspending),
         income_due=income_short,
         today=as_of,
@@ -1072,7 +1076,9 @@ def build_mobile_glance(
         elif cat.kind == CategoryKind.savings.value:
             a = _money(deposits.get(cat.id, ZERO))
             over_budget = a > p and (p > ZERO or a > ZERO)
-            balance = _money(balances.get(cat.id, ZERO))
+            balance = (
+                _money(balances.get(cat.id, ZERO)) if is_savings_bucket(cat) else None
+            )
         else:
             a = _money(actuals.get(cat.id, ZERO))
             over_budget = a > p and (p > ZERO or a > ZERO)
@@ -1172,6 +1178,7 @@ def build_annual_dashboard(
                     "actual": ZERO,
                     "funded_planned": ZERO,
                     "samples": [],
+                    "is_bucket": row.is_bucket,
                 },
             )
             slot["planned"] += row.planned
@@ -1225,7 +1232,7 @@ def build_annual_dashboard(
     ]
     # Projection reference: today when browsing the current/future year, else Dec.
     as_of = min(clock, date(year, 12, 31))
-    buckets = []
+    all_savings = []
     for c in savings_cats:
         planned_year = ZERO
         actual_year = ZERO
@@ -1236,7 +1243,7 @@ def build_annual_dashboard(
         monthly_rate = ledger.latest_contribution(
             c.id, year=as_of.year, month=as_of.month
         )
-        buckets.append(
+        all_savings.append(
             build_savings_bucket(
                 category=c,
                 balance=balances.get(c.id, ZERO),
@@ -1249,6 +1256,7 @@ def build_annual_dashboard(
                 actual_use_this_period=actual_use_year.get(c.id, ZERO),
             )
         )
+    buckets = [b for b in all_savings if b.is_bucket]
 
     spending_pace = _assemble_spending_pace(
         as_of=as_of,
@@ -1315,7 +1323,7 @@ def build_annual_dashboard(
         expense=expense_for_coach,
         savings=savings_for_coach,
         lines=coach_lines,
-        buckets=buckets,
+        buckets=all_savings,
         pace_overspending=bool(spending_pace.has_data and spending_pace.overspending),
         plan_suggestions=plan_suggestions,
         under_planned_ids=under_planned_ids,
@@ -1353,6 +1361,7 @@ def build_annual_dashboard(
                         actual=t.total_actual,
                         remaining=t.total_planned - t.total_actual,
                         over_budget=t.months_over_budget > 0,
+                        is_bucket=category_accum.get(t.category_id, {}).get("is_bucket"),
                     )
                     for t in trends
                 ]
@@ -1374,6 +1383,7 @@ def build_annual_dashboard(
                             / Decimal(plan_month_count)
                         ),
                         over_budget=t.months_over_budget > 0,
+                        is_bucket=category_accum.get(t.category_id, {}).get("is_bucket"),
                     )
                     for t in trends
                 ]

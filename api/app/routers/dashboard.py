@@ -53,10 +53,11 @@ def savings_balances(
 ) -> list[SavingsBucketOut]:
     """Current savings bucket balances (derived from the transaction ledger)."""
     from datetime import date
+    from decimal import Decimal
 
     from app.enums import CategoryKind
     from app.models import Category
-    from decimal import Decimal
+    from app.services.funding import is_savings_bucket
 
     balances = dashboard_service.savings_balances(db, user.id)
     cats = db.scalars(
@@ -81,6 +82,7 @@ def savings_balances(
             from_month=today.month,
         )
         for c in cats
+        if is_savings_bucket(c)
     ]
 
 

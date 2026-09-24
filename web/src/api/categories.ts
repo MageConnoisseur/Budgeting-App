@@ -17,6 +17,7 @@ export function createCategory(body: {
   name: string
   sort_order?: number
   target_amount?: string | null
+  is_bucket?: boolean
 }) {
   return apiFetch<Category>('/categories', {
     method: 'POST',
@@ -31,6 +32,7 @@ export function updateCategory(
     archived?: boolean
     sort_order?: number
     target_amount?: string | null
+    is_bucket?: boolean
   },
 ) {
   return apiFetch<Category>(`/categories/${id}`, {
