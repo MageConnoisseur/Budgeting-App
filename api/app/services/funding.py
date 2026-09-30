@@ -17,11 +17,11 @@ from decimal import Decimal, ROUND_HALF_UP
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session, joinedload
 
 from app.enums import CategoryKind
-from app.models import BudgetLine, BudgetMonth, Category, Transaction, User
+from app.models import BudgetLine, BudgetMonth, BudgetTemplateLine, Category, Transaction, User
 from app.schemas import PaycheckLeftoverOut
 
 ZERO = Decimal("0.00")
@@ -67,6 +67,29 @@ def add_leftovers(a: PaycheckLeftoverOut, b: PaycheckLeftoverOut) -> PaycheckLef
     )
 
 
+def is_savings_bucket(category: Category | None) -> bool:
+    """True when this category is a spendable savings pile (not a mix-only line)."""
+    if category is None:
+        return False
+    if category.kind != CategoryKind.savings.value:
+        return False
+    return bool(category.is_bucket)
+
+
+def clear_paid_from_links(db: Session, savings_category_id: UUID) -> None:
+    """Drop expense 'paid from' links when a savings line is no longer a bucket."""
+    db.execute(
+        update(BudgetLine)
+        .where(BudgetLine.funded_by_category_id == savings_category_id)
+        .values(funded_by_category_id=None)
+    )
+    db.execute(
+        update(BudgetTemplateLine)
+        .where(BudgetTemplateLine.funded_by_category_id == savings_category_id)
+        .values(funded_by_category_id=None)
+    )
+
+
 def resolve_funded_by(
     db: Session,
     user: User,
@@ -90,7 +113,7 @@ def resolve_funded_by(
     )
     if fund is None:
         raise HTTPException(status_code=404, detail="Savings bucket not found")
-    if fund.kind != CategoryKind.savings.value:
+    if not is_savings_bucket(fund):
         raise HTTPException(
             status_code=400,
             detail="Expenses can only be paid from a savings bucket",
@@ -110,7 +133,7 @@ def funding_by_expense(budget_month: BudgetMonth | None) -> dict[UUID, Category]
         fund = line.funded_by_category
         if cat is None or cat.kind != CategoryKind.expense.value:
             continue
-        if fund is None:
+        if fund is None or not is_savings_bucket(fund):
             continue
         out[line.category_id] = fund
     return out
@@ -126,6 +149,8 @@ def planned_use_by_bucket(budget_month: BudgetMonth | None) -> dict[UUID, Decima
             continue
         cat = line.category
         if cat is None or cat.kind != CategoryKind.expense.value:
+            continue
+        if not is_savings_bucket(line.funded_by_category):
             continue
         totals[line.funded_by_category_id] = _money(
             totals.get(line.funded_by_category_id, ZERO) + line.planned_amount
@@ -148,7 +173,7 @@ def get_expense_funding(
             BudgetLine.category_id == category_id,
         )
     )
-    if line is None or line.funded_by_category is None:
+    if line is None or not is_savings_bucket(line.funded_by_category):
         return None, None
     fund = line.funded_by_category
     return fund.id, fund.name

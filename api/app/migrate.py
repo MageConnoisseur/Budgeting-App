@@ -63,6 +63,7 @@ SCHEMA_FINGERPRINTS: tuple[tuple[str, str, str], ...] = (
     ("e5f6a7b8c9d0", "recovery_tokens", "token_hash"),
     ("f6a7b8c9d0e1", "import_candidates", "fingerprint"),
     ("b8c9d0e1f2a3", "merchant_rules", "merchant_key"),
+    ("c0d1e2f3a4b5", "categories", "is_bucket"),
 )
 
 

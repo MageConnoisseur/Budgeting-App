@@ -14,6 +14,7 @@ from sqlalchemy.types import String
 
 from app.enums import CategoryKind
 from app.models import Category, Transaction, User
+from app.services.funding import is_savings_bucket
 
 SORTABLE = {
     "date": Transaction.date,
@@ -258,10 +259,10 @@ def _savings_bucket(db: Session, user: User, category_id: UUID) -> Category:
     )
     if bucket is None:
         raise HTTPException(status_code=404, detail="Savings bucket not found")
-    if bucket.kind != CategoryKind.savings.value:
+    if not is_savings_bucket(bucket):
         raise HTTPException(
             status_code=400,
-            detail="withdraw_from_category_id must be a savings category",
+            detail="Expenses can only be paid from a savings bucket",
         )
     if bucket.archived:
         raise HTTPException(

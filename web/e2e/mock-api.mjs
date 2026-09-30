@@ -9,7 +9,7 @@ import { randomUUID } from 'node:crypto'
 const PORT = Number(process.env.E2E_API_PORT || 8000)
 
 /** @typedef {{ id: string, username: string, email: string, password: string, preferred_budget_view: string, preferred_dashboard_view: string, created_at: string }} User */
-/** @typedef {{ id: string, userId: string, kind: string, name: string, archived: boolean, sort_order: number, target_amount: string | null, created_at: string, updated_at: string }} Category */
+/** @typedef {{ id: string, userId: string, kind: string, name: string, archived: boolean, sort_order: number, target_amount: string | null, is_bucket: boolean, created_at: string, updated_at: string }} Category */
 /** @typedef {{ id: string, category_id: string, planned_amount: string, funded_by_category_id: string | null }} Line */
 /** @typedef {{ id: string, year: number, month: number, lines: Line[], created_at: string, updated_at: string }} Month */
 /** @typedef {{ id: string, userId: string, category_id: string, amount: string, date: string, note: string | null, created_at: string, pair_id: string | null }} Tx */
@@ -72,14 +72,27 @@ function publicUser(user) {
   }
 }
 
+function paidToward(userId, categoryId) {
+  let sum = 0
+  for (const t of transactions.values()) {
+    if (t.userId === userId && t.category_id === categoryId) {
+      sum += Number(t.amount)
+    }
+  }
+  return money(sum)
+}
+
 function publicCategory(c) {
+  const isBucket = c.kind === 'savings' ? c.is_bucket !== false : true
   return {
     id: c.id,
     kind: c.kind,
     name: c.name,
     archived: c.archived,
     sort_order: c.sort_order,
-    target_amount: c.target_amount,
+    target_amount: isBucket ? c.target_amount : null,
+    is_bucket: isBucket,
+    paid_toward: c.kind === 'savings' ? paidToward(c.userId, c.id) : null,
     created_at: c.created_at,
     updated_at: c.updated_at,
   }
@@ -209,6 +222,7 @@ function dashboardFor(user, year, month) {
       actual,
       remaining: money(Number(planned) - Number(actual)),
       over_budget: Number(actual) > Number(planned),
+      is_bucket: c.kind === 'savings' ? c.is_bucket !== false : null,
     }
   })
 
@@ -237,6 +251,26 @@ function dashboardFor(user, year, month) {
     leftover: money(Number(income.actual) - Number(expense.actual) - Number(savings.actual)),
   }
 
+  const savingsBuckets = cats
+    .filter((c) => c.kind === 'savings' && c.is_bucket !== false)
+    .map((c) => ({
+      category_id: c.id,
+      category_name: c.name,
+      balance: paidToward(user.id, c.id),
+      planned_this_period: money(plannedByCat.get(c.id) || 0),
+      actual_this_period: money(actualByCat.get(c.id) || 0),
+      over_budget: false,
+      target_amount: c.target_amount,
+      target_reached: false,
+      projected_hit_year: null,
+      projected_hit_month: null,
+      monthly_contribution: money(plannedByCat.get(c.id) || 0),
+      planned_use_this_period: '0.00',
+      actual_use_this_period: '0.00',
+      use_over_balance: false,
+      is_bucket: true,
+    }))
+
   return {
     year,
     month,
@@ -246,7 +280,7 @@ function dashboardFor(user, year, month) {
     leftover_planned: leftover,
     leftover_actual: leftoverActual,
     categories: categoriesOut,
-    savings_buckets: [],
+    savings_buckets: savingsBuckets,
     spending_pace: emptyPace(),
     coach: emptyCoach(year, month),
     top_transactions: txs.slice(0, 8).map((t) => {
@@ -305,6 +339,7 @@ function defaultLayout(viewMode) {
     { id: 'spending-runway', type: 'spending_runway', title: 'Month runway', config: {} },
     { id: 'largest-movers', type: 'largest_movers', title: 'Largest movers', config: {} },
     { id: 'recurring-due', type: 'recurring_due', title: 'Recurring vs remaining', config: {} },
+    { id: 'savings-buckets', type: 'savings_buckets', title: 'Savings buckets', config: {} },
   ]
   const thisMonth = [
     'allocation-snapshot',
@@ -342,7 +377,7 @@ function defaultLayout(viewMode) {
     {
       id: 'setaside-savings',
       name: 'Savings',
-      widgets: themeWidgets(monthlyCatalog, ['true-leftover', 'budget-coach', 'savings-progress']),
+      widgets: themeWidgets(monthlyCatalog, ['savings-buckets', 'true-leftover', 'budget-coach', 'savings-progress']),
     },
   ]
   return {
@@ -477,11 +512,34 @@ async function handle(req, res) {
       archived: false,
       sort_order: Number(body.sort_order || 0),
       target_amount: body.target_amount ?? null,
+      is_bucket: body.kind === 'savings' ? body.is_bucket !== false : true,
       created_at: nowIso(),
       updated_at: nowIso(),
     }
     categories.set(row.id, row)
     json(res, 201, publicCategory(row))
+    return
+  }
+
+  const categoryMatch = /^\/api\/categories\/([^/]+)$/.exec(path)
+  if (categoryMatch && method === 'PATCH') {
+    const row = categories.get(categoryMatch[1])
+    if (!row || row.userId !== user.id) {
+      json(res, 404, { detail: 'Category not found' })
+      return
+    }
+    const body = await readBody(req)
+    if (body.name != null) row.name = String(body.name).trim()
+    if (body.archived != null) row.archived = Boolean(body.archived)
+    if (body.is_bucket != null && row.kind === 'savings') {
+      row.is_bucket = Boolean(body.is_bucket)
+      if (!row.is_bucket) row.target_amount = null
+    }
+    if ('target_amount' in body) {
+      row.target_amount = row.is_bucket === false ? null : body.target_amount
+    }
+    row.updated_at = nowIso()
+    json(res, 200, publicCategory(row))
     return
   }
 
@@ -677,7 +735,7 @@ async function handle(req, res) {
       savings: monthly.savings,
       leftover_planned: emptyLeftover(),
       leftover_actual: emptyLeftover(),
-      savings_buckets: [],
+      savings_buckets: monthly.savings_buckets,
       spending_pace: emptyPace(),
       coach: emptyCoach(year, 1),
       top_transactions: monthly.top_transactions || [],

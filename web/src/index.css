@@ -708,7 +708,8 @@ a.btn {
   gap: 0.4rem;
 }
 
-.inline-edit input {
+.inline-edit input,
+.inline-edit select {
   min-width: 8rem;
   flex: 1;
 }

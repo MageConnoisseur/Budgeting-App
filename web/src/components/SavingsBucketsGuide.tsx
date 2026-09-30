@@ -40,9 +40,11 @@ export function SavingsBucketsGuide({
       <div className="savings-guide-body">
         {(variant === 'full' || variant === 'budget') && (
           <p>
-            Savings categories are <strong>named buckets</strong> (Emergency,
-            Vacation, Car fund) with a running balance — not regular expense
-            lines.
+            Savings categories are usually <strong>named buckets</strong>{' '}
+            (Emergency, Vacation, Car fund) with a running balance. A savings
+            line can also be marked <strong>not a bucket</strong> on Categories
+            — it still counts in leftover and the savings mix, without a
+            spendable pile (extra loan payments).
           </p>
         )}
 

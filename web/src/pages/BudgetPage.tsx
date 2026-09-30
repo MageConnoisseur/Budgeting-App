@@ -20,6 +20,7 @@ import { SavingsBucketsGuide } from '../components/SavingsBucketsGuide'
 import { ViewModeToggle } from '../components/ViewModeToggle'
 import { useAuth } from '../context/AuthContext'
 import { indexYearActuals, parseDraftAmount } from '../lib/budgetFill'
+import { isSavingsBucket } from '../lib/savings'
 import {
   MONTH_SHORT,
   currentYearMonth,
@@ -249,6 +250,11 @@ export function BudgetPage() {
     for (const c of categories) map[c.kind].push(c)
     return map
   }, [categories])
+
+  const bucketSavings = useMemo(
+    () => grouped.savings.filter(isSavingsBucket),
+    [grouped.savings],
+  )
 
   const plannedUseByBucket = useMemo(() => {
     const map: Record<string, number> = {}
@@ -591,7 +597,7 @@ export function BudgetPage() {
                           placeholder="0.00"
                           aria-label={`${c.name} planned amount`}
                         />
-                        {kind === 'expense' && grouped.savings.length > 0 && (
+                        {kind === 'expense' && bucketSavings.length > 0 && (
                           <select
                             className="pay-from"
                             aria-label={`Pay ${c.name} from`}
@@ -604,7 +610,7 @@ export function BudgetPage() {
                             }
                           >
                             <option value="">This month’s income</option>
-                            {grouped.savings.map((s) => (
+                            {bucketSavings.map((s) => (
                               <option key={s.id} value={s.id}>
                                 {s.name}
                               </option>
@@ -613,9 +619,11 @@ export function BudgetPage() {
                         )}
                         {kind === 'savings' && (
                           <span className="budget-line-note muted compact">
-                            {plannedUseByBucket[c.id]
-                              ? `This month’s expenses plan to use ${formatUsd(plannedUseByBucket[c.id])} from this bucket.`
-                              : 'Contribution this month'}
+                            {!isSavingsBucket(c)
+                              ? 'Counts as savings — not a spendable bucket'
+                              : plannedUseByBucket[c.id]
+                                ? `This month’s expenses plan to use ${formatUsd(plannedUseByBucket[c.id])} from this bucket.`
+                                : 'Contribution this month'}
                           </span>
                         )}
                       </div>
@@ -831,7 +839,7 @@ export function BudgetPage() {
                                 aria-label={`${c.name} ${MONTH_SHORT[m - 1]}`}
                               />
                               {c.kind === 'expense' &&
-                                grouped.savings.length > 0 && (
+                                bucketSavings.length > 0 && (
                                   <select
                                     className="cell-fund"
                                     value={
@@ -848,7 +856,7 @@ export function BudgetPage() {
                                     aria-label={`Pay ${c.name} ${MONTH_SHORT[m - 1]} from`}
                                     title={
                                       annualFunding[annualCellKey(c.id, m)]
-                                        ? grouped.savings.find(
+                                        ? bucketSavings.find(
                                             (s) =>
                                               s.id ===
                                               annualFunding[
@@ -859,7 +867,7 @@ export function BudgetPage() {
                                     }
                                   >
                                     <option value="">Income</option>
-                                    {grouped.savings.map((s) => (
+                                    {bucketSavings.map((s) => (
                                       <option key={s.id} value={s.id}>
                                         {s.name}
                                       </option>

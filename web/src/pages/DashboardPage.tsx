@@ -1091,6 +1091,12 @@ export function DashboardPage() {
                                   paid from {c.funded_by_category_name}
                                 </span>
                               ) : null}
+                              {c.kind === 'savings' && c.is_bucket === false ? (
+                                <span className="muted compact">
+                                  {' '}
+                                  not a bucket
+                                </span>
+                              ) : null}
                               <KindBadge kind={c.kind} />
                               {over && (
                                 <SoftWarning
