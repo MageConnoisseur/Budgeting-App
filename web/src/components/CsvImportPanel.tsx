@@ -11,6 +11,16 @@ function suggestionHint(row: ImportCandidate, selectedId: string) {
   return 'From last time'
 }
 
+function duplicateLabel(level: ImportCandidate['match_confidence']) {
+  if (level === 'high') return 'Very likely'
+  if (level === 'medium') return 'Likely'
+  return 'Possible'
+}
+
+function exactRowKey(row: { trans_date: string; amount: string; description: string }) {
+  return `${row.trans_date}|${row.amount}|${row.description}`
+}
+
 function inRange(iso: string, from: string, to: string) {
   if (from && iso < from) return false
   if (to && iso > to) return false
@@ -88,8 +98,16 @@ export function CsvImportPanel({
 
   const rangedCount = useMemo(() => {
     if (!preview) return 0
-    return preview.rows.filter((r) => inRange(r.trans_date, dateFrom, dateTo))
-      .length
+    const seen = new Set<string>()
+    let count = 0
+    for (const row of preview.rows) {
+      if (!inRange(row.trans_date, dateFrom, dateTo)) continue
+      const key = exactRowKey(row)
+      if (seen.has(key)) continue
+      seen.add(key)
+      count += 1
+    }
+    return count
   }, [preview, dateFrom, dateTo])
 
   async function onPickFile(next: File | null) {
@@ -126,7 +144,10 @@ export function CsvImportPanel({
         bits.push(`${batch.skipped_payment_count} card payment(s) skipped`)
       }
       if (batch.skipped_duplicate_count) {
-        bits.push(`${batch.skipped_duplicate_count} already imported`)
+        const n = batch.skipped_duplicate_count
+        bits.push(
+          `${n} exact duplicate${n === 1 ? '' : 's'} skipped`,
+        )
       }
       if (batch.skipped_out_of_range_count) {
         bits.push(`${batch.skipped_out_of_range_count} outside the date range`)
@@ -209,11 +230,14 @@ export function CsvImportPanel({
       <h3 className="section-title">Import statement</h3>
       <p className="muted">
         Upload a Discover CSV, pick the transaction dates to bring in, then
-        review each charge. Repeat merchants start in the category you used last
-        time. New payees can pick up that category from similar Discover labels
-        (Supermarkets → Groceries, Fuel → Gas) — change it if this one is
-        different. Card payments are skipped (those are transfers). Nothing hits
-        the tracker until you accept or merge it.
+        review each charge. An identical line (same date, amount, and
+        description) is skipped. A charge that only resembles something you
+        already logged stays in the inbox with a likelihood score, so you can
+        merge it or keep both. Repeat merchants start in the category you used
+        last time. New payees can pick up that category from similar Discover
+        labels (Supermarkets → Groceries, Fuel → Gas) — change it if this one
+        is different. Card payments are skipped (those are transfers). Nothing
+        hits the tracker until you accept or merge it.
       </p>
 
       <div className="inline-form wrap">
@@ -296,7 +320,7 @@ export function CsvImportPanel({
                 <th>Description</th>
                 <th className="num">Amount</th>
                 <th>Category</th>
-                <th>Match</th>
+                <th>Likelihood</th>
                 <th className="actions">Actions</th>
               </tr>
             </thead>
@@ -356,9 +380,36 @@ export function CsvImportPanel({
                     <td className="import-match">
                       {match ? (
                         <div className="import-clip">
-                          <span className="import-dup-label">
-                            Possible duplicate
-                          </span>
+                          <div
+                            className="import-dup-meter"
+                            role="meter"
+                            aria-valuemin={0}
+                            aria-valuemax={100}
+                            aria-valuenow={row.match_score ?? 0}
+                            aria-label={`${duplicateLabel(row.match_confidence)} duplicate. ${row.match_reason ?? ''}`}
+                          >
+                            <span className="import-dup-track" aria-hidden="true">
+                              <span
+                                className={`import-dup-fill ${row.match_confidence ?? 'low'}`}
+                                style={{ width: `${row.match_score ?? 0}%` }}
+                              />
+                            </span>
+                            <span
+                              className={`import-dup-label ${row.match_confidence ?? 'low'}`}
+                            >
+                              {duplicateLabel(row.match_confidence)}
+                            </span>
+                            {row.match_score != null && (
+                              <span className="muted import-dup-score">
+                                {row.match_score}
+                              </span>
+                            )}
+                          </div>
+                          {row.match_reason && (
+                            <span className="muted import-dup-reason">
+                              {row.match_reason}
+                            </span>
+                          )}
                           <span
                             className="muted import-dup-detail"
                             title={[

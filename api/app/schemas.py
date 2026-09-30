@@ -802,6 +802,10 @@ class ImportCandidateOut(ORMModel):
     issuer_category: Optional[str] = None
     status: ImportCandidateStatus
     match_kind: ImportMatchKind
+    # high | medium | low when this row resembles a tracker entry. Score is 0–100.
+    match_confidence: Optional[str] = None
+    match_score: Optional[int] = None
+    match_reason: Optional[str] = None
     category_id: Optional[UUID] = None
     category_source: Optional[str] = None
     matched_transaction_id: Optional[UUID] = None

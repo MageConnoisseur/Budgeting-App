@@ -60,6 +60,38 @@ def merchant_tokens(key: str) -> set[str]:
     return {p for p in parts if len(p) >= 3}
 
 
+def take_unique_fingerprints(
+    fingerprints: list[str], known: set[str] | None = None
+) -> tuple[list[int], int]:
+    """Indexes to keep, and how many exact repeats were dropped.
+
+    A repeat is the same fingerprint already on the ledger or earlier in this
+    file. Discover activity exports sometimes list two identical charges
+    (same date, amount, and description). Those share one fingerprint, and
+    inserting both violates the unique key and aborts the import.
+    """
+    seen = set(known or ())
+    keep: list[int] = []
+    skipped = 0
+    for index, fingerprint in enumerate(fingerprints):
+        if fingerprint in seen:
+            skipped += 1
+            continue
+        seen.add(fingerprint)
+        keep.append(index)
+    return keep, skipped
+
+
+def identical_rows_warning(extra: int) -> str | None:
+    if extra <= 0:
+        return None
+    noun = "charge" if extra == 1 else "charges"
+    return (
+        f"{extra} identical {noun} will be skipped "
+        "(same date, amount, and description)."
+    )
+
+
 def merchant_keys_related(left: str, right: str) -> bool:
     """True when two payee keys are the same chain.
 

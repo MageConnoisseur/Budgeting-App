@@ -22,6 +22,7 @@ from app.schemas import (
     ImportPreviewRowOut,
 )
 from app.services.imports import service as imports
+from app.services.imports.matching import rate_duplicate
 
 router = APIRouter(prefix="/imports", tags=["imports"])
 
@@ -39,7 +40,23 @@ def _matched_out(tx: Transaction | None) -> ImportMatchedTransactionOut | None:
     )
 
 
+def _duplicate_scale(row) -> tuple[str | None, int | None, str | None]:
+    match = row.matched_transaction
+    if match is None or str(row.match_kind) == "none":
+        return None, None, None
+    rated = rate_duplicate(
+        trans_date=row.trans_date,
+        amount=row.amount,
+        description=row.description,
+        tx_date=match.date,
+        tx_amount=match.amount,
+        tx_note=match.note,
+    )
+    return rated.level, rated.score, rated.reason
+
+
 def _candidate_out(row) -> ImportCandidateOut:
+    confidence, score, reason = _duplicate_scale(row)
     return ImportCandidateOut(
         id=row.id,
         batch_id=row.batch_id,
@@ -53,6 +70,9 @@ def _candidate_out(row) -> ImportCandidateOut:
         issuer_category=row.issuer_category,
         status=row.status,
         match_kind=row.match_kind,
+        match_confidence=confidence,
+        match_score=score,
+        match_reason=reason,
         category_id=row.category_id,
         category_source=getattr(row, "category_source", None),
         matched_transaction_id=row.matched_transaction_id,

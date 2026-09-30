@@ -13,8 +13,12 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.enums import CategoryKind, ImportCandidateStatus, ImportMatchKind
 from app.models import Category, ImportBatch, ImportCandidate, MerchantRule, Transaction, User
-from app.services.imports.fingerprints import merchant_key as fingerprint_merchant_key
-from app.services.imports.fingerprints import merchant_keys_related
+from app.services.imports.fingerprints import (
+    identical_rows_warning,
+    merchant_key as fingerprint_merchant_key,
+    merchant_keys_related,
+    take_unique_fingerprints,
+)
 from app.services.imports.matching import (
     TIGHT_DATE_WINDOW_DAYS,
     LedgerRow,
@@ -337,6 +341,13 @@ def parse_csv_text(text: str, filename: str) -> ParseResult:
 def preview_from_parse(parsed: ParseResult) -> dict:
     importable = parsed.importable
     dates = [row.trans_date for row in importable]
+    warnings = list(parsed.warnings)
+    _kept, identical_extra = take_unique_fingerprints(
+        [row.fingerprint for row in importable]
+    )
+    identical_warning = identical_rows_warning(identical_extra)
+    if identical_warning:
+        warnings.append(identical_warning)
     return {
         "source": parsed.source,
         "date_min": min(dates) if dates else None,
@@ -345,7 +356,7 @@ def preview_from_parse(parsed: ParseResult) -> dict:
         "importable_count": len(importable),
         "payment_count": len(parsed.payments),
         "credit_count": sum(1 for row in importable if row.amount < 0),
-        "warnings": list(parsed.warnings),
+        "warnings": warnings,
         "rows": [
             {
                 "trans_date": row.trans_date,
@@ -444,8 +455,13 @@ def commit_import(
         else:
             out_of_range += 1
 
-    new_rows = [row for row in in_range if row.fingerprint not in known]
-    duplicate_count = len(in_range) - len(new_rows)
+    # Exact repeats (already imported, or a second identical line in this file)
+    # are ignored. Two copies of the same date/amount/description share a
+    # fingerprint; inserting both would violate the unique key and fail the import.
+    keep, duplicate_count = take_unique_fingerprints(
+        [row.fingerprint for row in in_range], known
+    )
+    new_rows = [in_range[index] for index in keep]
 
     batch = ImportBatch(
         user_id=user.id,

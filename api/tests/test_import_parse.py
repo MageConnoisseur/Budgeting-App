@@ -7,11 +7,18 @@ from decimal import Decimal
 from uuid import uuid4
 
 from app.services.imports.fingerprints import (
+    identical_rows_warning,
     merchant_key,
     merchant_keys_related,
     row_fingerprint,
+    take_unique_fingerprints,
 )
-from app.services.imports.matching import LedgerRow, assign_fuzzy_matches, score_match
+from app.services.imports.matching import (
+    LedgerRow,
+    assign_fuzzy_matches,
+    rate_duplicate,
+    score_match,
+)
 from app.services.imports.parsers import is_card_payment, parse_discover, parse_statement
 
 SAMPLE = """Trans. Date,Post Date,Description,Amount,Category
@@ -160,6 +167,63 @@ def test_fuzzy_match_rounding_and_date_window() -> None:
         tx=ledger[0],
     )
     assert too_much is None
+
+
+IDENTICAL = """Trans. Date,Post Date,Description,Amount,Category
+09/19/2026,09/19/2026,ST VINCENT DE PAUL CHURC BROOKLYN PARKMN,4.00,Services
+09/19/2026,09/19/2026,ST VINCENT DE PAUL CHURC BROOKLYN PARKMN,4.00,Services
+09/19/2026,09/19/2026,ST VINCENT DE PAUL CHURC BROOKLYN PARKMN,7.00,Services
+"""
+
+
+def test_identical_charges_share_a_fingerprint_and_are_skipped() -> None:
+    parsed = parse_discover(IDENTICAL, filename="Discover-RecentActivity-20260930.csv")
+    importable = list(parsed.importable)
+    assert len(importable) == 3
+    assert importable[0].fingerprint == importable[1].fingerprint
+    assert importable[0].fingerprint != importable[2].fingerprint
+    keep, skipped = take_unique_fingerprints([row.fingerprint for row in importable])
+    assert keep == [0, 2]
+    assert skipped == 1
+    warning = identical_rows_warning(skipped)
+    assert warning is not None
+    assert "1 identical charge will be skipped" in warning
+
+
+def test_duplicate_likelihood_is_a_scale() -> None:
+    rounded_same_payee = rate_duplicate(
+        trans_date=date(2026, 8, 2),
+        amount=Decimal("42.18"),
+        description="COSTCO WHSE #123",
+        tx_date=date(2026, 8, 1),
+        tx_amount=Decimal("42.00"),
+        tx_note="Costco",
+    )
+    exact_same_day_other_note = rate_duplicate(
+        trans_date=date(2026, 8, 2),
+        amount=Decimal("42.00"),
+        description="COSTCO WHSE #123",
+        tx_date=date(2026, 8, 2),
+        tx_amount=Decimal("42.00"),
+        tx_note="Coffee shop",
+    )
+    close_amount_other_payee = rate_duplicate(
+        trans_date=date(2026, 8, 2),
+        amount=Decimal("42.18"),
+        description="COSTCO WHSE #123",
+        tx_date=date(2026, 8, 2),
+        tx_amount=Decimal("42.00"),
+        tx_note="Coffee",
+    )
+    assert rounded_same_payee.level == "high"
+    assert rounded_same_payee.label == "Very likely"
+    assert rounded_same_payee.score == 80
+    assert "similar payee" in rounded_same_payee.reason
+    assert exact_same_day_other_note.level == "medium"
+    assert exact_same_day_other_note.score == 55
+    assert close_amount_other_payee.level == "low"
+    assert close_amount_other_payee.score < exact_same_day_other_note.score
+    assert close_amount_other_payee.score < rounded_same_payee.score
 
 
 def test_two_similar_purchases_are_not_both_matched_to_one_row() -> None:
