@@ -117,6 +117,43 @@ def test_accept_skip_and_fingerprint_dedup(auth_headers: dict[str, str]) -> None
     assert "SHELL OIL 123" in remaining
 
 
+def test_exact_duplicate_lines_are_skipped(auth_headers: dict[str, str]) -> None:
+    h = auth_headers
+    csv = b"""Trans. Date,Post Date,Description,Amount,Category
+09/19/2026,09/19/2026,ST VINCENT DE PAUL CHURC BROOKLYN PARKMN,4.00,Services
+09/19/2026,09/19/2026,ST VINCENT DE PAUL CHURC BROOKLYN PARKMN,4.00,Services
+09/19/2026,09/19/2026,ST VINCENT DE PAUL CHURC BROOKLYN PARKMN,7.00,Services
+"""
+    def files() -> dict:
+        return {
+            "file": (
+                "Discover-RecentActivity-20260930.csv",
+                BytesIO(csv),
+                "text/csv",
+            )
+        }
+
+    preview = client.post("/api/imports/preview", headers=h, files=files())
+    assert preview.status_code == 200, preview.text
+    assert any(
+        "identical charge will be skipped" in warning
+        for warning in preview.json()["warnings"]
+    )
+
+    committed = client.post(
+        "/api/imports",
+        headers=h,
+        files=files(),
+        data={"date_from": "2026-09-01", "date_to": "2026-09-30"},
+    )
+    assert committed.status_code == 200, committed.text
+    body = committed.json()
+    assert body["batch"]["imported_count"] == 2
+    assert body["batch"]["skipped_duplicate_count"] == 1
+    amounts = sorted(Decimal(item["amount"]) for item in body["inbox"]["items"])
+    assert amounts == [Decimal("4.00"), Decimal("7.00")]
+
+
 def test_fuzzy_merge_replaces_rounded_amount(auth_headers: dict[str, str]) -> None:
     h = auth_headers
     groceries = client.post(
@@ -147,6 +184,9 @@ def test_fuzzy_merge_replaces_rounded_amount(auth_headers: dict[str, str]) -> No
     assert len(inbox) == 1
     row = inbox[0]
     assert row["match_kind"] == "fuzzy"
+    assert row["match_confidence"] == "high"
+    assert row["match_score"] == 80
+    assert "similar payee" in row["match_reason"]
     assert row["matched_transaction"]["id"] == manual_id
 
     merged = client.post(

@@ -559,7 +559,7 @@ a.btn {
 
 .import-inbox {
   table-layout: fixed;
-  min-width: 52rem;
+  min-width: 56rem;
 }
 
 .import-inbox th,
@@ -609,7 +609,7 @@ a.btn {
 
 .import-inbox th:nth-child(5),
 .import-inbox td:nth-child(5) {
-  width: 11.5rem;
+  width: 14.5rem;
 }
 
 .import-inbox th:nth-child(6),
@@ -661,15 +661,68 @@ a.btn {
   white-space: normal;
 }
 
+.import-dup-meter {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.import-dup-track {
+  flex: 0 0 2.6rem;
+  height: 0.38rem;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--warn) 16%, white);
+  overflow: hidden;
+}
+
+.import-dup-fill {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--warn) 45%, var(--line));
+}
+
+.import-dup-fill.medium {
+  background: color-mix(in srgb, var(--warn) 75%, #c47a3a);
+}
+
+.import-dup-fill.high {
+  background: var(--warn);
+}
+
 .import-dup-label {
   display: inline-block;
   padding: 0.12rem 0.45rem;
   border-radius: 6px;
-  background: var(--warn-bg);
-  color: var(--warn);
+  background: color-mix(in srgb, var(--warn-bg) 65%, white);
+  color: var(--ink-soft);
   font-size: 0.75rem;
   font-weight: 700;
   line-height: 1.2;
+}
+
+.import-dup-label.medium {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.import-dup-label.high {
+  background: color-mix(in srgb, var(--warn) 16%, var(--warn-bg));
+  color: var(--warn);
+}
+
+.import-dup-score {
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.import-dup-reason {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  line-height: 1.25;
+  white-space: normal;
 }
 
 .import-dup-detail {

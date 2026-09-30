@@ -615,6 +615,11 @@ export interface ImportCandidate {
   issuer_category: string | null
   status: ImportCandidateStatus
   match_kind: ImportMatchKind
+  /** high | medium | low when this row resembles a tracker entry */
+  match_confidence?: 'high' | 'medium' | 'low' | null
+  /** 0–100 likelihood that the matched tracker entry is the same charge */
+  match_score?: number | null
+  match_reason?: string | null
   category_id: string | null
   /** merchant = this payee; issuer = same bank label; label = name match */
   category_source?: 'merchant' | 'issuer' | 'label' | null
