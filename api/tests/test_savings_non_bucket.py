@@ -243,3 +243,28 @@ def test_converting_to_non_bucket_clears_target_and_paid_from() -> None:
         if line["category_id"] == car["id"]
     )
     assert car_line["funded_by_category_id"] is None
+
+
+def test_expense_cannot_be_paid_from_a_non_bucket() -> None:
+    h = _auth()
+    car = client.post(
+        "/api/categories",
+        headers=h,
+        json={"kind": "expense", "name": "Car maintenance"},
+    ).json()
+    loan = client.post(
+        "/api/categories",
+        headers=h,
+        json={"kind": "savings", "name": "Extra loan", "is_bucket": False},
+    ).json()
+    created = client.post(
+        "/api/transactions",
+        headers=h,
+        json={
+            "category_id": car["id"],
+            "amount": "300.00",
+            "date": "2026-09-12",
+            "withdraw_from_category_id": loan["id"],
+        },
+    )
+    assert created.status_code == 400, created.text

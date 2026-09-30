@@ -18,7 +18,7 @@ function leftoverHint(tone: ReturnType<typeof leftoverTone>, scope: string): str
     return `Actual income covered expenses paid from income and savings contributions for ${scope}.`
   }
   if (tone === 'surplus') {
-    return `Cash left after expenses paid from income and savings — bills paid from a bucket are set aside.`
+    return `Cash left after expenses paid from income and savings — the part of a bill covered by a bucket is set aside.`
   }
   return `Unfunded expenses and savings outpaced actual income for ${scope}. Soft signal only.`
 }
@@ -58,7 +58,7 @@ function Equation({ totals }: { totals: TrueLeftoverTotals }) {
 
 /**
  * Actual income − expenses paid from income − savings contributions.
- * Expenses marked “paid from a bucket” are excluded from leftover.
+ * Dollars withdrawn from a bucket for an expense are left out of leftover.
  */
 export function TrueLeftoverWidget({
   leftoverPlanned,
@@ -109,7 +109,7 @@ export function TrueLeftoverWidget({
 
       {actual.expenseFromSavings > 0.005 && (
         <p className="muted compact">
-          {formatUsd(actual.expenseFromSavings)} of spending was paid from
+          {formatUsd(actual.expenseFromSavings)} of spending was covered by
           savings and is not in leftover.
         </p>
       )}

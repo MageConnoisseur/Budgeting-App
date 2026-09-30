@@ -257,8 +257,10 @@ export function CategoriesPage() {
             <>
               Tip: a <strong>bucket</strong> is money you can use later. Set an
               optional target, plan a monthly contribution on Budget, and mark
-              big bills as <strong>paid from</strong> that bucket. Log deposits
-              (+) and withdrawals (−) in Tracker.
+              big bills as <strong>paid from</strong> that bucket. In Tracker,
+              set <strong>Pay from</strong> on an expense to take that whole
+              entry from the bucket — or log the paycheck part and the bucket
+              part as two expenses.
             </>
           ) : (
             <>

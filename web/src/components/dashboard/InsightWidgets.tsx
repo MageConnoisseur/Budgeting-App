@@ -91,7 +91,7 @@ export function AllocationSnapshotWidget({
   return (
     <div className="widget">
       <h3>{title || 'At a glance'}</h3>
-      <p className="muted compact">Orientation for {scopeLabel} — leftover ignores bills paid from a bucket.</p>
+      <p className="muted compact">Orientation for {scopeLabel} — leftover ignores the part of a bill paid from a bucket.</p>
       <dl className="stat-grid four">
         <div>
           <dt>Income</dt>
