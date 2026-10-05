@@ -181,33 +181,21 @@ export interface SavingsBucket {
 
 export interface SpendingPaceDay {
   date: string
-  income: string
-  expense: string
-  savings: string
-  cumulative_income: string
-  cumulative_expense: string
-  cumulative_savings: string
-  cumulative_outflow: string
-  cumulative_net: string
-  cumulative_expected_income: string
+  spent: string
+  cumulative_spent: string | null
+  cumulative_budget: string
 }
 
 export interface SpendingPace {
   as_of: string
-  window_start: string
-  window_end: string
-  window_days: number
-  income: string
-  expense: string
-  savings: string
-  outflow: string
-  net: string
-  average_daily_income: string
-  expected_income: string
-  income_lookback_start: string | null
-  income_lookback_end: string | null
-  income_lookback_days: number
-  tracking_started_on: string | null
+  period_start: string
+  period_end: string
+  period_days: number
+  days_elapsed: number
+  days_left: number
+  expense_planned: string
+  expense_spent: string
+  budget_to_date: string
   overspending: boolean
   has_data: boolean
   days: SpendingPaceDay[]

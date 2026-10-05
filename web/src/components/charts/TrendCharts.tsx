@@ -64,7 +64,9 @@ export function LineTrendChart({
   height?: number
 }) {
   const width = 640
-  const allValues = series.flatMap((s) => s.values)
+  const allValues = series
+    .flatMap((s) => s.values)
+    .filter((v) => Number.isFinite(v))
   const { min: minY, max: maxY } = niceExtent(allValues)
   const spanY = maxY - minY || 1
   const pad = {
@@ -108,39 +110,55 @@ export function LineTrendChart({
           )
         })}
         {series.map((s) => {
-          const points = s.values
-            .map((v, i) => `${xAt(i)},${yAt(v)}`)
-            .join(' ')
+          const segments: string[] = []
+          let current: string[] = []
+          s.values.forEach((v, i) => {
+            if (!Number.isFinite(v)) {
+              if (current.length > 0) segments.push(current.join(' '))
+              current = []
+              return
+            }
+            current.push(`${xAt(i)},${yAt(v)}`)
+          })
+          if (current.length > 0) segments.push(current.join(' '))
+          const markAll = n <= 40
           return (
             <g key={s.key}>
-              <polyline
-                fill="none"
-                stroke={s.color}
-                strokeWidth={2.5}
-                strokeLinejoin="round"
-                strokeLinecap="round"
-                points={points}
-                className="chart-line"
-              />
-              {s.values.map((v, i) => (
-                <circle
-                  key={`${s.key}-${i}`}
-                  cx={xAt(i)}
-                  cy={yAt(v)}
-                  r={3.5}
-                  fill={s.color}
-                >
-                  <title>
-                    {s.label} · {labels[i]}: {formatUsd(v)}
-                  </title>
-                </circle>
+              {segments.map((points, segment) => (
+                <polyline
+                  key={`${s.key}-${segment}`}
+                  fill="none"
+                  stroke={s.color}
+                  strokeWidth={2.5}
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                  points={points}
+                  className="chart-line"
+                />
               ))}
+              {s.values.map((v, i) => {
+                if (!Number.isFinite(v)) return null
+                if (!markAll && !labels[i]) return null
+                return (
+                  <circle
+                    key={`${s.key}-${i}`}
+                    cx={xAt(i)}
+                    cy={yAt(v)}
+                    r={3.5}
+                    fill={s.color}
+                  >
+                    <title>
+                      {s.label} · {labels[i] || ''}: {formatUsd(v)}
+                    </title>
+                  </circle>
+                )
+              })}
             </g>
           )
         })}
         {labels.map((label, i) => (
           <text
-            key={label}
+            key={`${i}-${label}`}
             x={xAt(i)}
             y={height - 12}
             className="chart-axis"
