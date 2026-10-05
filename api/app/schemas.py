@@ -537,38 +537,35 @@ class SavingsBucketOut(BaseModel):
 
 
 class SpendingPaceDay(BaseModel):
-    """One day inside the rolling pace window (cumulative totals are inclusive)."""
+    """One day in the budget period.
+
+    ``cumulative_budget`` is the even share of the expense plan through this day.
+    ``cumulative_spent`` is null after today so the spend line can stop while the
+    budget line continues through the end of the period.
+    """
 
     date: date
-    income: Decimal
-    expense: Decimal
-    savings: Decimal
-    cumulative_income: Decimal
-    cumulative_expense: Decimal
-    cumulative_savings: Decimal
-    cumulative_outflow: Decimal
-    cumulative_net: Decimal
-    cumulative_expected_income: Decimal
+    spent: Decimal
+    cumulative_spent: Optional[Decimal] = None
+    cumulative_budget: Decimal
 
 
 class SpendingPaceOut(BaseModel):
-    """Rolling actual cash pace vs average income capacity (soft overspending signal)."""
+    """Expense pace vs an even split of this period's expense budget.
+
+    Soft signal that spending is running hot for the month or year. Savings
+    contributions are not part of the spend line.
+    """
 
     as_of: date
-    window_start: date
-    window_end: date
-    window_days: int
-    income: Decimal
-    expense: Decimal
-    savings: Decimal
-    outflow: Decimal
-    net: Decimal
-    average_daily_income: Decimal
-    expected_income: Decimal
-    income_lookback_start: Optional[date] = None
-    income_lookback_end: Optional[date] = None
-    income_lookback_days: int = 0
-    tracking_started_on: Optional[date] = None
+    period_start: date
+    period_end: date
+    period_days: int
+    days_elapsed: int
+    days_left: int
+    expense_planned: Decimal
+    expense_spent: Decimal
+    budget_to_date: Decimal
     overspending: bool = False
     has_data: bool = False
     days: list[SpendingPaceDay] = Field(default_factory=list)

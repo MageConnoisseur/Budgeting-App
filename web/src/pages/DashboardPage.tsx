@@ -161,6 +161,20 @@ function formatShortDate(iso: string): string {
   return `${MONTH_SHORT[m - 1]} ${d}`
 }
 
+function paceChartLabels(days: SpendingPace['days']): string[] {
+  const yearSpan = days.length > 40
+  return days.map((d, i) => {
+    const [, month, day] = d.date.split('-').map(Number)
+    if (!month || !day) return ''
+    if (yearSpan) {
+      if (day === 1 || i === days.length - 1) return MONTH_SHORT[month - 1]
+      return ''
+    }
+    const show = i === 0 || i === days.length - 1 || (i + 1) % 5 === 0
+    return show ? String(day) : ''
+  })
+}
+
 function SpendingPaceWidget({
   pace,
   title,
@@ -168,86 +182,88 @@ function SpendingPaceWidget({
   pace: SpendingPace
   title?: string | null
 }) {
+  const monthScoped = pace.period_start.slice(0, 7) === pace.period_end.slice(0, 7)
+  const scope = monthScoped ? 'month' : 'year'
+
   if (!pace.has_data) {
     return (
       <div className="widget">
         <h3>{title || 'Spending pace'}</h3>
         <p className="muted">
-          Log income and expenses to see a rolling pace check. This uses actuals
-          over the last 30 days against your average income — not your monthly
-          plan — so mid-month paydays do not falsely look like overspending.
+          Plan expenses to see whether spending is ahead of an even pace through
+          the {scope}. The line is the expense budget spread across the {scope}.
+          Savings contributions stay out of it.
         </p>
       </div>
     )
   }
 
-  const outflow = Number(pace.outflow)
-  const expected = Number(pace.expected_income)
+  const spent = Number(pace.expense_spent)
+  const allowed = Number(pace.budget_to_date)
+  const planned = Number(pace.expense_planned)
+  const versusPace = allowed - spent
+  const left = planned - spent
   const pct =
-    expected > 0 ? Math.min(140, (outflow / expected) * 100) : outflow > 0 ? 100 : 0
-  const headroom = expected - outflow
-
-  const chartLabels = pace.days.map((d, i) => {
-    const show =
-      i === 0 || i === pace.days.length - 1 || (i + 1) % 5 === 0
-    return show ? String(Number(d.date.slice(8))) : ''
-  })
+    allowed > 0 ? Math.min(140, (spent / allowed) * 100) : spent > 0 ? 100 : 0
 
   return (
     <div className="widget">
       <div className="widget-head">
         <h3>{title || 'Spending pace'}</h3>
         {pace.overspending && (
-          <SoftWarning message="Outflow above average income" />
+          <SoftWarning message="Ahead of an even budget pace" />
         )}
       </div>
       <p className="muted compact">
-        Actuals for {formatShortDate(pace.window_start)} –{' '}
-        {formatShortDate(pace.window_end)} ({pace.window_days} days). Capacity
-        uses average daily income over{' '}
-        {pace.income_lookback_days} day
-        {pace.income_lookback_days === 1 ? '' : 's'} of tracking
-        {pace.income_lookback_days < 183 ? ' (since you started)' : ' (last ~6 months)'}.
+        {pace.days_elapsed === 0
+          ? `This ${scope} has not started. `
+          : `Expenses for ${formatShortDate(pace.period_start)} – ${formatShortDate(pace.period_end)} (${pace.days_elapsed} of ${pace.period_days} days). `}
+        The line is this {scope}&apos;s expense budget, spread evenly
+        {monthScoped ? ' across the month' : ' within each month'}. Savings
+        contributions are not included.
       </p>
+      {planned <= 0 && (
+        <p className="muted compact">
+          Set an expense budget to compare spending with an even pace.
+        </p>
+      )}
 
       <div className="pace-hero">
         <div>
-          <p className="pace-label">Net (income − expenses − savings)</p>
-          <p className={`pace-net ${Number(pace.net) < 0 ? 'warn-text' : ''}`}>
-            {formatUsd(pace.net)}
-          </p>
+          <p className="pace-label">Spent</p>
+          <p className="pace-net">{formatUsd(pace.expense_spent)}</p>
         </div>
         <div>
-          <p className="pace-label">Headroom vs avg income</p>
-          <p className={`pace-net ${headroom < 0 ? 'warn-text' : ''}`}>
-            {formatUsd(headroom)}
+          <p className="pace-label">Vs even pace</p>
+          <p className={`pace-net ${versusPace < 0 ? 'warn-text' : ''}`}>
+            {formatUsd(versusPace)}
           </p>
         </div>
       </div>
 
       <dl className="stat-grid four">
         <div>
-          <dt>Income</dt>
-          <dd>{formatUsd(pace.income)}</dd>
+          <dt>Spent</dt>
+          <dd>{formatUsd(pace.expense_spent)}</dd>
         </div>
         <div>
-          <dt>Expenses</dt>
-          <dd>{formatUsd(pace.expense)}</dd>
+          <dt>Expense budget</dt>
+          <dd>{formatUsd(pace.expense_planned)}</dd>
         </div>
         <div>
-          <dt>Savings</dt>
-          <dd>{formatUsd(pace.savings)}</dd>
+          <dt>Even pace so far</dt>
+          <dd>{formatUsd(pace.budget_to_date)}</dd>
         </div>
         <div>
-          <dt>Avg income capacity</dt>
-          <dd>{formatUsd(pace.expected_income)}</dd>
+          <dt>Left in budget</dt>
+          <dd className={left < 0 ? 'warn-text' : undefined}>{formatUsd(left)}</dd>
         </div>
       </dl>
 
       <div className="pace-meter">
         <div className="pace-meter-labels">
-          <span>Outflow {formatUsd(pace.outflow)}</span>
-          <span>Capacity {formatUsd(pace.expected_income)}</span>
+          <span>Spent {formatUsd(pace.expense_spent)}</span>
+          <span>Even pace {formatUsd(pace.budget_to_date)}</span>
         </div>
         <div className="progress-track" aria-hidden>
           <div
@@ -259,25 +275,23 @@ function SpendingPaceWidget({
 
       {pace.days.length > 1 && (
         <>
-          <h4 className="chart-subtitle">
-            Cumulative outflow vs average income capacity
-          </h4>
+          <h4 className="chart-subtitle">Cumulative expenses vs even budget</h4>
           <LineTrendChart
-            labels={chartLabels}
+            labels={paceChartLabels(pace.days)}
             series={[
               {
-                key: 'outflow',
-                label: 'Outflow (expenses + savings)',
+                key: 'spent',
+                label: 'Expenses',
                 color: COLOR.expense,
-                values: pace.days.map((d) => Number(d.cumulative_outflow)),
+                values: pace.days.map((d) =>
+                  d.cumulative_spent == null ? Number.NaN : Number(d.cumulative_spent),
+                ),
               },
               {
-                key: 'capacity',
-                label: 'Avg income capacity',
+                key: 'budget',
+                label: 'Expense budget',
                 color: COLOR.income,
-                values: pace.days.map((d) =>
-                  Number(d.cumulative_expected_income),
-                ),
+                values: pace.days.map((d) => Number(d.cumulative_budget)),
               },
             ]}
             height={200}

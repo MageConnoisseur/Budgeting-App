@@ -168,7 +168,7 @@ Shipped / expected direction:
 - **Three default habit views** (Monthly and Annual each): **This month/year** (pace leftover mix), **Fix the plan** (unused plan, overruns, heatmap, reallocate), **Savings** (trajectory, fill vs use, targets). Existing users receive these views on next load without losing a custom layout (kept as **My layout**)
 - Progress vs plan for income, expenses, and savings
 - **Month-to-month trends** and readable plan-vs-actual visuals (including overlapping bars / major vs smaller bands where useful)
-- **Spending pace:** rolling ~30-day actuals vs average daily income capacity (soft overspending signal)
+- **Spending pace:** cumulative expenses vs an even split of the expense budget (the viewed month, or each month's plan across the year). Savings contributions stay off the spend line. Soft signal when spending is ahead of that pace
 - **Plan coaching:** after repeated expense/savings overruns, soft suggestions to raise plans (median overrun) or tip seasonal clusters; one-click apply via annual budget cell; dismissals may be local-only
 - **Budget coach:** deterministic leftover / shortfall / savings-target recommendations (monthly and annual). Shortfall tips skip rent/mortgage-like fixed costs. Income under-plan is overrun only after paydays (or the month) are due. Optional one-click apply; dedicated Coach page plus a compact Dashboard widget. Not an LLM — dollar amounts come from the user’s plan.
 - Allocation mix, leftover waterfall, month runway, largest movers, recurring vs remaining, unused plan, flexible vs committed, category drill-down, savings trajectory, plan heatmap / drift, optional reallocate-to-target apply
@@ -388,7 +388,7 @@ All user-owned rows must be scoped by authenticated user.
 | Budget coach | Deterministic leftover coach (Phase 1.x): unassigned plan leftover → fund a savings bucket (prefer unmet targets); plan shortfall → optional trim of **flexible** spend (skip rent/mortgage/dominant housing-sized lines); income under-plan is only flagged after paydays or the month are due; plus existing raise/seasonal tips and spending-pace warnings. Dedicated **Coach** page + compact Dashboard widget. Apply is optional; dismissals local-only. |
 | AI / LLM coach | **Later (Phase 3+), not now.** If added, it must wrap the deterministic engine (explain tips, answer “why”) and must not invent dollar amounts or bypass soft-advisory rules. No API-key LLM in the current desktop-depth phase. |
 | Dashboard | Robust, customizable widgets; three default habit views (This month/year, Fix the plan, Savings); existing users gain those views without losing My layout |
-| Dashboard spending pace | Rolling ~30-day actuals vs average daily income capacity (lookback ≤ ~6 months, clamped to first tracking day) — soft overspending signal that avoids mid-month paycheck skew |
+| Dashboard spending pace | Cumulative expenses vs an even split of the expense budget for the viewed month (on Annual, each month's expense plan across the year). Savings stay off the spend line. Soft signal when spending is ahead of that pace |
 | Budget / Dashboard views | Monthly and Annual modes; easy swap; annual budget editing allowed; preferences stored on the user |
 | Tracker findability | Search, sort, and filters required |
 | Auth now | Username + email + password; Google/Facebook OAuth with explicit account linking; JWT Bearer + bcrypt |

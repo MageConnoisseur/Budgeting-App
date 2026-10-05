@@ -56,9 +56,6 @@ from app.services.recurring import occurrences_in_month
 
 ZERO = Decimal("0.00")
 MONEY = Decimal("0.01")
-# Rolling actuals window and income-average lookback (calendar-day based).
-PACE_WINDOW_DAYS = 30
-INCOME_LOOKBACK_DAYS = 183  # ~6 months; shorter if the user has less history
 PLAN_SUGGESTION_MIN_OVER_MONTHS = 3
 _MONTH_NAMES = (
     "Jan",
@@ -346,9 +343,6 @@ class UserLedger:
             if key < target_key and prior is None:
                 prior = _money(amount)
         return prior if prior is not None else ZERO
-
-    def first_tracking_date(self) -> date | None:
-        return self.transactions[0].date if self.transactions else None
 
 
 def load_user_ledger(db: Session, user: User) -> UserLedger:
@@ -663,30 +657,63 @@ def build_plan_suggestions(
     return suggestions
 
 
-def _first_tracking_date(db: Session, user_id: UUID) -> date | None:
-    return db.scalar(
-        select(func.min(Transaction.date)).where(Transaction.user_id == user_id)
-    )
+def _period_elapsed(
+    period_start: date, period_end: date, today: date
+) -> tuple[date, int, int]:
+    """Return (as_of, days_elapsed, days_left) inside a closed calendar period."""
+    period_days = (period_end - period_start).days + 1
+    if today < period_start:
+        return period_start, 0, period_days
+    if today >= period_end:
+        return period_end, period_days, 0
+    elapsed = (today - period_start).days + 1
+    return today, elapsed, period_days - elapsed
 
 
-def _empty_spending_pace(as_of: date) -> SpendingPaceOut:
-    start = as_of - timedelta(days=PACE_WINDOW_DAYS - 1)
+def _even_budget(planned: Decimal, day_index: int, period_days: int) -> Decimal:
+    """Even share of one segment's plan through day ``day_index`` (1-based)."""
+    if planned == ZERO or period_days <= 0 or day_index <= 0:
+        return ZERO
+    if day_index >= period_days:
+        return _money(planned)
+    return planned * Decimal(day_index) / Decimal(period_days)
+
+
+def _budget_on_day(
+    segments: list[tuple[date, date, Decimal]], day: date
+) -> Decimal:
+    """Expense budget earned through ``day`` across calendar segments.
+
+    A finished segment counts in full. The segment that contains ``day`` counts
+    as an even share of its own plan. Later segments stay at zero until they start.
+    """
+    total = ZERO
+    for start, end, planned in segments:
+        if day < start:
+            continue
+        if day >= end:
+            total += planned
+            continue
+        period_days = (end - start).days + 1
+        index = (day - start).days + 1
+        total += _even_budget(planned, index, period_days)
+    return _money(total)
+
+
+def _empty_spending_pace(
+    period_start: date, period_end: date, today: date
+) -> SpendingPaceOut:
+    as_of, elapsed, left = _period_elapsed(period_start, period_end, today)
     return SpendingPaceOut(
         as_of=as_of,
-        window_start=start,
-        window_end=as_of,
-        window_days=PACE_WINDOW_DAYS,
-        income=ZERO,
-        expense=ZERO,
-        savings=ZERO,
-        outflow=ZERO,
-        net=ZERO,
-        average_daily_income=ZERO,
-        expected_income=ZERO,
-        income_lookback_start=None,
-        income_lookback_end=None,
-        income_lookback_days=0,
-        tracking_started_on=None,
+        period_start=period_start,
+        period_end=period_end,
+        period_days=(period_end - period_start).days + 1,
+        days_elapsed=elapsed,
+        days_left=left,
+        expense_planned=ZERO,
+        expense_spent=ZERO,
+        budget_to_date=ZERO,
         overspending=False,
         has_data=False,
         days=[],
@@ -695,164 +722,72 @@ def _empty_spending_pace(as_of: date) -> SpendingPaceOut:
 
 def _assemble_spending_pace(
     *,
-    as_of: date,
-    tracking_started: date | None,
+    period_start: date,
+    period_end: date,
+    today: date,
+    budget_segments: list[tuple[date, date, Decimal]],
     txs: list[Transaction],
 ) -> SpendingPaceOut:
-    """Build spending pace from already-loaded transactions."""
-    if tracking_started is None or tracking_started > as_of:
-        return _empty_spending_pace(as_of)
+    """Cumulative expenses vs the expense budget spread across the period.
 
-    raw_window_start = as_of - timedelta(days=PACE_WINDOW_DAYS - 1)
-    window_start = max(raw_window_start, tracking_started)
-    window_end = as_of
-    window_days = (window_end - window_start).days + 1
+    A month is one segment, spread evenly over its days. A year is one segment
+    per month, so each month rises only across its own plan. Savings
+    contributions are not spending. Days after today keep a budget point and
+    leave cumulative spend empty, so the spend line stops at today while the
+    budget line runs through the last day of the period.
+    """
+    if period_end < period_start:
+        return _empty_spending_pace(period_start, period_end, today)
 
-    lookback_floor = as_of - timedelta(days=INCOME_LOOKBACK_DAYS - 1)
-    income_lookback_start = max(tracking_started, lookback_floor)
-    income_lookback_end = as_of
-    income_lookback_days = (income_lookback_end - income_lookback_start).days + 1
+    as_of, days_elapsed, days_left = _period_elapsed(period_start, period_end, today)
+    period_days = (period_end - period_start).days + 1
+    planned = _money(sum((amount for _, _, amount in budget_segments), ZERO))
 
-    income_lookback_total = ZERO
-    daily: dict[date, dict[str, Decimal]] = {}
-    cursor = window_start
-    while cursor <= window_end:
-        daily[cursor] = {"income": ZERO, "expense": ZERO, "savings": ZERO}
-        cursor += timedelta(days=1)
-
+    spent_by_day: dict[date, Decimal] = {}
     for tx in txs:
-        if tx.date > as_of:
+        if tx.date < period_start or tx.date > period_end or tx.date > today:
             continue
-        kind = tx.category.kind
-        if kind == CategoryKind.income.value:
-            amount = abs(tx.amount)
-            if income_lookback_start <= tx.date <= income_lookback_end:
-                income_lookback_total += amount
-            if window_start <= tx.date <= window_end:
-                daily[tx.date]["income"] += amount
-        elif kind == CategoryKind.expense.value:
-            amount = tx.amount
-            if window_start <= tx.date <= window_end:
-                daily[tx.date]["expense"] += amount
-        elif kind == CategoryKind.savings.value:
-            if window_start <= tx.date <= window_end:
-                daily[tx.date]["savings"] += tx.amount
-
-    avg_daily_raw = (
-        income_lookback_total / Decimal(income_lookback_days)
-        if income_lookback_days > 0
-        else ZERO
-    )
-    avg_daily = _money(avg_daily_raw)
-    expected_income = (
-        _money(
-            income_lookback_total
-            * Decimal(window_days)
-            / Decimal(income_lookback_days)
-        )
-        if income_lookback_days > 0
-        else ZERO
-    )
+        category = tx.category
+        if category is None or category.kind != CategoryKind.expense.value:
+            continue
+        spent_by_day[tx.date] = spent_by_day.get(tx.date, ZERO) + tx.amount
 
     days_out: list[SpendingPaceDay] = []
-    cum_income = ZERO
-    cum_expense = ZERO
-    cum_savings = ZERO
-    ordered_dates = sorted(daily.keys())
-    for i, day in enumerate(ordered_dates):
-        bucket = daily[day]
-        cum_income += bucket["income"]
-        cum_expense += bucket["expense"]
-        cum_savings += bucket["savings"]
-        cum_outflow = cum_expense + cum_savings
-        day_count = i + 1
-        expected_to_date = (
-            _money(
-                income_lookback_total
-                * Decimal(day_count)
-                / Decimal(income_lookback_days)
-            )
-            if income_lookback_days > 0
-            else ZERO
-        )
+    cum = ZERO
+    day = period_start
+    while day <= period_end:
+        include_spent = days_elapsed > 0 and day <= today
+        if include_spent:
+            cum += spent_by_day.get(day, ZERO)
         days_out.append(
             SpendingPaceDay(
                 date=day,
-                income=_money(bucket["income"]),
-                expense=_money(bucket["expense"]),
-                savings=_money(bucket["savings"]),
-                cumulative_income=_money(cum_income),
-                cumulative_expense=_money(cum_expense),
-                cumulative_savings=_money(cum_savings),
-                cumulative_outflow=_money(cum_outflow),
-                cumulative_net=_money(cum_income - cum_expense - cum_savings),
-                cumulative_expected_income=expected_to_date,
+                spent=_money(spent_by_day.get(day, ZERO)) if include_spent else ZERO,
+                cumulative_spent=_money(cum) if include_spent else None,
+                cumulative_budget=_budget_on_day(budget_segments, day),
             )
         )
+        day += timedelta(days=1)
 
-    income_total = _money(cum_income)
-    expense_total = _money(cum_expense)
-    savings_total = _money(cum_savings)
-    outflow = _money(expense_total + savings_total)
-    net = _money(income_total - expense_total - savings_total)
-    overspending = expected_income > ZERO and outflow > expected_income
+    spent_total = _money(cum)
+    budget_to_date = (
+        _budget_on_day(budget_segments, as_of) if days_elapsed > 0 else ZERO
+    )
+    overspending = budget_to_date > ZERO and spent_total > budget_to_date
 
     return SpendingPaceOut(
         as_of=as_of,
-        window_start=window_start,
-        window_end=window_end,
-        window_days=window_days,
-        income=income_total,
-        expense=expense_total,
-        savings=savings_total,
-        outflow=outflow,
-        net=net,
-        average_daily_income=avg_daily,
-        expected_income=expected_income,
-        income_lookback_start=income_lookback_start,
-        income_lookback_end=income_lookback_end,
-        income_lookback_days=income_lookback_days,
-        tracking_started_on=tracking_started,
+        period_start=period_start,
+        period_end=period_end,
+        period_days=period_days,
+        days_elapsed=days_elapsed,
+        days_left=days_left,
+        expense_planned=planned,
+        expense_spent=spent_total,
+        budget_to_date=budget_to_date,
         overspending=overspending,
-        has_data=True,
+        has_data=planned > ZERO or spent_total != ZERO,
         days=days_out,
-    )
-
-
-def build_spending_pace(db: Session, user: User, as_of: date) -> SpendingPaceOut:
-    """Rolling actual income/expense/savings vs average income capacity.
-
-    Uses the last ~30 days of actuals (clamped to the first tracking day so new
-    users are not compared against empty pre-history). Income capacity is the
-    average daily income since tracking began, looking back at most ~6 months.
-    Soft overspending when window outflow (expenses + net savings) exceeds that
-    expected income for the same number of days.
-    """
-    tracking_started = _first_tracking_date(db, user.id)
-    if tracking_started is None or tracking_started > as_of:
-        return _empty_spending_pace(as_of)
-
-    lookback_floor = as_of - timedelta(days=INCOME_LOOKBACK_DAYS - 1)
-    income_lookback_start = max(tracking_started, lookback_floor)
-    raw_window_start = as_of - timedelta(days=PACE_WINDOW_DAYS - 1)
-    window_start = max(raw_window_start, tracking_started)
-    load_start = min(income_lookback_start, window_start)
-    txs = (
-        db.scalars(
-            select(Transaction)
-            .options(joinedload(Transaction.category))
-            .where(
-                Transaction.user_id == user.id,
-                Transaction.date >= load_start,
-                Transaction.date <= as_of,
-            )
-            .order_by(Transaction.date.asc())
-        )
-        .unique()
-        .all()
-    )
-    return _assemble_spending_pace(
-        as_of=as_of, tracking_started=tracking_started, txs=list(txs)
     )
 
 
@@ -984,19 +919,20 @@ def _monthly_from_ledger(
     ]
     buckets = [b for b in all_savings if b.is_bucket]
 
-    if include_pace:
-        spending_pace = _assemble_spending_pace(
-            as_of=min(as_of, end),
-            tracking_started=ledger.first_tracking_date(),
-            txs=ledger.transactions,
-        )
-    else:
-        spending_pace = _empty_spending_pace(min(as_of, end))
-
     income_totals = _kind_totals(by_kind[CategoryKind.income])
     expense_totals = _kind_totals(by_kind[CategoryKind.expense])
     savings_totals = _kind_totals(by_kind[CategoryKind.savings])
     income_short = any(r.over_budget for r in by_kind[CategoryKind.income])
+    if include_pace:
+        spending_pace = _assemble_spending_pace(
+            period_start=start,
+            period_end=end,
+            today=as_of,
+            budget_segments=[(start, end, expense_totals.planned)],
+            txs=ledger.transactions,
+        )
+    else:
+        spending_pace = _empty_spending_pace(start, end, as_of)
     income_totals = income_totals.model_copy(update={"over_budget": income_short})
 
     funded_planned = sum(
@@ -1323,12 +1259,6 @@ def build_annual_dashboard(
         )
     buckets = [b for b in all_savings if b.is_bucket]
 
-    spending_pace = _assemble_spending_pace(
-        as_of=as_of,
-        tracking_started=ledger.first_tracking_date(),
-        txs=ledger.transactions,
-    )
-
     plan_month_count = max(
         sum(
             1
@@ -1380,6 +1310,16 @@ def build_annual_dashboard(
             "remaining": leftover_planned.savings_contributions
             - leftover_actual.savings_contributions,
         }
+    )
+    spending_pace = _assemble_spending_pace(
+        period_start=date(year, 1, 1),
+        period_end=date(year, 12, 31),
+        today=clock,
+        budget_segments=[
+            (*_month_date_range(year, point.month), point.expense_planned)
+            for point in months
+        ],
+        txs=ledger.transactions,
     )
     coach = build_budget_coach(
         year=year,

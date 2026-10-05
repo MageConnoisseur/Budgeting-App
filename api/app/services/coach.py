@@ -628,15 +628,15 @@ def build_budget_coach(
         tips.extend(extra)
 
     if pace_overspending:
+        scope = "this month's" if month is not None else "this year's"
         tips.append(
             CoachTip(
                 id="pace-warning",
                 kind="pace_warning",
-                title="Spending pace is ahead of income",
+                title="Spending is ahead of the budget",
                 message=(
-                    "Outflows over the last ~30 days are running ahead of your "
-                    "average daily income. Soft signal only — it does not block "
-                    "logging. Slow spending or log upcoming income if it is missing."
+                    f"Expenses so far are ahead of an even split of {scope} "
+                    "expense budget. Soft signal only — it does not block logging."
                 ),
                 priority=5,
             )
