@@ -16,6 +16,7 @@ from app.services.imports.fingerprints import (
 from app.services.imports.matching import (
     LedgerRow,
     assign_fuzzy_matches,
+    assign_inbox_matches,
     rate_duplicate,
     score_match,
 )
@@ -245,3 +246,139 @@ def test_two_similar_purchases_are_not_both_matched_to_one_row() -> None:
     ]
     assigned = assign_fuzzy_matches(candidates, ledger)
     assert len(assigned) == 1
+
+
+def _dining(amount: str, note: str, day: int = 2, *, imported: bool = False) -> LedgerRow:
+    return LedgerRow(
+        id=uuid4(),
+        date=date(2026, 8, day),
+        amount=Decimal(amount),
+        note=note,
+        category_id=uuid4(),
+        category_name="Dining",
+        already_imported=imported,
+    )
+
+
+def test_tip_gap_matches_same_payee_and_stays_likely() -> None:
+    manual = _dining("40.00", "Olive Garden")
+    candidates = [
+        (None, date(2026, 8, 2), Decimal("48.00"), "OLIVE GARDEN #88"),
+    ]
+    assigned = assign_inbox_matches(candidates, [manual])
+    assert set(assigned) == {0}
+    assert assigned[0].transaction_id == manual.id
+    assert assigned[0].amount_delta == Decimal("8.00")
+
+    rated = rate_duplicate(
+        trans_date=date(2026, 8, 2),
+        amount=Decimal("48.00"),
+        description="OLIVE GARDEN #88",
+        tx_date=date(2026, 8, 2),
+        tx_amount=Decimal("40.00"),
+        tx_note="Olive Garden",
+    )
+    assert rated.level == "medium"
+    assert rated.label == "Likely"
+    assert rated.score == 70
+    assert rated.score < 75
+    assert "tip (20% higher)" in rated.reason
+    assert "similar payee" in rated.reason
+
+    next_day = rate_duplicate(
+        trans_date=date(2026, 8, 3),
+        amount=Decimal("48.00"),
+        description="OLIVE GARDEN #88",
+        tx_date=date(2026, 8, 2),
+        tx_amount=Decimal("40.00"),
+        tx_note="Olive Garden",
+    )
+    assert next_day.level == "medium"
+    assert next_day.score == 60
+
+
+def test_tip_gap_rejects_broad_or_weak_matches() -> None:
+    manual = _dining("40.00", "Olive Garden")
+    cases = [
+        # 10% — price drift, not a tip
+        (date(2026, 8, 2), Decimal("44.00"), "OLIVE GARDEN #88"),
+        # 40% — too large
+        (date(2026, 8, 2), Decimal("56.00"), "OLIVE GARDEN #88"),
+        # posted lower than the log
+        (date(2026, 8, 2), Decimal("32.00"), "OLIVE GARDEN #88"),
+        # different restaurant
+        (date(2026, 8, 2), Decimal("48.00"), "CHIPOTLE 12"),
+        # note does not name the chain
+        (date(2026, 8, 2), Decimal("48.00"), "OLIVE GARDEN #88"),
+        # three days apart
+        (date(2026, 8, 5), Decimal("48.00"), "OLIVE GARDEN #88"),
+        # 20% but only $1.50 — coffee-sized, left alone
+        (date(2026, 8, 2), Decimal("9.00"), "OLIVE GARDEN #88"),
+        # just outside the band
+        (date(2026, 8, 2), Decimal("45.99"), "OLIVE GARDEN #88"),
+        (date(2026, 8, 2), Decimal("52.01"), "OLIVE GARDEN #88"),
+    ]
+    unnamed = _dining("40.00", "dinner")
+    small = _dining("7.50", "Olive Garden")
+    ledgers = {
+        4: [unnamed],
+        6: [small],
+    }
+    for index, (when, amount, description) in enumerate(cases):
+        ledger = ledgers.get(index, [manual])
+        assigned = assign_inbox_matches([(None, when, amount, description)], ledger)
+        assert assigned == {}, (index, amount, description)
+
+    edges = assign_inbox_matches(
+        [
+            (None, date(2026, 8, 2), Decimal("46.00"), "OLIVE GARDEN #88"),
+            (None, date(2026, 8, 2), Decimal("52.00"), "OLIVE GARDEN #88"),
+        ],
+        [manual],
+    )
+    # 15% and 30% are both in range. One log takes the gap closer to 20%.
+    assert set(edges) == {0}
+    assert edges[0].amount_delta == Decimal("6.00")
+
+
+def test_tip_gap_does_not_guess_between_similar_logs() -> None:
+    first = _dining("40.00", "Olive Garden")
+    second = _dining("40.50", "Olive Garden")
+    assigned = assign_inbox_matches(
+        [(None, date(2026, 8, 2), Decimal("48.00"), "OLIVE GARDEN #88")],
+        [first, second],
+    )
+    assert assigned == {}
+
+
+def test_tip_gap_prefers_the_nearer_day_and_skips_imported_rows() -> None:
+    same_day = _dining("40.00", "Olive Garden", day=2)
+    next_day = _dining("40.00", "Olive Garden", day=3)
+    assigned = assign_inbox_matches(
+        [(None, date(2026, 8, 2), Decimal("48.00"), "OLIVE GARDEN #88")],
+        [next_day, same_day],
+    )
+    assert assigned[0].transaction_id == same_day.id
+
+    linked = _dining("40.00", "Olive Garden", imported=True)
+    assert (
+        assign_inbox_matches(
+            [(None, date(2026, 8, 2), Decimal("48.00"), "OLIVE GARDEN #88")],
+            [linked],
+        )
+        == {}
+    )
+
+
+def test_rounding_match_keeps_a_row_from_the_tip_pass() -> None:
+    manual = _dining("42.00", "Costco")
+    assigned = assign_inbox_matches(
+        [
+            (None, date(2026, 8, 2), Decimal("42.18"), "COSTCO WHSE #123"),
+            (None, date(2026, 8, 2), Decimal("50.40"), "COSTCO WHSE #123"),
+        ],
+        [manual],
+    )
+    assert set(assigned) == {0}
+    assert assigned[0].transaction_id == manual.id
+    assert assigned[0].amount_delta == Decimal("0.18")

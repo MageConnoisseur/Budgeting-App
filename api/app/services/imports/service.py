@@ -22,7 +22,7 @@ from app.services.imports.fingerprints import (
 from app.services.imports.matching import (
     TIGHT_DATE_WINDOW_DAYS,
     LedgerRow,
-    assign_fuzzy_matches,
+    assign_inbox_matches,
 )
 from app.services.imports.labels import best_category_for_issuer_label
 from app.services.imports.parsers import ParseError, ParseResult, ParsedRow, parse_statement
@@ -409,6 +409,7 @@ def _expense_ledger(db: Session, user: User, start: date, end: date) -> list[Led
                 note=tx.note,
                 category_id=tx.category_id,
                 category_name=cat.name,
+                already_imported=tx.import_fingerprint is not None,
             )
         )
     return out
@@ -422,7 +423,7 @@ def _apply_matches(db: Session, user: User, candidates: list[ImportCandidate]) -
     end = max(c.trans_date for c in pending) + timedelta(days=TIGHT_DATE_WINDOW_DAYS)
     ledger = _expense_ledger(db, user, start, end)
     payload = [(c, c.trans_date, c.amount, c.description) for c in pending]
-    assigned = assign_fuzzy_matches(payload, ledger)
+    assigned = assign_inbox_matches(payload, ledger)
     for idx, cand in enumerate(pending):
         match = assigned.get(idx)
         if match is None:

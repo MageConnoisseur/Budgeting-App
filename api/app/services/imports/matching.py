@@ -1,15 +1,17 @@
 """Rounding-aware fuzzy match of import rows against existing tracker entries.
 
 Tight windows (this version): amount within $1, date within 2 days, same sign.
+A second pass flags a same-payee tip gap: the imported charge is higher than
+the logged amount by at least $2 and by 15–30%, still within 2 days.
 Do not auto-merge — two real $12 coffees on the same day must stay distinct.
-Loose windows stay documented here for a later confirmation pile.
+Loose dollar windows stay documented here for a later confirmation pile.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, timedelta
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from uuid import UUID
 
 from app.services.imports.fingerprints import (
@@ -21,6 +23,17 @@ from app.services.imports.fingerprints import (
 # High-confidence inbox flag (covers nearest-dollar rounding + posted vs purchase).
 TIGHT_AMOUNT_WINDOW = Decimal("1.00")
 TIGHT_DATE_WINDOW_DAYS = 2
+
+# Pre-tip authorization vs posted check. Narrow on purpose: a flat dollar
+# window would flag unrelated meals, and a 2% band is rounding, not a tip.
+# Same payee, posted higher, gap of at least $2 and 15–30%, within 2 days.
+TIP_MIN_DELTA = Decimal("2.00")
+TIP_MIN_RATIO = Decimal("0.15")
+TIP_MAX_RATIO = Decimal("0.30")
+TIP_TARGET_RATIO = Decimal("0.20")
+TIP_DATE_WINDOW_DAYS = TIGHT_DATE_WINDOW_DAYS
+# Two logged amounts this close to the same posted total are too alike to guess.
+TIP_AMBIGUITY = Decimal("0.02")
 
 # Future “possible duplicate” pile — not applied automatically.
 LOOSE_AMOUNT_WINDOW = Decimal("5.00")
@@ -35,6 +48,8 @@ class LedgerRow:
     note: str | None
     category_id: UUID
     category_name: str
+    # Already linked to an import. A tip suggestion against it cannot merge.
+    already_imported: bool = False
 
 
 @dataclass(frozen=True)
@@ -151,6 +166,143 @@ def assign_fuzzy_matches(
     return assigned
 
 
+def _as_fuzzy(tx: LedgerRow, amount: Decimal, trans_date: date) -> FuzzyMatch:
+    return FuzzyMatch(
+        transaction_id=tx.id,
+        date=tx.date,
+        amount=tx.amount,
+        note=tx.note,
+        category_id=tx.category_id,
+        category_name=tx.category_name,
+        amount_delta=abs(abs(amount) - abs(tx.amount)),
+        date_delta_days=abs((tx.date - trans_date).days),
+    )
+
+
+@dataclass(frozen=True)
+class _TipPair:
+    distance: Decimal
+    date_delta: int
+    overlap: int
+    index: int
+    tx: LedgerRow
+    posted: Decimal
+    trans_date: date
+
+
+def assign_tip_matches(
+    candidates: list[tuple[object, date, Decimal, str]],
+    ledger: list[LedgerRow],
+    *,
+    skip_indexes: set[int] | None = None,
+    skip_transaction_ids: set[UUID] | None = None,
+) -> dict[int, FuzzyMatch]:
+    """1-to-1 matches for a pre-tip log vs the posted charge.
+
+    Requires a strong payee, a posted amount at least $2 and 15–30% higher,
+    and a date within 2 days. Skips a row when two logged amounts are similarly
+    plausible, and prefers the gap closer to 20% when one posted total could
+    fit two imports. Never matches a charge that is already imported.
+    """
+    if not candidates or not ledger:
+        return {}
+    skipped_idx = skip_indexes or set()
+    skipped_tx = skip_transaction_ids or set()
+    dates = [c[1] for c in candidates]
+    start = min(dates) - timedelta(days=TIP_DATE_WINDOW_DAYS)
+    end = max(dates) + timedelta(days=TIP_DATE_WINDOW_DAYS)
+    pool = [
+        tx
+        for tx in ledger
+        if start <= tx.date <= end and tx.id not in skipped_tx and not tx.already_imported
+    ]
+    if not pool:
+        return {}
+
+    pairs: list[_TipPair] = []
+    for idx, (_obj, trans_date, amount, description) in enumerate(candidates):
+        if idx in skipped_idx or amount <= 0:
+            continue
+        for tx in pool:
+            ratio = tip_ratio(amount, tx.amount)
+            if ratio is None:
+                continue
+            date_delta = abs((tx.date - trans_date).days)
+            if date_delta > TIP_DATE_WINDOW_DAYS:
+                continue
+            if _payee_strength(description, tx.note) != "strong":
+                continue
+            overlap = len(
+                merchant_tokens(merchant_key(description))
+                & merchant_tokens(merchant_key(tx.note or ""))
+            )
+            pairs.append(
+                _TipPair(
+                    distance=abs(ratio - TIP_TARGET_RATIO),
+                    date_delta=date_delta,
+                    overlap=overlap,
+                    index=idx,
+                    tx=tx,
+                    posted=amount,
+                    trans_date=trans_date,
+                )
+            )
+    if not pairs:
+        return {}
+
+    by_index: dict[int, list[_TipPair]] = {}
+    for pair in pairs:
+        by_index.setdefault(pair.index, []).append(pair)
+
+    ambiguous: set[int] = set()
+    for idx, opts in by_index.items():
+        opts.sort(key=lambda pair: (pair.distance, pair.date_delta, -pair.overlap))
+        if len(opts) < 2:
+            continue
+        best, second = opts[0], opts[1]
+        ratio_close = second.distance - best.distance <= TIP_AMBIGUITY
+        # A nearer date breaks the tie. Two same-day amounts do not.
+        date_tie = second.date_delta <= best.date_delta
+        if ratio_close and date_tie:
+            ambiguous.add(idx)
+
+    ordered = [pair for pair in pairs if pair.index not in ambiguous]
+    ordered.sort(key=lambda pair: (pair.distance, pair.date_delta, -pair.overlap, pair.index))
+    used_tx: set[UUID] = set()
+    used_idx: set[int] = set()
+    assigned: dict[int, FuzzyMatch] = {}
+    for pair in ordered:
+        if pair.index in used_idx or pair.tx.id in used_tx:
+            continue
+        used_idx.add(pair.index)
+        used_tx.add(pair.tx.id)
+        assigned[pair.index] = _as_fuzzy(pair.tx, pair.posted, pair.trans_date)
+    return assigned
+
+
+def assign_inbox_matches(
+    candidates: list[tuple[object, date, Decimal, str]],
+    ledger: list[LedgerRow],
+    *,
+    amount_window: Decimal = TIGHT_AMOUNT_WINDOW,
+    date_window_days: int = TIGHT_DATE_WINDOW_DAYS,
+) -> dict[int, FuzzyMatch]:
+    """Tight rounding matches first, then tip gaps on whatever is left."""
+    tight = assign_fuzzy_matches(
+        candidates,
+        ledger,
+        amount_window=amount_window,
+        date_window_days=date_window_days,
+    )
+    tip = assign_tip_matches(
+        candidates,
+        ledger,
+        skip_indexes=set(tight),
+        skip_transaction_ids={match.transaction_id for match in tight.values()},
+    )
+    return {**tight, **tip}
+
+
 def _payee_strength(description: str, note: str | None) -> str:
     left = merchant_key(description)
     right = merchant_key(note or "")
@@ -164,8 +316,35 @@ def _payee_strength(description: str, note: str | None) -> str:
     return "none"
 
 
-def _likelihood_reason(amount_delta: Decimal, date_delta: int, payee: str) -> str:
-    if amount_delta == 0:
+def tip_ratio(posted: Decimal, manual: Decimal) -> Decimal | None:
+    """Gap as a fraction of the logged amount, when it looks like a tip.
+
+    The imported charge must be a positive amount strictly above the logged
+    expense. The difference must be at least $2 and between 15% and 30%.
+    A lower posted amount, a refund, or a coffee-sized gap is not a tip.
+    """
+    if posted <= 0 or manual <= 0 or posted <= manual:
+        return None
+    delta = posted - manual
+    if delta < TIP_MIN_DELTA:
+        return None
+    ratio = delta / manual
+    if ratio < TIP_MIN_RATIO or ratio > TIP_MAX_RATIO:
+        return None
+    return ratio
+
+
+def _likelihood_reason(
+    amount_delta: Decimal,
+    date_delta: int,
+    payee: str,
+    *,
+    tip: Decimal | None = None,
+) -> str:
+    if tip is not None:
+        pct = (tip * Decimal(100)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        amount_bit = f"Amount looks like a tip ({pct}% higher)"
+    elif amount_delta == 0:
         amount_bit = "Exact amount"
     elif amount_delta <= Decimal("0.50"):
         amount_bit = "Amount within 50¢"
@@ -206,6 +385,11 @@ def rate_duplicate(
     amount_delta = abs(abs(amount) - abs(tx_amount))
     date_delta = abs((tx_date - trans_date).days)
     payee = _payee_strength(description, tx_note)
+    # A tip gap scores no amount points, so same-day + strong payee stays
+    # "Likely" (70) instead of "Very likely". The inbox still asks.
+    tip = tip_ratio(amount, tx_amount)
+    if date_delta > TIP_DATE_WINDOW_DAYS:
+        tip = None
 
     if amount_delta == 0:
         amount_pts = 30
@@ -237,5 +421,5 @@ def rate_duplicate(
         level=level,
         score=score,
         label=label,
-        reason=_likelihood_reason(amount_delta, date_delta, payee),
+        reason=_likelihood_reason(amount_delta, date_delta, payee, tip=tip),
     )

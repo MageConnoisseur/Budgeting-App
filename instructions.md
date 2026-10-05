@@ -382,7 +382,7 @@ All user-owned rows must be scoped by authenticated user.
 | Periods | Calendar months now; custom ranges later |
 | Savings | Buckets with allocated balances, optional target goals + projected hit month, and monthly contribution plans. A savings category may be **not a bucket** (Categories): it still counts in leftover and the savings mix, and paid-toward is tracked, but it has no spendable balance, stays off bucket/balance charts, cannot fund expenses, and has no target. Expense lines may be **paid from** a *bucket* for a given month (planned use, whole category). A logged expense may be paid entirely from a bucket even when the plan does not; split a bill by logging the paycheck part and the bucket part as two expenses. Actual leftover ignores bucket-paid entries. Auto-seed does not copy paid-from links; copy-from and templates do. |
 | Tracker | Manual transactions first; note memory autocomplete; Discover CSV inbox per **§12** (staging, fingerprints, rounding-aware fuzzy match). Merchant auto-rules later |
-| CSV / bank import | **Discover CSV inbox shipped** (not silent ledger insert). Fingerprints; amount ±$1 and date ±2 days for possible duplicates; merge keeps category / note / paid-from and replaces rounded amount with posted. Auto category suggestion and bank sync later — see **§12** |
+| CSV / bank import | **Discover CSV inbox shipped** (not silent ledger insert). Fingerprints; amount ±$1 and date ±2 days for rounding duplicates; a same-payee tip gap (posted **higher** by **≥ $2** and **15–30%**, within ±2 days) is a separate inbox flag. Merge keeps category / note / paid-from and replaces the logged amount with posted. Auto category suggestion and bank sync later — see **§12** |
 | Over budget | Soft warnings; emphasize multi-month trends |
 | Plan coaching | After 3+ expense/savings overruns in a year: suggest raising the apply-month plan by the median overrun, or tip “looks seasonal” for a short contiguous cluster; one-click apply via annual budget cell; dismissals local-only |
 | Budget coach | Deterministic leftover coach (Phase 1.x): unassigned plan leftover → fund a savings bucket (prefer unmet targets); plan shortfall → optional trim of **flexible** spend (skip rent/mortgage/dominant housing-sized lines); income under-plan is only flagged after paydays or the month are due; plus existing raise/seasonal tips and spending-pace warnings. Dedicated **Coach** page + compact Dashboard widget. Apply is optional; dismissals local-only. |
@@ -463,6 +463,15 @@ Users often **round manual amounts to the nearest dollar** (e.g. posted `$42.18`
 | Merchant / note | `Costco` vs `COSTCO WHSE #123` | weaker overlap |
 
 Do **not** auto-merge on amount + date alone. Two real $12 coffees on the same day must remain distinguishable. Loose matches go to a “possible duplicate” pile.
+
+**Tip gap (inbox flag, not auto-merge).** A restaurant often authorizes the pre-tip total. Someone may log that pending amount, then the CSV posts the check with tip — often about 20% higher, which is outside the $1 rounding window. Flag it only when all of these hold:
+
+- Payee is a **strong** match (same chain). A note like “dinner” or a different restaurant stays unmatched.
+- The imported amount is **higher** than the logged expense (a tip adds money).
+- The gap is at least **$2** and **15–30%** of the logged amount. Under $2 stays quiet so two coffees at the same shop are not treated as a tip. Over 30% or under 15% stays quiet.
+- Dates are within **2 days**.
+
+One logged row matches at most one imported row. If two logged amounts are similarly close to the same posted total (within 2 percentage points, and the dates do not pick a nearer day), leave the row unmatched rather than guess. When two posted amounts could fit one log, prefer the gap closer to 20%. Merge still replaces the logged amount with the posted amount.
 
 Inbox actions:
 

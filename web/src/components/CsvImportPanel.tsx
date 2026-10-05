@@ -233,7 +233,9 @@ export function CsvImportPanel({
         review each charge. An identical line (same date, amount, and
         description) is skipped. A charge that only resembles something you
         already logged stays in the inbox with a likelihood score, so you can
-        merge it or keep both. Repeat merchants start in the category you used
+        merge it or keep both. That includes a rounded amount, and a pre-tip
+        total at the same place when the posted charge is about 15–30% higher.
+        Repeat merchants start in the category you used
         last time. New payees can pick up that category from similar Discover
         labels (Supermarkets → Groceries, Fuel → Gas) — change it if this one
         is different. Card payments are skipped (those are transfers). Nothing
