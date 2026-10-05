@@ -210,6 +210,60 @@ def test_fuzzy_merge_replaces_rounded_amount(auth_headers: dict[str, str]) -> No
     assert Decimal(groceries_row["actual"]) == Decimal("42.18")
 
 
+def test_tip_gap_merge_replaces_pretip_amount(auth_headers: dict[str, str]) -> None:
+    h = auth_headers
+    dining = client.post(
+        "/api/categories",
+        headers=h,
+        json={"kind": "expense", "name": "Dining"},
+    ).json()
+    manual = client.post(
+        "/api/transactions",
+        headers=h,
+        json={
+            "category_id": dining["id"],
+            "amount": "40.00",
+            "date": "2026-08-02",
+            "note": "Olive Garden",
+        },
+    )
+    assert manual.status_code == 201, manual.text
+    manual_id = manual.json()["id"]
+
+    csv = b"""Trans. Date,Post Date,Description,Amount,Category
+08/02/2026,08/03/2026,OLIVE GARDEN #88,48.00,Restaurants
+08/02/2026,08/03/2026,CHIPOTLE 12,48.00,Restaurants
+"""
+    committed = client.post(
+        "/api/imports",
+        headers=h,
+        files={"file": ("Discover-tips.csv", BytesIO(csv), "text/csv")},
+        data={"date_from": "2026-08-01", "date_to": "2026-08-31"},
+    )
+    assert committed.status_code == 200, committed.text
+    items = committed.json()["inbox"]["items"]
+    olive = next(i for i in items if i["description"].startswith("OLIVE"))
+    chipotle = next(i for i in items if i["description"].startswith("CHIPOTLE"))
+    assert olive["match_kind"] == "fuzzy"
+    assert olive["match_confidence"] == "medium"
+    assert olive["match_score"] == 70
+    assert "tip (20% higher)" in olive["match_reason"]
+    assert olive["matched_transaction"]["id"] == manual_id
+    assert chipotle["match_kind"] == "none"
+    assert chipotle["matched_transaction"] is None
+
+    merged = client.post(
+        f"/api/imports/candidates/{olive['id']}/merge",
+        headers=h,
+        json={},
+    )
+    assert merged.status_code == 200, merged.text
+    updated = client.get(f"/api/transactions/{manual_id}", headers=h).json()
+    assert Decimal(updated["amount"]) == Decimal("48.00")
+    assert updated["note"] == "Olive Garden"
+    assert updated["category_id"] == dining["id"]
+
+
 def test_repeat_merchant_prefills_last_category(auth_headers: dict[str, str]) -> None:
     h = auth_headers
     groceries = client.post(

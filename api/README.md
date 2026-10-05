@@ -15,7 +15,7 @@ Hosts on **Render**; database is **PostgreSQL on Neon**. Web (Vite/React on Verc
 - **Annual** budget surface (`GET /api/budgets/annual/{year}`, `PUT /api/budgets/annual/cell`)
 - Compact yearly actuals for budget-cell fills (`GET /api/budgets/actuals/{year}`)
 - Transactions with **search, sort, filters**, and pagination
-- **CSV statement inbox** (Discover first): date-range import, fingerprint dedup, rounding-aware possible-duplicate flags, accept / merge / skip
+- **CSV statement inbox** (Discover first): date-range import, fingerprint dedup, rounding-aware and same-payee tip-gap duplicate flags, accept / merge / skip
 - **Recurring schedules** for payday / regular expense tracking reminders (manual log/skip)
 - **Income estimate** for a month from tracker patterns + schedules
 - Dashboard monthly/annual insights with **soft** over-budget flags
