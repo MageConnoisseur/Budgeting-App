@@ -105,7 +105,7 @@ All data routes are under `/api` and require auth except `/api/auth/register`, `
 | Budgets | `GET/PUT /budgets/months/{year}/{month}`, `GET /budgets/annual/{year}`, `PUT /budgets/annual/cell`, copy/template actions |
 | Transactions | `GET/POST /transactions`, `GET/PATCH/DELETE /transactions/{id}` (`q`, `kind`, `category_id`, `date_from`, `date_to`, `sort_by`, `sort_dir`) |
 | Imports | `POST /imports/preview`, `POST /imports` (CSV + date range), `GET /imports/inbox`, accept / skip / merge candidates |
-| Recurring | `GET/POST /recurring-schedules`, due/log/skip, `GET /recurring-schedules/suggestions`, `GET /recurring-schedules/income-estimate` |
+| Recurring | `GET/POST /recurring-schedules` (income, expense, and savings reminders — log or skip, never auto-posted), due/log/skip, `GET /recurring-schedules/suggestions`, `GET /recurring-schedules/income-estimate` |
 | Dashboard | `GET /dashboard/monthly/{year}/{month}`, `GET /dashboard/annual/{year}`, layout + savings balances |
 | Mobile glance | `GET /mobile/glance?year=&month=` (leftover per category; savings include bucket balance). Does not seed months or return dashboard widgets. |
 

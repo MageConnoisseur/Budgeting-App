@@ -171,7 +171,7 @@ def detect_patterns(
     lookback_months: int = 6,
     min_samples: int = 3,
 ) -> list[dict]:
-    """Find income/expense categories that look recurring from tracker history."""
+    """Find income, expense, and savings categories that look recurring."""
     today = date.today()
     # Approximate lookback window.
     start_month = today.month - lookback_months
@@ -208,7 +208,12 @@ def detect_patterns(
         if tx.category.kind not in (
             CategoryKind.income.value,
             CategoryKind.expense.value,
+            CategoryKind.savings.value,
         ):
+            continue
+        # Paired savings rows are the cover for an expense. Suggesting them
+        # would schedule a second withdrawal of the same bill.
+        if tx.category.kind == CategoryKind.savings.value and tx.pair_id is not None:
             continue
         if tx.category_id in scheduled_cats:
             continue
@@ -218,8 +223,15 @@ def detect_patterns(
     for category_id, txs in by_cat.items():
         if len(txs) < min_samples:
             continue
-        # Use absolute amounts for consistency.
-        amounts = [abs(Decimal(t.amount)) for t in txs]
+        cat = txs[0].category
+        if cat is None:
+            continue
+        kind = CategoryKind(cat.kind)
+        # Savings keep their sign so a withdrawal is not suggested as a deposit.
+        if kind == CategoryKind.savings:
+            amounts = [Decimal(t.amount) for t in txs]
+        else:
+            amounts = [abs(Decimal(t.amount)) for t in txs]
         dates = [t.date for t in txs]
         intervals = [
             (dates[i] - dates[i - 1]).days for i in range(1, len(dates)) if (dates[i] - dates[i - 1]).days > 0
@@ -230,11 +242,12 @@ def detect_patterns(
         if avg_interval < 5 or avg_interval > 40:
             continue
 
-        # Amount stability: median ± 20%.
+        # Amount stability: median ± 20% of the absolute median.
         med_amt = Decimal(median(amounts))
-        if med_amt <= 0:
+        if med_amt == 0:
             continue
-        stable = sum(1 for a in amounts if abs(a - med_amt) / med_amt <= Decimal("0.20"))
+        scale = abs(med_amt)
+        stable = sum(1 for a in amounts if abs(a - med_amt) / scale <= Decimal("0.20"))
         if stable < min_samples:
             continue
 
@@ -259,10 +272,12 @@ def detect_patterns(
         else:
             anchor = 1
 
-        cat = txs[0].category
-        kind = CategoryKind(cat.kind)
         note = next((t.note for t in reversed(txs) if t.note), None)
-        label = "income" if kind == CategoryKind.income else "expense"
+        label = {
+            CategoryKind.income: "income",
+            CategoryKind.expense: "expense",
+            CategoryKind.savings: "savings",
+        }[kind]
         suggestions.append(
             {
                 "category_id": category_id,

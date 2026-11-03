@@ -3,6 +3,7 @@ import { ApiError } from '../api/client'
 import * as recurringApi from '../api/recurringSchedules'
 import { KindBadge } from './KindBadge'
 import { formatUsd, todayISO, toMoneyString } from '../lib/format'
+import { isSavingsBucket } from '../lib/savings'
 import type {
   Category,
   CategoryKind,
@@ -38,9 +39,12 @@ function defaultAnchor(frequency: RecurrenceFrequency): number {
 export function RecurringSchedulesPanel({
   categories,
   onLogged,
+  reloadToken = 0,
 }: {
   categories: Category[]
   onLogged?: () => void
+  /** Bump to reload schedules without remounting the add form. */
+  reloadToken?: number
 }) {
   const [items, setItems] = useState<RecurringSchedule[]>([])
   const [suggestions, setSuggestions] = useState<RecurringPatternSuggestion[]>(
@@ -84,20 +88,24 @@ export function RecurringSchedulesPanel({
 
   useEffect(() => {
     void load()
-  }, [load])
+  }, [load, reloadToken])
 
   useEffect(() => {
-    if (filteredCats.length && !filteredCats.some((c) => c.id === formCategory)) {
+    if (!filteredCats.length) {
+      if (formCategory) setFormCategory('')
+      return
+    }
+    if (!filteredCats.some((c) => c.id === formCategory)) {
       setFormCategory(filteredCats[0].id)
     }
   }, [filteredCats, formCategory])
 
+  const selectedCat = filteredCats.find((c) => c.id === formCategory) ?? null
+  const savingsBucket = selectedCat != null && isSavingsBucket(selectedCat)
+
   function resetForm() {
-    setFormKind('income')
     setFormAmount('')
     setFormNote('')
-    setFormFreq('biweekly')
-    setFormAnchor(defaultAnchor('biweekly'))
     setFormStart(todayISO())
     setShowForm(false)
   }
@@ -215,8 +223,8 @@ export function RecurringSchedulesPanel({
         <div>
           <h3 className="section-title">Scheduled tracking</h3>
           <p className="muted recurring-lead">
-            Remind yourself to log paychecks and regular withdrawals. Logging
-            still happens here in the tracker — nothing is auto-posted.
+            Remind yourself to log paychecks, bills, and savings. Logging still
+            happens here in the tracker — nothing is auto-posted.
           </p>
         </div>
         <button
@@ -241,6 +249,7 @@ export function RecurringSchedulesPanel({
               >
                 <option value="income">Income</option>
                 <option value="expense">Expense</option>
+                <option value="savings">Savings</option>
               </select>
             </label>
             <label className="grow">
@@ -262,13 +271,24 @@ export function RecurringSchedulesPanel({
               </select>
             </label>
             <label>
-              Amount
+              {formKind === 'savings' && savingsBucket
+                ? 'Amount (+ in / − out)'
+                : 'Amount'}
               <input
                 inputMode="decimal"
                 value={formAmount}
                 onChange={(e) => setFormAmount(e.target.value)}
                 required
-                placeholder="0.00"
+                placeholder={
+                  formKind === 'savings' && savingsBucket
+                    ? 'e.g. 200 or -150'
+                    : '0.00'
+                }
+                aria-describedby={
+                  formKind === 'savings' && selectedCat
+                    ? 'savings-schedule-hint'
+                    : undefined
+                }
               />
             </label>
             <label>
@@ -338,6 +358,23 @@ export function RecurringSchedulesPanel({
               {saving ? 'Saving…' : 'Save schedule'}
             </button>
           </div>
+          {formKind === 'savings' && selectedCat && (
+            <p className="muted compact" id="savings-schedule-hint">
+              {savingsBucket ? (
+                <>
+                  A positive amount adds to the bucket. A negative amount is a
+                  standalone withdrawal. When a bill should come out of this
+                  bucket, schedule the expense and set <strong>Pay from</strong>{' '}
+                  when you log it.
+                </>
+              ) : (
+                <>
+                  This line is not a spendable bucket. Schedule the amount you
+                  pay toward it.
+                </>
+              )}
+            </p>
+          )}
         </form>
       )}
 
@@ -366,8 +403,8 @@ export function RecurringSchedulesPanel({
         <p className="muted">Loading schedules…</p>
       ) : items.length === 0 ? (
         <p className="empty">
-          No schedules yet. Add one for payday or a monthly bill, or wait for
-          pattern tips after a few similar logs.
+          No schedules yet. Add one for payday, a monthly bill, or a savings
+          contribution, or wait for pattern tips after a few similar logs.
         </p>
       ) : (
         <>

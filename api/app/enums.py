@@ -15,7 +15,7 @@ class ViewMode(str, enum.Enum):
 
 
 class RecurrenceFrequency(str, enum.Enum):
-    """How often a scheduled income/expense is expected."""
+    """How often a scheduled income, expense, or savings entry is expected."""
 
     weekly = "weekly"
     biweekly = "biweekly"

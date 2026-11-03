@@ -178,7 +178,7 @@ def build_recurring_load(
                 category_id=sched.category_id,
                 category_name=cat.name,
                 kind=CategoryKind(cat.kind),
-                amount=_money(abs(sched.amount)),
+                amount=_money(sched.amount),
                 note=sched.note,
                 next_occurrence=sched.next_occurrence,
                 occurrences_this_period=len(dates),

@@ -49,7 +49,20 @@ export function RecurringPrompt({
     void weekday
   }, [draft])
 
-  const kindLabel = draft.kind === 'income' ? 'income' : 'expense'
+  const kindLabel =
+    draft.kind === 'income'
+      ? 'income'
+      : draft.kind === 'savings'
+        ? 'savings'
+        : 'expense'
+  const duePhrase =
+    draft.kind === 'income'
+      ? 'on payday'
+      : draft.kind === 'savings'
+        ? Number(draft.amount) < 0
+          ? 'when you next withdraw'
+          : 'when you next set money aside'
+        : 'on the next bill'
   const weekday = useMemo(() => {
     const d = new Date(`${draft.date}T12:00:00`)
     return d.getDay() === 0 ? 7 : d.getDay()
@@ -91,7 +104,7 @@ export function RecurringPrompt({
         <p>
           Want to schedule this {kindLabel} (
           <strong>{draft.categoryName}</strong> · {formatUsd(draft.amount)}) so
-          it shows up again on payday or withdrawal day?
+          it shows up again {duePhrase}?
         </p>
         <div className="row-gap">
           <button

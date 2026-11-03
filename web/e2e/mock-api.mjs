@@ -20,6 +20,8 @@ const categories = new Map()
 /** @type {Map<string, Month>} key = userId:year:month */
 const months = new Map()
 const transactions = new Map()
+/** @type {Map<string, { id: string, userId: string, category_id: string, amount: string, note: string | null, frequency: string, anchor_day: number, start_date: string, end_date: string | null, next_occurrence: string, active: boolean, created_at: string, updated_at: string }>} */
+const schedules = new Map()
 /** @type {Map<string, { widgets: object[], presets: object[], active_preset_id: string | null }>} */
 const layouts = new Map()
 
@@ -158,20 +160,14 @@ function emptyPace() {
   const today = new Date().toISOString().slice(0, 10)
   return {
     as_of: today,
-    window_start: today,
-    window_end: today,
-    window_days: 0,
-    income: '0.00',
-    expense: '0.00',
-    savings: '0.00',
-    outflow: '0.00',
-    net: '0.00',
-    average_daily_income: '0.00',
-    expected_income: '0.00',
-    income_lookback_start: null,
-    income_lookback_end: null,
-    income_lookback_days: 0,
-    tracking_started_on: null,
+    period_start: `${today.slice(0, 8)}01`,
+    period_end: today,
+    period_days: 30,
+    days_elapsed: 1,
+    days_left: 29,
+    expense_planned: '0.00',
+    expense_spent: '0.00',
+    budget_to_date: '0.00',
     overspending: false,
     has_data: false,
     days: [],
@@ -385,6 +381,27 @@ function defaultLayout(viewMode) {
     widgets,
     presets,
     active_preset_id: 'setaside-this-month',
+  }
+}
+
+function publicSchedule(s) {
+  const cat = categories.get(s.category_id)
+  const today = new Date().toISOString().slice(0, 10)
+  return {
+    id: s.id,
+    category_id: s.category_id,
+    amount: s.amount,
+    note: s.note,
+    frequency: s.frequency,
+    anchor_day: s.anchor_day,
+    start_date: s.start_date,
+    end_date: s.end_date,
+    next_occurrence: s.next_occurrence,
+    active: s.active,
+    created_at: s.created_at,
+    updated_at: s.updated_at,
+    category: cat ? publicCategory(cat) : null,
+    is_due: Boolean(s.active && s.next_occurrence <= today),
   }
 }
 
@@ -666,8 +683,85 @@ async function handle(req, res) {
     return
   }
 
-  if (path.startsWith('/api/recurring-schedules') && method === 'GET') {
+  if (path === '/api/recurring-schedules/suggestions' && method === 'GET') {
     json(res, 200, { items: [] })
+    return
+  }
+
+  if (path === '/api/recurring-schedules' && method === 'GET') {
+    const items = [...schedules.values()]
+      .filter((s) => s.userId === user.id)
+      .map(publicSchedule)
+    json(res, 200, { items })
+    return
+  }
+
+  if (path === '/api/recurring-schedules' && method === 'POST') {
+    const body = await readBody(req)
+    const cat = categories.get(body.category_id)
+    if (!cat || cat.userId !== user.id) {
+      json(res, 404, { detail: 'Category not found' })
+      return
+    }
+    if (cat.archived) {
+      json(res, 400, { detail: 'Cannot schedule an archived category' })
+      return
+    }
+    const numeric = Number(body.amount)
+    if (!Number.isFinite(numeric) || numeric === 0) {
+      json(res, 422, { detail: 'amount must not be zero' })
+      return
+    }
+    if ((cat.kind === 'income' || cat.kind === 'expense') && numeric < 0) {
+      json(res, 400, { detail: `${cat.kind} amounts must be positive` })
+      return
+    }
+    const now = nowIso()
+    const row = {
+      id: randomUUID(),
+      userId: user.id,
+      category_id: body.category_id,
+      amount: money(numeric),
+      note: body.note || null,
+      frequency: body.frequency,
+      anchor_day: Number(body.anchor_day || 1),
+      start_date: body.start_date,
+      end_date: body.end_date || null,
+      next_occurrence: body.start_date,
+      active: body.active !== false,
+      created_at: now,
+      updated_at: now,
+    }
+    schedules.set(row.id, row)
+    json(res, 201, publicSchedule(row))
+    return
+  }
+
+  const recurringLog = /^\/api\/recurring-schedules\/([^/]+)\/log$/.exec(path)
+  if (recurringLog && method === 'POST') {
+    const sched = schedules.get(recurringLog[1])
+    if (!sched || sched.userId !== user.id) {
+      json(res, 404, { detail: 'Schedule not found' })
+      return
+    }
+    const cat = categories.get(sched.category_id)
+    if (!cat || cat.archived) {
+      json(res, 400, { detail: 'Cannot log against an archived category' })
+      return
+    }
+    const body = await readBody(req)
+    const tx = {
+      id: randomUUID(),
+      userId: user.id,
+      category_id: sched.category_id,
+      amount: money(body.amount ?? sched.amount),
+      date: body.date || sched.next_occurrence,
+      note: body.note ?? sched.note,
+      pair_id: null,
+      created_at: nowIso(),
+    }
+    transactions.set(tx.id, tx)
+    json(res, 200, { transaction: txOut(tx), schedule: publicSchedule(sched) })
     return
   }
 

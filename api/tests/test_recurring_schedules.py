@@ -204,23 +204,256 @@ def test_pattern_suggestions_and_income_estimate(auth_headers: dict[str, str]) -
     assert est2.json()["based_on_schedules"] >= 1
 
 
-def test_rejects_savings_schedule(auth_headers: dict[str, str]) -> None:
+def _prior_month_dates(count: int = 4) -> list[date]:
+    today = date.today()
+    out: list[date] = []
+    for months_ago in range(count, 0, -1):
+        y = today.year
+        m = today.month - months_ago
+        while m <= 0:
+            m += 12
+            y -= 1
+        out.append(date(y, m, min(15, 28)))
+    return out
+
+
+def test_savings_contribution_and_withdrawal_schedules(auth_headers: dict[str, str]) -> None:
     h = auth_headers
-    sav = client.post(
+    fund = client.post(
         "/api/categories",
         headers=h,
         json={"kind": "savings", "name": f"Emergency {uuid.uuid4().hex[:6]}"},
     )
-    assert sav.status_code == 201
-    bad = client.post(
+    assert fund.status_code == 201, fund.text
+    fund_id = fund.json()["id"]
+    expense = client.post(
+        "/api/categories",
+        headers=h,
+        json={"kind": "expense", "name": f"Rent {uuid.uuid4().hex[:6]}"},
+    )
+    assert expense.status_code == 201, expense.text
+    expense_id = expense.json()["id"]
+
+    today = date.today()
+    start = date(today.year, today.month, 1)
+    anchor = min(today.day, 28)
+
+    created = client.post(
         "/api/recurring-schedules",
         headers=h,
         json={
-            "category_id": sav.json()["id"],
-            "amount": "100.00",
+            "category_id": fund_id,
+            "amount": "200.00",
+            "note": "Emergency transfer",
             "frequency": "monthly",
-            "anchor_day": 1,
-            "start_date": date.today().isoformat(),
+            "anchor_day": anchor,
+            "start_date": start.isoformat(),
         },
     )
-    assert bad.status_code == 400
+    assert created.status_code == 201, created.text
+    sched = created.json()
+    assert sched["category"]["kind"] == "savings"
+    assert Decimal(sched["amount"]) == Decimal("200.00")
+
+    listed = client.get(
+        "/api/recurring-schedules",
+        headers=h,
+        params={"kind": "savings", "active_only": False},
+    )
+    assert listed.status_code == 200, listed.text
+    assert any(i["id"] == sched["id"] for i in listed.json()["items"])
+
+    logged = client.post(f"/api/recurring-schedules/{sched['id']}/log", headers=h, json={})
+    assert logged.status_code == 200, logged.text
+    tx = logged.json()["transaction"]
+    assert tx["category_id"] == fund_id
+    assert Decimal(tx["amount"]) == Decimal("200.00")
+    assert tx["pair_id"] is None
+    assert tx["note"] == "Emergency transfer"
+
+    withdrawal = client.post(
+        "/api/recurring-schedules",
+        headers=h,
+        json={
+            "category_id": fund_id,
+            "amount": "-75.00",
+            "note": "Move to checking",
+            "frequency": "monthly",
+            "anchor_day": anchor,
+            "start_date": start.isoformat(),
+        },
+    )
+    assert withdrawal.status_code == 201, withdrawal.text
+    withdrawal_id = withdrawal.json()["id"]
+
+    dash = client.get(
+        f"/api/dashboard/monthly/{today.year}/{today.month}",
+        headers=h,
+    )
+    assert dash.status_code == 200, dash.text
+    load = dash.json()["recurring_load"]
+    withdraw_row = next(i for i in load if i["schedule_id"] == withdrawal_id)
+    assert withdraw_row["kind"] == "savings"
+    assert Decimal(withdraw_row["amount"]) == Decimal("-75.00")
+
+    pulled = client.post(
+        f"/api/recurring-schedules/{withdrawal_id}/log",
+        headers=h,
+        json={},
+    )
+    assert pulled.status_code == 200, pulled.text
+    pulled_tx = pulled.json()["transaction"]
+    assert Decimal(pulled_tx["amount"]) == Decimal("-75.00")
+    assert pulled_tx["pair_id"] is None
+
+    # An expense schedule can be pointed at savings, but a negative expense cannot.
+    rent = client.post(
+        "/api/recurring-schedules",
+        headers=h,
+        json={
+            "category_id": expense_id,
+            "amount": "10.00",
+            "frequency": "monthly",
+            "anchor_day": anchor,
+            "start_date": start.isoformat(),
+        },
+    )
+    assert rent.status_code == 201, rent.text
+    negative = client.patch(
+        f"/api/recurring-schedules/{rent.json()['id']}",
+        headers=h,
+        json={"amount": "-10.00"},
+    )
+    assert negative.status_code == 400, negative.text
+    moved = client.patch(
+        f"/api/recurring-schedules/{rent.json()['id']}",
+        headers=h,
+        json={"category_id": fund_id, "amount": "40.00"},
+    )
+    assert moved.status_code == 200, moved.text
+    assert moved.json()["category"]["kind"] == "savings"
+    assert Decimal(moved.json()["amount"]) == Decimal("40.00")
+
+    extra = client.post(
+        "/api/categories",
+        headers=h,
+        json={
+            "kind": "savings",
+            "name": f"Loan {uuid.uuid4().hex[:6]}",
+            "is_bucket": False,
+        },
+    )
+    assert extra.status_code == 201, extra.text
+    loan = client.post(
+        "/api/recurring-schedules",
+        headers=h,
+        json={
+            "category_id": extra.json()["id"],
+            "amount": "125.00",
+            "frequency": "monthly",
+            "anchor_day": anchor,
+            "start_date": start.isoformat(),
+        },
+    )
+    assert loan.status_code == 201, loan.text
+    assert loan.json()["category"]["is_bucket"] is False
+
+    archived = client.delete(f"/api/categories/{extra.json()['id']}", headers=h)
+    assert archived.status_code == 204, archived.text
+    blocked = client.post(
+        f"/api/recurring-schedules/{loan.json()['id']}/log",
+        headers=h,
+        json={},
+    )
+    assert blocked.status_code == 400, blocked.text
+
+
+def test_savings_patterns_keep_sign_and_skip_paired_covers(
+    auth_headers: dict[str, str],
+) -> None:
+    h = auth_headers
+    fund = client.post(
+        "/api/categories",
+        headers=h,
+        json={"kind": "savings", "name": f"House {uuid.uuid4().hex[:6]}"},
+    ).json()
+    car = client.post(
+        "/api/categories",
+        headers=h,
+        json={"kind": "expense", "name": f"Car {uuid.uuid4().hex[:6]}"},
+    ).json()
+    standalone = client.post(
+        "/api/categories",
+        headers=h,
+        json={"kind": "savings", "name": f"Brokerage {uuid.uuid4().hex[:6]}"},
+    ).json()
+
+    for day in _prior_month_dates():
+        paid = client.post(
+            "/api/transactions",
+            headers=h,
+            json={
+                "category_id": car["id"],
+                "amount": "500.00",
+                "date": day.isoformat(),
+                "note": "Shop",
+                "withdraw_from_category_id": fund["id"],
+            },
+        )
+        assert paid.status_code == 201, paid.text
+        withdraw = client.post(
+            "/api/transactions",
+            headers=h,
+            json={
+                "category_id": standalone["id"],
+                "amount": "-150.00",
+                "date": day.isoformat(),
+                "note": "Invest",
+            },
+        )
+        assert withdraw.status_code == 201, withdraw.text
+
+    tips = client.get("/api/recurring-schedules/suggestions", headers=h)
+    assert tips.status_code == 200, tips.text
+    items = tips.json()["items"]
+    assert all(i["category_id"] != fund["id"] for i in items)
+    car_tip = next(i for i in items if i["category_id"] == car["id"])
+    assert car_tip["kind"] == "expense"
+    assert Decimal(car_tip["suggested_amount"]) == Decimal("500.00")
+    withdraw_tip = next(i for i in items if i["category_id"] == standalone["id"])
+    assert withdraw_tip["kind"] == "savings"
+    assert Decimal(withdraw_tip["suggested_amount"]) == Decimal("-150.00")
+    assert "savings" in withdraw_tip["message"]
+
+
+def test_income_estimate_ignores_savings_schedule(auth_headers: dict[str, str]) -> None:
+    h = auth_headers
+    fund = client.post(
+        "/api/categories",
+        headers=h,
+        json={"kind": "savings", "name": f"Emergency {uuid.uuid4().hex[:6]}"},
+    )
+    assert fund.status_code == 201, fund.text
+    today = date.today()
+    sched = client.post(
+        "/api/recurring-schedules",
+        headers=h,
+        json={
+            "category_id": fund.json()["id"],
+            "amount": "800.00",
+            "frequency": "monthly",
+            "anchor_day": 1,
+            "start_date": date(today.year, today.month, 1).isoformat(),
+        },
+    )
+    assert sched.status_code == 201, sched.text
+    est = client.get(
+        "/api/recurring-schedules/income-estimate",
+        headers=h,
+        params={"year": today.year, "month": today.month},
+    )
+    assert est.status_code == 200, est.text
+    body = est.json()
+    assert Decimal(body["estimated_total"]) == Decimal("0.00")
+    assert body["based_on_schedules"] == 0
+    assert all(c["category_id"] != fund.json()["id"] for c in body["categories"])
