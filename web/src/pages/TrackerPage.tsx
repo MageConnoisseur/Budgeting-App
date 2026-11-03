@@ -56,6 +56,7 @@ export function TrackerPage() {
   /** Savings category id, or empty when this expense is paid from income. */
   const [payFromId, setPayFromId] = useState('')
   const payFromTouchedRef = useRef(false)
+  const [fundingTick, setFundingTick] = useState(0)
 
   const filteredCats = useMemo(() => {
     const active = categories.filter((c) => c.kind === formKind && !c.archived)
@@ -144,10 +145,14 @@ export function TrackerPage() {
     return () => {
       cancelled = true
     }
-  }, [formKind, formCategory, formDate, editingId])
+  }, [formKind, formCategory, formDate, editingId, fundingTick])
 
   useEffect(() => {
-    if (filteredCats.length && !filteredCats.some((c) => c.id === formCategory)) {
+    if (!filteredCats.length) {
+      if (formCategory) setFormCategory('')
+      return
+    }
+    if (!filteredCats.some((c) => c.id === formCategory)) {
       setFormCategory(filteredCats[0].id)
     }
   }, [filteredCats, formCategory])
@@ -165,15 +170,15 @@ export function TrackerPage() {
 
   function resetForm() {
     setEditingId(null)
-    setFormKind('expense')
     setFormAmount('')
     setFormNote('')
     setNoteHint(null)
     setFormDate(todayISO())
-    const expenseCats = categories.filter((c) => c.kind === 'expense' && !c.archived)
-    setFormCategory(expenseCats[0]?.id ?? '')
+    // Drop any manual Pay-from so the next expense uses this month's plan.
+    // fundingTick refetches that plan; leaving the old id would log it again.
     payFromTouchedRef.current = false
     setPayFromId('')
+    setFundingTick((n) => n + 1)
   }
 
   function startEdit(tx: Transaction) {
@@ -244,11 +249,7 @@ export function TrackerPage() {
       resetForm()
       setOffset(0)
       await load()
-      if (
-        creating &&
-        (promptKind === 'income' || promptKind === 'expense') &&
-        promptCat
-      ) {
+      if (creating && promptCat) {
         setRecurringPrompt({
           categoryId: promptCat.id,
           categoryName: promptCat.name,
@@ -468,8 +469,8 @@ export function TrackerPage() {
       <IncomeEstimatePanel />
 
       <RecurringSchedulesPanel
-        key={schedulesKey}
         categories={categories}
+        reloadToken={schedulesKey}
         onLogged={() => {
           setOffset(0)
           void load()

@@ -271,26 +271,31 @@ export function RecurringDueWidget({
         <p className="muted">No recurring schedules land in this month.</p>
       ) : (
         <ul className="bucket-list">
-          {rows.map((row) => (
-            <li key={row.schedule_id}>
-              <div className="bucket-row">
-                <span>
-                  {row.category_name} <KindBadge kind={row.kind} />
-                </span>
-                <strong>
-                  {formatUsd(row.amount)} × {row.occurrences_this_period}
-                </strong>
-              </div>
-              <p className="muted compact">
-                Remaining in category {formatUsd(row.remaining_in_category)} · logged{' '}
-                {formatUsd(row.logged_this_period)}
-                {n(row.remaining_in_category) < n(row.amount) ? ' · ' : ''}
-                {n(row.remaining_in_category) < n(row.amount) && (
-                  <SoftWarning message="Remaining is less than the next occurrence" />
-                )}
-              </p>
-            </li>
-          ))}
+          {rows.map((row) => {
+            const scheduled = n(row.amount)
+            const shortOnPlan =
+              scheduled > 0 && n(row.remaining_in_category) < scheduled
+            return (
+              <li key={row.schedule_id}>
+                <div className="bucket-row">
+                  <span>
+                    {row.category_name} <KindBadge kind={row.kind} />
+                  </span>
+                  <strong>
+                    {formatUsd(row.amount)} × {row.occurrences_this_period}
+                  </strong>
+                </div>
+                <p className="muted compact">
+                  Remaining in category {formatUsd(row.remaining_in_category)} · logged{' '}
+                  {formatUsd(row.logged_this_period)}
+                  {shortOnPlan ? ' · ' : ''}
+                  {shortOnPlan && (
+                    <SoftWarning message="Remaining is less than the next occurrence" />
+                  )}
+                </p>
+              </li>
+            )
+          })}
         </ul>
       )}
     </div>

@@ -163,11 +163,6 @@ def create_schedule(
     cat = _get_category(db, user, body.category_id)
     if cat.archived:
         raise HTTPException(status_code=400, detail="Cannot schedule an archived category")
-    if cat.kind == CategoryKind.savings.value:
-        raise HTTPException(
-            status_code=400,
-            detail="Recurring schedules are for income and expense categories",
-        )
     _validate_amount_for_kind(cat.kind, body.amount)
     try:
         anchor = validate_anchor_day(body.frequency, body.anchor_day)
@@ -222,11 +217,8 @@ def update_schedule(
 
     category_id = updates.get("category_id", sched.category_id)
     cat = _get_category(db, user, category_id)
-    if cat.kind == CategoryKind.savings.value:
-        raise HTTPException(
-            status_code=400,
-            detail="Recurring schedules are for income and expense categories",
-        )
+    if cat.archived and category_id != sched.category_id:
+        raise HTTPException(status_code=400, detail="Cannot schedule an archived category")
     amount = updates.get("amount", sched.amount)
     _validate_amount_for_kind(cat.kind, amount)
 
@@ -307,6 +299,8 @@ def log_occurrence(
     cat = sched.category
     if cat is None:
         raise HTTPException(status_code=400, detail="Schedule category missing")
+    if cat.archived:
+        raise HTTPException(status_code=400, detail="Cannot log against an archived category")
 
     amount = body.amount if body.amount is not None else sched.amount
     _validate_amount_for_kind(cat.kind, amount)

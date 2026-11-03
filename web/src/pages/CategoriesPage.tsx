@@ -71,7 +71,6 @@ export function CategoriesPage() {
       await categoriesApi.createCategory(body)
       setName('')
       setTargetAmount('')
-      setIsBucket(true)
       await load()
     } catch (err) {
       setError(err instanceof ApiError ? err.detail : 'Could not create')

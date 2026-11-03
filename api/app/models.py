@@ -376,10 +376,11 @@ class Transaction(Base):
 
 
 class RecurringSchedule(Base):
-    """User-defined recurring income/expense reminder for the tracker.
+    """User-defined recurring income, expense, or savings reminder.
 
-    Schedules do not auto-create transactions — they surface due dates so the
-    user can log (or skip) on payday / withdrawal day.
+    Schedules do not auto-create transactions. They surface due dates so the
+    user can log or skip a paycheck, a bill, a savings contribution, or a
+    standalone bucket withdrawal.
     """
 
     __tablename__ = "recurring_schedules"
