@@ -5,5 +5,29 @@
   <string name="widget_income">Income</string>
   <string name="widget_expense">Expense</string>
   <string name="widget_savings">Savings</string>
+  <string name="log_sheet_close">Close</string>
+  <string name="log_sheet_category">Category</string>
+  <string name="log_sheet_choose">Choose a category</string>
+  <string name="log_sheet_amount">Amount</string>
+  <string name="log_sheet_date">Date</string>
+  <string name="log_sheet_prev_day">Previous day</string>
+  <string name="log_sheet_next_day">Next day</string>
+  <string name="log_sheet_today">Today</string>
+  <string name="log_sheet_note">Note</string>
+  <string name="log_sheet_note_hint">Optional</string>
+  <string name="log_sheet_title_income">Log income</string>
+  <string name="log_sheet_title_expense">Log an expense</string>
+  <string name="log_sheet_title_savings">Log savings</string>
+  <string name="log_sheet_save_income">Log income</string>
+  <string name="log_sheet_save_expense">Log expense</string>
+  <string name="log_sheet_save_savings">Log savings</string>
+  <string name="log_sheet_saving">Saving…</string>
+  <string name="log_sheet_need_category">Select a category.</string>
+  <string name="log_sheet_need_amount">Enter an amount greater than zero.</string>
+  <string name="log_sheet_need_sign_in">Sign in from Setaside once, then logs from here upload in the background.</string>
+  <string name="log_sheet_no_categories">No %1$s categories on this phone yet. Open Setaside once while you are online.</string>
+  <string name="log_sheet_withdraw">Also withdraw from %1$s</string>
+  <string name="log_sheet_save_failed">Could not save that log.</string>
+  <string name="log_sheet_untitled">Untitled</string>
   <string name="expo_system_ui_user_interface_style" translatable="false">light</string>
 </resources>

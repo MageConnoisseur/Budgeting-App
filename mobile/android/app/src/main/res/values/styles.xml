@@ -8,4 +8,20 @@
   <style name="Theme.App.SplashScreen" parent="AppTheme">
     <item name="android:windowBackground">@drawable/splashscreen_logo</item>
   </style>
+  <style name="Theme.Setaside.LogSheet" parent="Theme.AppCompat.Light.NoActionBar">
+    <item name="android:windowIsTranslucent">true</item>
+    <item name="android:windowBackground">@android:color/transparent</item>
+    <item name="android:windowIsFloating">false</item>
+    <item name="android:backgroundDimEnabled">false</item>
+    <item name="android:windowAnimationStyle">@null</item>
+    <item name="android:statusBarColor">@android:color/transparent</item>
+    <item name="android:navigationBarColor">#f3f6f2</item>
+    <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+    <item name="android:windowLightStatusBar">false</item>
+    <item name="android:windowLightNavigationBar">true</item>
+    <item name="colorPrimary">@color/colorPrimary</item>
+    <item name="android:windowSplashScreenBackground">@android:color/transparent</item>
+    <item name="android:windowSplashScreenAnimatedIcon">@drawable/log_sheet_transparent</item>
+    <item name="android:windowSplashScreenAnimationDuration">0</item>
+  </style>
 </resources>

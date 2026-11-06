@@ -7,7 +7,7 @@ export default {
   expo: {
     name: 'Setaside',
     slug: 'setaside',
-    version: '0.1.0',
+    version: '0.1.1',
     orientation: 'portrait',
     icon: './assets/icon.png',
     userInterfaceStyle: 'light',
@@ -23,7 +23,7 @@ export default {
     },
     android: {
       package: 'com.setasideplan.app',
-      versionCode: 1,
+      versionCode: 2,
       adaptiveIcon: {
         backgroundColor: '#1f4b3a',
         foregroundImage: './assets/android-icon-foreground.png',

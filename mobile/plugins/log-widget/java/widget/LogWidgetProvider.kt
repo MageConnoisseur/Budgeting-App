@@ -9,7 +9,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.widget.RemoteViews
-import com.setasideplan.app.MainActivity
 import com.setasideplan.app.R
 
 class LogWidgetProvider : AppWidgetProvider() {
@@ -32,7 +31,7 @@ class LogWidgetProvider : AppWidgetProvider() {
       Intent.ACTION_VIEW,
       Uri.parse("setaside://log/$kind"),
       context,
-      MainActivity::class.java,
+      LogSheetActivity::class.java,
     ).apply {
       flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
     }
