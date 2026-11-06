@@ -5,9 +5,11 @@ import { AuthProvider, useAuth } from './src/context/AuthContext'
 import { LoginScreen } from './src/screens/LoginScreen'
 import { TrackerScreen } from './src/screens/TrackerScreen'
 import { colors } from './src/theme'
+import { useLogLaunch } from './src/useLogLaunch'
 
 function Root() {
-  const { user, loading } = useAuth()
+  const { hasSession, loading } = useAuth()
+  const launch = useLogLaunch()
   if (loading) {
     return (
       <View style={styles.boot}>
@@ -15,7 +17,8 @@ function Root() {
       </View>
     )
   }
-  return user ? <TrackerScreen /> : <LoginScreen />
+  if (!hasSession) return <LoginScreen />
+  return <TrackerScreen launch={launch} />
 }
 
 export default function App() {

@@ -159,6 +159,7 @@ def create_transaction(
         note=body.note,
         withdraw_from_category_id=body.withdraw_from_category_id,
         withdraw_amount=body.withdraw_amount,
+        client_request_id=body.client_request_id,
     )
     return _outs(db, user, [created])[0]
 

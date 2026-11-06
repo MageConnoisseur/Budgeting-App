@@ -2,7 +2,9 @@
 
 Standalone phone app for leftover glance and logging. It is a real Android APK: install it, put the phone in your pocket, and it talks to the same live API as the website. Your computer does not need to stay on.
 
-**Fast path:** open Setaside → sign in → scan leftover → amount + category → log.
+**Fast path:** open Setaside (already signed in) → amount + category → log. The entry is saved on the phone immediately and uploaded in the background, including while the API is waking up.
+
+**Home screen:** long-press the home screen → Widgets → Setaside → Quick log. The widget is three icons: up arrow for income, down arrow for an expense, and a rising zigzag for savings. Tap one and the app expands into that log form with the category list open. Install a new APK to get the widget; an older install does not have it.
 
 Planning, category setup, budgets, dashboard, and coach stay on the website. This app does not reimplement them.
 

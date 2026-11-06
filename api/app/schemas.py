@@ -294,6 +294,20 @@ class TransactionCreate(BaseModel):
     withdraw_amount: Optional[Decimal] = Field(
         default=None, max_digits=14, decimal_places=2
     )
+    # Phone outbox id. Posting the same id again returns the original transaction.
+    client_request_id: Optional[str] = Field(default=None, max_length=64)
+
+    @field_validator("client_request_id")
+    @classmethod
+    def clean_client_request_id(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        text = v.strip()
+        if not text:
+            return None
+        if len(text) > 64 or any(not (ch.isalnum() or ch in "_-") for ch in text):
+            raise ValueError("client_request_id must be 1-64 letters, numbers, _ or -")
+        return text
 
     @field_validator("amount")
     @classmethod

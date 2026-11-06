@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
@@ -32,6 +32,17 @@ import {
   yearMonthFromISO,
 } from '../lib/format'
 import { colors, radius } from '../theme'
+import { enqueueLog } from '../upload/enqueueLog'
+import {
+  readCategoryCache,
+  readFundingEntry,
+  readOutbox,
+  removeQueued,
+  writeCategoryCache,
+  writeFundingEntry,
+} from '../upload/native'
+import type { OutboxItem } from '../upload/outbox'
+import type { LogLaunch } from '../useLogLaunch'
 import type {
   Category,
   CategoryKind,
@@ -39,6 +50,10 @@ import type {
   NoteSuggestion,
   Transaction,
 } from '../types'
+
+type ListRow =
+  | { key: string; source: 'local'; item: OutboxItem }
+  | { key: string; source: 'server'; item: Transaction }
 
 const PAGE_SIZE = 40
 const KINDS: CategoryKind[] = ['income', 'expense', 'savings']
@@ -63,12 +78,19 @@ function logButtonLabel(kind: CategoryKind, editing: boolean): string {
   return `Log ${kindNoun(kind)}`
 }
 
-export function TrackerScreen() {
+export function TrackerScreen({ launch }: { launch: LogLaunch | null }) {
   const { user, logout } = useAuth()
   const [categories, setCategories] = useState<Category[]>([])
   const [items, setItems] = useState<Transaction[]>([])
+  const [outbox, setOutbox] = useState<OutboxItem[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [sheetToken, setSheetToken] = useState(0)
+  const amountRef = useRef<TextInput>(null)
+  const outboxRef = useRef(outbox)
+  outboxRef.current = outbox
+  const categoriesRef = useRef(categories)
+  categoriesRef.current = categories
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [banner, setBanner] = useState<string | null>(null)
@@ -100,21 +122,32 @@ export function TrackerScreen() {
   }, [categories, formCategory, formKind])
 
   const loadCategories = useCallback(async () => {
-    const list = await categoriesApi.listCategories({ include_archived: true })
-    setCategories(list)
+    try {
+      const list = await categoriesApi.listCategories({ include_archived: true })
+      setCategories(list)
+      await writeCategoryCache(list)
+    } catch (err) {
+      if (categoriesRef.current.length === 0) {
+        setError(err instanceof ApiError ? err.detail : 'Could not load categories')
+      }
+    }
   }, [])
 
   const loadTransactions = useCallback(async () => {
-    const list = await txApi.listTransactions({
-      q: search || undefined,
-      kind: formKind,
-      sort_by: 'date',
-      sort_dir: 'desc',
-      limit: PAGE_SIZE,
-      offset: 0,
-    })
-    setItems(list.items)
-    setTotal(list.total)
+    try {
+      const list = await txApi.listTransactions({
+        q: search || undefined,
+        kind: formKind,
+        sort_by: 'date',
+        sort_dir: 'desc',
+        limit: PAGE_SIZE,
+        offset: 0,
+      })
+      setItems(list.items)
+      setTotal(list.total)
+    } catch {
+      // The form stays usable while the API wakes up. Pull to refresh retries.
+    }
   }, [search, formKind])
 
   const loadGlance = useCallback(async () => {
@@ -131,23 +164,42 @@ export function TrackerScreen() {
     }
   }, [formDate])
 
-  const loadAll = useCallback(async () => {
-    setError(null)
-    try {
-      await Promise.all([loadCategories(), loadTransactions()])
-    } catch (err) {
-      setError(
-        err instanceof ApiError ? err.detail : 'Could not load transactions',
-      )
-    } finally {
-      setLoading(false)
-      setRefreshing(false)
-    }
-  }, [loadCategories, loadTransactions])
+  const refreshQueue = useCallback(async () => {
+    const next = await readOutbox()
+    const nextIds = new Set(next.map((item) => item.id))
+    const removed = outboxRef.current.filter(
+      (item) => item.status === 'pending' && !nextIds.has(item.id),
+    )
+    setOutbox(next)
+    if (removed.length) void loadTransactions()
+  }, [loadTransactions])
 
   useEffect(() => {
-    void loadAll()
-  }, [loadAll])
+    let cancelled = false
+    void (async () => {
+      const [cached, queued] = await Promise.all([
+        readCategoryCache(),
+        readOutbox(),
+      ])
+      if (cancelled) return
+      if (cached) setCategories(cached)
+      setOutbox(queued)
+      setLoading(false)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (loading) return
+    void loadCategories()
+  }, [loading, loadCategories])
+
+  useEffect(() => {
+    if (loading) return
+    void loadTransactions()
+  }, [loading, loadTransactions])
 
   useEffect(() => {
     void loadGlance()
@@ -172,6 +224,18 @@ export function TrackerScreen() {
   }, [kindCats, formCategory])
 
   useEffect(() => {
+    if (!launch) return
+    setFormKind(launch.kind)
+    setEditingId(null)
+    setFormAmount('')
+    setFormNote('')
+    setFormDate(todayISO())
+    setError(null)
+    setPlanFunding(null)
+    setSheetToken(launch.seq)
+  }, [launch])
+
+  useEffect(() => {
     if (formKind !== 'expense' || !formCategory || !formDate) {
       setPlanFunding(null)
       return
@@ -181,23 +245,33 @@ export function TrackerScreen() {
       setPlanFunding(null)
       return
     }
+    const year = Number(match[1])
+    const month = Number(match[2])
     let cancelled = false
+    void readFundingEntry(year, month, formCategory).then((cached) => {
+      if (cancelled || cached === undefined) return
+      setPlanFunding(cached)
+      if (cached) setWithdrawFromBucket(true)
+    })
     void budgetsApi
-      .getExpenseFunding(Number(match[1]), Number(match[2]), formCategory)
+      .getExpenseFunding(year, month, formCategory)
       .then((row) => {
         if (cancelled) return
         if (row.funded_by_category_id && row.funded_by_category_name) {
-          setPlanFunding({
+          const next = {
             id: row.funded_by_category_id,
             name: row.funded_by_category_name,
-          })
+          }
+          setPlanFunding(next)
           setWithdrawFromBucket(true)
+          void writeFundingEntry(year, month, formCategory, next)
         } else {
           setPlanFunding(null)
+          void writeFundingEntry(year, month, formCategory, null)
         }
       })
       .catch(() => {
-        if (!cancelled) setPlanFunding(null)
+        // Keep the cached paid-from choice when the API is still waking up.
       })
     return () => {
       cancelled = true
@@ -254,41 +328,97 @@ export function TrackerScreen() {
     }
     setSaving(true)
     setError(null)
+    const catName =
+      categories.find((c) => c.id === formCategory)?.name ?? kindNoun(formKind)
+    const payload = {
+      category_id: formCategory,
+      amount,
+      date: formDate,
+      note: formNote.trim() || null,
+      ...(formKind === 'expense' && withdrawFromBucket && planFunding
+        ? { withdraw_from_category_id: planFunding.id }
+        : {}),
+    }
     try {
-      const payload = {
-        category_id: formCategory,
-        amount,
-        date: formDate,
-        note: formNote.trim() || null,
-        ...(!editingId &&
-        formKind === 'expense' &&
-        withdrawFromBucket &&
-        planFunding
-          ? { withdraw_from_category_id: planFunding.id }
-          : {}),
-      }
-      const catName =
-        categories.find((c) => c.id === formCategory)?.name ?? kindNoun(formKind)
       if (editingId) {
         await txApi.updateTransaction(editingId, payload)
         setBanner(`Updated ${formatUsd(amount)} · ${catName}`)
+        resetForm()
+        await Promise.all([loadTransactions(), loadGlance()])
       } else {
-        await txApi.createTransaction(payload)
-        setBanner(`Logged ${formatUsd(amount)} · ${catName}`)
+        const queued = await enqueueLog({
+          kind: formKind,
+          categoryId: formCategory,
+          categoryName: catName,
+          amount,
+          date: formDate,
+          note: formNote.trim() || null,
+          withdrawFromCategoryId:
+            formKind === 'expense' && withdrawFromBucket && planFunding
+              ? planFunding.id
+              : null,
+        })
+        if (queued.mode === 'queued') {
+          setOutbox(queued.items)
+          setBanner(`Saved ${formatUsd(amount)} · ${catName}. Uploading…`)
+        } else {
+          setBanner(`Logged ${formatUsd(amount)} · ${catName}`)
+          void Promise.all([loadTransactions(), loadGlance()])
+        }
+        resetForm()
       }
-      resetForm()
-      await Promise.all([loadTransactions(), loadGlance()])
     } catch (err) {
       setError(
         err instanceof ApiError
           ? err.detail
-          : editingId
-            ? `Could not update ${kindNoun(formKind)}`
-            : `Could not log ${kindNoun(formKind)}`,
+          : err instanceof Error
+            ? err.message
+            : editingId
+              ? `Could not update ${kindNoun(formKind)}`
+              : `Could not log ${kindNoun(formKind)}`,
       )
     } finally {
       setSaving(false)
     }
+  }
+
+  const mine = useMemo(
+    () => outbox.filter((item) => !user?.id || item.owner_id === user.id),
+    [outbox, user?.id],
+  )
+  const hasPending = mine.some((item) => item.status === 'pending')
+  useEffect(() => {
+    if (!hasPending) return
+    const handle = setInterval(() => {
+      void refreshQueue()
+    }, 2000)
+    return () => clearInterval(handle)
+  }, [hasPending, refreshQueue])
+
+  const needsAuth = mine.some(
+    (item) => item.kind === formKind && item.status === 'needs_auth',
+  )
+
+  const rows = useMemo<ListRow[]>(() => {
+    const query = search.trim().toLowerCase()
+    const local = mine
+      .filter((item) => {
+        if (item.kind !== formKind) return false
+        if (!query) return true
+        const hay = `${item.category_name} ${item.note ?? ''} ${item.amount}`.toLowerCase()
+        return hay.includes(query)
+      })
+      .map((item) => ({ key: `local-${item.id}`, source: 'local' as const, item }))
+    const server = items.map((item) => ({
+      key: item.id,
+      source: 'server' as const,
+      item,
+    }))
+    return [...local, ...server]
+  }, [mine, items, formKind, search])
+
+  async function removeLocal(id: string) {
+    setOutbox(await removeQueued(id))
   }
 
   async function doDelete(tx: Transaction) {
@@ -328,7 +458,7 @@ export function TrackerScreen() {
       <View style={styles.topBar}>
         <View>
           <Text style={styles.brand}>Setaside</Text>
-          <Text style={styles.hello}>Hi {user?.username}</Text>
+          <Text style={styles.hello}>Hi {user?.username ?? 'there'}</Text>
         </View>
         <Pressable
           onPress={() => void logout()}
@@ -373,6 +503,7 @@ export function TrackerScreen() {
 
         <Text style={styles.label}>Amount</Text>
         <TextInput
+          ref={amountRef}
           value={formAmount}
           onChangeText={setFormAmount}
           keyboardType="decimal-pad"
@@ -386,8 +517,12 @@ export function TrackerScreen() {
         <CategoryPicker
           categories={kindCats}
           value={formCategory}
-          onChange={setFormCategory}
+          onChange={(id) => {
+            setFormCategory(id)
+            setTimeout(() => amountRef.current?.focus(), 300)
+          }}
           kindLabel={KIND_TITLE[formKind]}
+          openToken={loading ? 0 : sheetToken}
         />
 
         {kindCats.length === 0 ? (
@@ -452,6 +587,20 @@ export function TrackerScreen() {
           </Pressable>
         ) : null}
 
+        {needsAuth ? (
+          <View>
+            <Text style={styles.error}>
+              Saved entries are waiting. Sign in again to send them.
+            </Text>
+            <Pressable
+              onPress={() => void logout()}
+              accessibilityRole="button"
+              accessibilityLabel="Sign in"
+            >
+              <Text style={styles.link}>Sign in</Text>
+            </Pressable>
+          </View>
+        ) : null}
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {banner ? <Text style={styles.success}>{banner}</Text> : null}
 
@@ -513,8 +662,8 @@ export function TrackerScreen() {
           </View>
         ) : (
           <FlatList
-            data={items}
-            keyExtractor={(item) => item.id}
+            data={rows}
+            keyExtractor={(row) => row.key}
             ListHeaderComponent={header}
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={styles.list}
@@ -523,7 +672,12 @@ export function TrackerScreen() {
                 refreshing={refreshing}
                 onRefresh={() => {
                   setRefreshing(true)
-                  void Promise.all([loadAll(), loadGlance()])
+                  void Promise.all([
+                    loadCategories(),
+                    loadTransactions(),
+                    loadGlance(),
+                    refreshQueue(),
+                  ]).finally(() => setRefreshing(false))
                 }}
                 tintColor={colors.pine}
               />
@@ -535,7 +689,51 @@ export function TrackerScreen() {
                   : 'Nothing logged yet. Add one above.'}
               </Text>
             }
-            renderItem={({ item }) => {
+            renderItem={({ item: row }) => {
+              if (row.source === 'local') {
+                const item = row.item
+                const status =
+                  item.status === 'pending'
+                    ? 'Uploading…'
+                    : item.status === 'needs_auth'
+                      ? 'Sign in to send'
+                      : item.detail || 'Could not upload'
+                return (
+                  <View style={styles.row}>
+                    <View style={styles.rowMain}>
+                      <Text style={styles.rowCat}>{item.category_name}</Text>
+                      <Text style={styles.rowNote} numberOfLines={1}>
+                        {status}
+                      </Text>
+                    </View>
+                    <View style={styles.rowRight}>
+                      <Text style={[styles.rowAmt, { color: colors[item.kind] }]}>
+                        {formatUsd(item.amount)}
+                      </Text>
+                      <Pressable
+                        onPress={() => {
+                          Alert.alert('Remove saved entry?', status, [
+                            { text: 'Cancel', style: 'cancel' },
+                            {
+                              text: 'Delete',
+                              style: 'destructive',
+                              onPress: () => {
+                                void removeLocal(item.id)
+                              },
+                            },
+                          ])
+                        }}
+                        hitSlop={8}
+                        accessibilityRole="button"
+                        accessibilityLabel="Delete"
+                      >
+                        <Text style={styles.delete}>Delete</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                )
+              }
+              const item = row.item
               const kind = item.category?.kind ?? formKind
               return (
                 <View style={styles.row}>

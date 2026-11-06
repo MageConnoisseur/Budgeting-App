@@ -336,6 +336,13 @@ class Transaction(Base):
             unique=True,
             postgresql_where=text("import_fingerprint IS NOT NULL"),
         ),
+        Index(
+            "uq_transactions_user_client_request",
+            "user_id",
+            "client_request_id",
+            unique=True,
+            postgresql_where=text("client_request_id IS NOT NULL"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
@@ -355,6 +362,10 @@ class Transaction(Base):
     # Same fingerprint twice (re-upload) is a no-op. NULL for purely manual rows.
     import_fingerprint: Mapped[Optional[str]] = mapped_column(
         String(64), nullable=True, index=True, default=None
+    )
+    # Phone outbox id. A retry of the same id returns the original row.
+    client_request_id: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, default=None
     )
     # Shared by an expense and its savings withdrawal. The withdrawal amount
     # may be the full charge or only the part covered by the bucket.

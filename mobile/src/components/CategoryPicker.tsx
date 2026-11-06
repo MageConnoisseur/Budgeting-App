@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { colors, radius } from '../theme'
@@ -10,6 +10,7 @@ interface Props {
   onChange: (id: string) => void
   disabled?: boolean
   kindLabel?: string
+  openToken?: number
 }
 
 export function CategoryPicker({
@@ -18,9 +19,18 @@ export function CategoryPicker({
   onChange,
   disabled,
   kindLabel = 'Expense',
+  openToken = 0,
 }: Props) {
   const [open, setOpen] = useState(false)
+  const seenToken = useRef(0)
   const selected = categories.find((c) => c.id === value)
+
+  useEffect(() => {
+    if (!openToken || openToken === seenToken.current) return
+    if (categories.length === 0) return
+    seenToken.current = openToken
+    setOpen(true)
+  }, [openToken, categories.length])
 
   return (
     <View>
