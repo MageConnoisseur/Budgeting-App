@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_background"
+    android:gravity="center"
+    android:orientation="horizontal"
+    android:padding="8dp">
+
+    <ImageButton
+        android:id="@+id/widget_income"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_marginEnd="6dp"
+        android:layout_weight="1"
+        android:background="@drawable/widget_button"
+        android:contentDescription="@string/widget_income"
+        android:padding="10dp"
+        android:scaleType="centerInside"
+        android:src="@drawable/ic_widget_income" />
+
+    <ImageButton
+        android:id="@+id/widget_expense"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_marginEnd="6dp"
+        android:layout_weight="1"
+        android:background="@drawable/widget_button"
+        android:contentDescription="@string/widget_expense"
+        android:padding="10dp"
+        android:scaleType="centerInside"
+        android:src="@drawable/ic_widget_expense" />
+
+    <ImageButton
+        android:id="@+id/widget_savings"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:background="@drawable/widget_button"
+        android:contentDescription="@string/widget_savings"
+        android:padding="10dp"
+        android:scaleType="centerInside"
+        android:src="@drawable/ic_widget_savings" />
+</LinearLayout>

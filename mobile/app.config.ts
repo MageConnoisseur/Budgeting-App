@@ -39,7 +39,7 @@ export default {
       ],
       predictiveBackGestureEnabled: false,
     },
-    plugins: ['expo-secure-store', './plugins/withNodeBinary'],
+    plugins: ['expo-secure-store', './plugins/withNodeBinary', './plugins/withLogWidget'],
     extra: {
       apiUrl: process.env.EXPO_PUBLIC_API_URL,
     },

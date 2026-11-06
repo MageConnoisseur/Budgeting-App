@@ -9,11 +9,13 @@ import {
 } from 'react'
 import * as authApi from '../api/auth'
 import { ApiError, setUnauthorizedHandler } from '../api/client'
-import { getToken, setToken } from '../storage'
+import { getCachedUser, getToken, setCachedUser, setToken } from '../storage'
+import { retryNeedsAuth, syncNativeSession } from '../upload/native'
 import type { User } from '../types'
 
 interface AuthState {
   user: User | null
+  hasSession: boolean
   loading: boolean
   login: (username: string, password: string) => Promise<void>
   logout: () => Promise<void>
@@ -23,41 +25,58 @@ const AuthContext = createContext<AuthState | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
+  const [hasSession, setHasSession] = useState(false)
   const [loading, setLoading] = useState(true)
 
   const logout = useCallback(async () => {
     await setToken(null)
+    await setCachedUser(null)
     setUser(null)
-  }, [])
-
-  const refreshUser = useCallback(async () => {
-    const token = await getToken()
-    if (!token) {
-      setUser(null)
-      setLoading(false)
-      return
-    }
-    try {
-      const me = await authApi.getMe()
-      setUser(me)
-    } catch (err) {
-      setUser(null)
-      await setToken(null)
-      if (!(err instanceof ApiError && err.status === 401)) {
-        // Keep going; login screen will show a connection error on submit.
-      }
-    } finally {
-      setLoading(false)
-    }
+    setHasSession(false)
   }, [])
 
   useEffect(() => {
-    void refreshUser()
-  }, [refreshUser])
+    let cancelled = false
+    void (async () => {
+      const token = await getToken()
+      if (!token) {
+        if (!cancelled) setLoading(false)
+        return
+      }
+      await syncNativeSession(token)
+      const cached = await getCachedUser()
+      if (!cancelled) {
+        if (cached) setUser(cached)
+        setHasSession(true)
+        setLoading(false)
+      }
+      try {
+        const me = await authApi.getMe()
+        if (cancelled) return
+        setUser(me)
+        await setCachedUser(me)
+        await retryNeedsAuth(me.id)
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 401) {
+          await setToken(null)
+          await setCachedUser(null)
+          if (!cancelled) {
+            setUser(null)
+            setHasSession(false)
+          }
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     setUnauthorizedHandler(() => {
       setUser(null)
+      setHasSession(false)
+      void setCachedUser(null)
     })
     return () => setUnauthorizedHandler(null)
   }, [])
@@ -66,17 +85,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const tok = await authApi.login(username, password)
     await setToken(tok.access_token)
     const me = await authApi.getMe()
+    await setCachedUser(me)
     setUser(me)
+    setHasSession(true)
+    await retryNeedsAuth(me.id)
   }, [])
 
   const value = useMemo(
     () => ({
       user,
+      hasSession,
       loading,
       login,
       logout,
     }),
-    [user, loading, login, logout],
+    [user, hasSession, loading, login, logout],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

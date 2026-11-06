@@ -9,6 +9,7 @@ from uuid import UUID, uuid4
 
 from fastapi import HTTPException
 from sqlalchemy import asc, cast, desc, func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.types import String
 
@@ -246,6 +247,19 @@ def _load_tx(db: Session, user: User, tx_id: UUID) -> Transaction | None:
     )
 
 
+def _load_by_client_request(
+    db: Session, user: User, client_request_id: str
+) -> Transaction | None:
+    return db.scalar(
+        select(Transaction)
+        .options(joinedload(Transaction.category))
+        .where(
+            Transaction.user_id == user.id,
+            Transaction.client_request_id == client_request_id,
+        )
+    )
+
+
 def _money(value: Decimal) -> Decimal:
     return value.quantize(Decimal("0.01"))
 
@@ -298,12 +312,18 @@ def create_transaction(
     withdraw_from_category_id: UUID | None = None,
     withdraw_amount: Decimal | None = None,
     import_fingerprint: str | None = None,
+    client_request_id: str | None = None,
 ) -> Transaction:
     """Create a transaction, optionally pairing an expense with a savings withdrawal.
 
     ``withdraw_amount`` may be less than the expense. The rest stays on that
     month's paycheck. Omit it to withdraw the full expense amount.
     """
+    if client_request_id:
+        existing = _load_by_client_request(db, user, client_request_id)
+        if existing is not None:
+            return existing
+
     pair_id = None
     withdrawal_cat = None
     cover = None
@@ -330,6 +350,7 @@ def create_transaction(
         note=note,
         pair_id=pair_id,
         import_fingerprint=import_fingerprint,
+        client_request_id=client_request_id,
     )
     db.add(tx)
     if withdrawal_cat is not None and pair_id is not None and cover is not None:
@@ -343,7 +364,15 @@ def create_transaction(
                 pair_id=pair_id,
             )
         )
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        if client_request_id:
+            existing = _load_by_client_request(db, user, client_request_id)
+            if existing is not None:
+                return existing
+        raise
     loaded = _load_tx(db, user, tx.id)
     assert loaded is not None
     return loaded

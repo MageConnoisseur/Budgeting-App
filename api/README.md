@@ -38,7 +38,7 @@ Hosts on **Render**; database is **PostgreSQL on Neon**. Web (Vite/React on Verc
 | Recovery email | Required for password signup. No verification email — sign-up asks people to type it twice. Sign-in is not gated on confirming the address. |
 | Password hash | bcrypt (passlib) |
 | Session | Stateless JWT (`Authorization: Bearer <token>`) |
-| Token lifetime | 7 days (override with `ACCESS_TOKEN_EXPIRE_MINUTES`) |
+| Token lifetime | 30 days (override with `ACCESS_TOKEN_EXPIRE_MINUTES`) |
 
 Register or login returns `{ "access_token": "...", "token_type": "bearer" }`.
 Login accepts **username or email**.
@@ -87,7 +87,7 @@ OpenAPI docs: http://localhost:8000/docs
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | no | Enable Google sign-in |
 | `FACEBOOK_APP_ID` / `FACEBOOK_APP_SECRET` | no | Enable Facebook sign-in |
 | `OAUTH_DEV_MODE` | no | Expose local `dev` OAuth provider for tests (default false) |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | no | JWT lifetime (default 10080) |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | no | JWT lifetime (default 43200, 30 days) |
 | `PASSWORD_RESET_EXPIRE_MINUTES` | no | Reset link lifetime (default 60) |
 | `RESEND_API_KEY` | prod (for reset mail) | Resend API key. Unset = log-only (dev/tests) |
 | `RESEND_FROM` | with the API key | From header, e.g. `Setaside <noreply@setasideplan.com>` |
@@ -118,6 +118,8 @@ The sideloaded Android app reads only:
 - `GET/POST/PATCH/DELETE /transactions` and `GET /transactions/note-suggestions`
 - `GET /budgets/months/{year}/{month}/expense-funding/{category_id}`
 - `GET /mobile/glance`
+
+`POST /transactions` may include `client_request_id` (the phone outbox id). Sending that id again returns the original transaction, so a background retry does not log it twice.
 
 New fields on those responses are fine. Renaming or removing keys the APK already reads needs a new path (for glance, `/mobile/glance` v2). Desktop dashboard and budget JSON may change freely.
 

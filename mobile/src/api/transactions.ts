@@ -30,6 +30,7 @@ export function createTransaction(body: {
   date: string
   note?: string | null
   withdraw_from_category_id?: string | null
+  client_request_id?: string | null
 }) {
   return apiFetch<Transaction>('/transactions', {
     method: 'POST',

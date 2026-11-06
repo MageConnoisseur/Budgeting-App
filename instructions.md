@@ -185,7 +185,7 @@ Over-budget behavior: **soft warnings only**. Emphasize patterns across months s
 | Auth | Username + **email** + password, plus optional **Google / Facebook** OAuth |
 | Account linking | Users can attach email and link social providers to an **existing** account so budget data is never split |
 | Email verification | Not required. Sign-up reminds people to type the recovery email carefully (confirm field). Password reset is sent via **Resend**. |
-| Session | JWT Bearer + bcrypt; details in `api/README.md` |
+| Session | JWT Bearer, **30-day** access token; details in `api/README.md` |
 | Desktop depth | Password **reset / recovery** (forgot-password email via Resend, change/set password) is in scope for the active desktop phase |
 
 Do not build multi-user sharing yet, but avoid hard-coding assumptions that make “one budget, many members” impossible later (e.g. prefer `user_id` / future `workspace_id` ownership patterns).
@@ -287,11 +287,12 @@ Coach depth that stays **rule-based** (clearer copy, more apply actions, dismiss
 
 Shipped as a **small Expo client** in `mobile/` so someone can check leftover and log away from the desk. It is not a second product.
 
-- Same FastAPI + JWT account as web (live Render origin baked into the APK)
-- Sign in (username/email + password). No registration, OAuth, or password reset in the app — those stay on the website
+- Same FastAPI + JWT account as web (live Render origin baked into the APK). Access tokens last **30 days**.
+- Sign in once (username/email + password). A saved session opens the logger without waiting for the API. No registration, OAuth, or password reset in the app — those stay on the website
+- **Home-screen widget** with income (up arrow), expense (down arrow), and savings (rising zigzag) icons. A tap expands into the logger on that kind and opens the category list. Planning screens stay off the widget
 - **Leftover glance** for the form date’s month: leftover per category from `GET /api/mobile/glance` (savings also show bucket balance). Math stays on the server.
-- Log **income, expense, and savings** (amount, category, date, optional note; paid-from withdrawal only for expenses when the month’s plan has one)
-- Recent list for the selected kind, with search, edit, and delete
+- Log **income, expense, and savings** (amount, category, date, optional note; paid-from withdrawal only for expenses when the month’s plan has one). New logs are stored on the phone and uploaded in the background, including while Render is waking up. `client_request_id` makes a retry the same row. Edits and deletes of rows already on the server still wait for the API
+- Recent list for the selected kind, with search, edit, and delete. Queued logs show as uploading until the server accepts them
 - **Do not add** Budget editor, Dashboard, Categories CRUD, or Coach
 - Phone contract is additive: login/me, categories, transactions, expense-funding, and `/mobile/glance`. Do not wire the APK to dashboard/annual budget payloads.
 - Ship as a **standalone Android APK** (Android Studio / `npm run apk`). The phone must not need Metro, Expo Go, or a running computer. iOS / Play Store later
@@ -321,7 +322,7 @@ Shipped as a **small Expo client** in `mobile/` so someone can check leftover an
 
 ### Mobile (`mobile/` — leftover glance + logger)
 
-- Fast path: open the installed app → sign in → scan leftover → amount + category → log.
+- Fast path: a saved sign-in opens straight to the logger. From the home screen, tap the income, expense, or savings icon, pick a category, enter the amount, and save. The phone keeps the entry and uploads it after you leave. First launch on a phone with no saved session still asks for the website password once.
 - Same categories and paid-from rules as web; leftover is `planned − actual` from the API — never fork that math client-side.
 - If a category does not exist yet, tell the user to create it on the website.
 - Keep this client small. Planning, dashboard, and coach stay on `web/`.
@@ -392,11 +393,11 @@ All user-owned rows must be scoped by authenticated user.
 | Dashboard spending pace | Cumulative expenses vs an even split of the expense budget for the viewed month (on Annual, each month's expense plan across the year). Savings stay off the spend line. Soft signal when spending is ahead of that pace |
 | Budget / Dashboard views | Monthly and Annual modes; easy swap; annual budget editing allowed; preferences stored on the user |
 | Tracker findability | Search, sort, and filters required |
-| Auth now | Username + email + password; Google/Facebook OAuth with explicit account linking; JWT Bearer + bcrypt |
+| Auth now | Username + email + password; Google/Facebook OAuth with explicit account linking; JWT Bearer + bcrypt; access token lasts 30 days |
 | Auth later / desktop depth | Password reset/recovery **shipped** (Resend forgot-password email, change/set password). Email verification is not required to sign in |
 | Users | Individual accounts; households later |
 | Currency | USD now; multi-currency later |
-| Mobile | Thin Android leftover glance + income/expense/savings logger (`mobile/`, sideload APK); planning stays on web; leftover via `GET /api/mobile/glance`; shared API/DB |
+| Mobile | Thin Android leftover glance + income/expense/savings logger (`mobile/`, sideload APK). Home-screen widget opens that logger; new logs queue on the phone and upload in the background. Planning stays on web; leftover via `GET /api/mobile/glance`; shared API/DB |
 | Schema | Alembic under `api/` is source of truth (not a separate `database/` SQL apply tree) |
 | Hosting | Neon (DB) + Render (API) + Vercel (web) |
 | Stack | React (Vite) web, FastAPI, PostgreSQL |

@@ -1,5 +1,6 @@
 package com.setasideplan.app
 
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 
@@ -8,6 +9,7 @@ import com.facebook.react.ReactActivityDelegate
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
 import com.facebook.react.defaults.DefaultReactActivityDelegate
 
+import com.setasideplan.app.widget.WidgetOpenAnimator
 import expo.modules.ReactActivityDelegateWrapper
 
 class MainActivity : ReactActivity() {
@@ -17,6 +19,13 @@ class MainActivity : ReactActivity() {
     // This is required for expo-splash-screen.
     setTheme(R.style.AppTheme);
     super.onCreate(null)
+    WidgetOpenAnimator.play(this, intent) // setaside-widget-open
+  }
+
+  override fun onNewIntent(intent: Intent) {
+    setIntent(intent)
+    super.onNewIntent(intent)
+    WidgetOpenAnimator.play(this, intent) // setaside-widget-open
   }
 
   /**

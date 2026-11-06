@@ -1,4 +1,9 @@
 <resources>
   <string name="app_name">Setaside</string>
+  <string name="widget_label">Quick log</string>
+  <string name="widget_description">Log income, an expense, or savings.</string>
+  <string name="widget_income">Income</string>
+  <string name="widget_expense">Expense</string>
+  <string name="widget_savings">Savings</string>
   <string name="expo_system_ui_user_interface_style" translatable="false">light</string>
 </resources>
