@@ -3,9 +3,12 @@ package com.setasideplan.app.widget
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
+import android.transition.AutoTransition
+import android.transition.TransitionManager
 import android.view.Gravity
-import android.view.WindowManager
 import android.view.View
+import android.view.ViewGroup
+import android.view.WindowManager
 import android.view.ViewOutlineProvider
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
@@ -48,8 +51,10 @@ class LogSheetActivity : AppCompatActivity() {
   private lateinit var titleView: TextView
   private lateinit var errorView: TextView
   private lateinit var categoryValue: TextView
+  private lateinit var categoryChevron: TextView
   private lateinit var categoryScroll: View
   private lateinit var categoryItems: LinearLayout
+  private lateinit var details: View
   private lateinit var amountField: EditText
   private lateinit var dateText: TextView
   private lateinit var todayButton: TextView
@@ -66,6 +71,9 @@ class LogSheetActivity : AppCompatActivity() {
   private var closing = false
   private var saving = false
   private var categoriesOpen = true
+  private var lastIme = 0
+  private var lastStatusTop = 0
+  private var lastNavBottom = 0
 
   private val dayFormat = SimpleDateFormat("EEE, MMM d", Locale.US)
   private val isoFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
@@ -85,8 +93,10 @@ class LogSheetActivity : AppCompatActivity() {
     titleView = findViewById(R.id.log_sheet_title)
     errorView = findViewById(R.id.log_sheet_error)
     categoryValue = findViewById(R.id.log_sheet_category_value)
+    categoryChevron = findViewById(R.id.log_sheet_category_chevron)
     categoryScroll = findViewById(R.id.log_sheet_categories)
     categoryItems = findViewById(R.id.log_sheet_category_items)
+    details = findViewById(R.id.log_sheet_details)
     amountField = findViewById(R.id.log_sheet_amount)
     dateText = findViewById(R.id.log_sheet_date)
     todayButton = findViewById(R.id.log_sheet_today)
@@ -103,34 +113,21 @@ class LogSheetActivity : AppCompatActivity() {
     )
     card.clipToOutline = true
     card.outlineProvider = ViewOutlineProvider.BACKGROUND
-    applySheetHeight()
-    ViewCompat.setOnApplyWindowInsetsListener(card) { view, insets ->
+    ViewCompat.setOnApplyWindowInsetsListener(card) { _, insets ->
       val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
       val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
-      val screen = resources.displayMetrics.heightPixels
-      val params = view.layoutParams as FrameLayout.LayoutParams
-      params.gravity = Gravity.BOTTOM
-      if (ime.bottom > 0) {
-        // Sit in the band above the keyboard, not in the keyboard's own rect.
-        params.height = (screen - ime.bottom).coerceAtLeast(dp(280))
-        params.bottomMargin = ime.bottom
-        view.setPadding(dp(16), bars.top + dp(12), dp(16), dp(16))
-        categoryScroll.visibility = View.GONE
-      } else {
-        params.height = (screen * 0.72f).toInt()
-        params.bottomMargin = 0
-        view.setPadding(dp(16), dp(12), dp(16), bars.bottom + dp(16))
-        categoryScroll.visibility = if (categoriesOpen) View.VISIBLE else View.GONE
-      }
-      view.layoutParams = params
+      lastIme = ime.bottom
+      lastStatusTop = bars.top
+      lastNavBottom = bars.bottom
+      applyChrome(animate = false)
       insets
     }
     ViewCompat.requestApplyInsets(card)
 
     scrim.setOnClickListener { shrinkAndFinish() }
     findViewById<View>(R.id.log_sheet_category_field).setOnClickListener {
-      categoriesOpen = !categoriesOpen
-      categoryScroll.visibility = if (categoriesOpen) View.VISIBLE else View.GONE
+      if (categoriesOpen && selectedId == null) return@setOnClickListener
+      setPicking(!categoriesOpen, animate = true)
     }
     amountField.imeOptions = EditorInfo.IME_ACTION_NEXT
     amountField.setOnEditorActionListener { _, actionId, _ ->
@@ -180,6 +177,7 @@ class LogSheetActivity : AppCompatActivity() {
     if (next != kind) {
       kind = next
       selectedId = null
+      categoriesOpen = true
       amountField.setText("")
       noteField.setText("")
       selectedDate = noonToday()
@@ -202,6 +200,8 @@ class LogSheetActivity : AppCompatActivity() {
     refreshDate()
     refreshFunding()
     refreshGate()
+    categoriesOpen = selectedId == null
+    applyChrome(animate = false)
   }
 
   private fun renderCategories() {
@@ -218,11 +218,11 @@ class LogSheetActivity : AppCompatActivity() {
     for (category in categories) {
       val row = TextView(this)
       row.text = category.name
-      row.textSize = 16f
+      row.textSize = 18f
       row.setTextColor(Color.parseColor("#14231c"))
       row.gravity = Gravity.CENTER_VERTICAL
-      row.minHeight = dp(48)
-      row.setPadding(dp(14), 0, dp(14), 0)
+      row.minHeight = dp(56)
+      row.setPadding(dp(16), dp(8), dp(16), dp(8))
       val selected = category.id == selectedId
       row.setBackgroundColor(if (selected) Color.parseColor("#e4f0e9") else Color.TRANSPARENT)
       row.setOnClickListener { choose(category) }
@@ -242,9 +242,13 @@ class LogSheetActivity : AppCompatActivity() {
     renderCategories()
     refreshFunding()
     clearError()
-    amountField.requestFocus()
-    val imm = getSystemService(InputMethodManager::class.java)
-    imm?.showSoftInput(amountField, InputMethodManager.SHOW_IMPLICIT)
+    setPicking(open = false, animate = true)
+    details.postDelayed({
+      if (closing || categoriesOpen || isDestroyed) return@postDelayed
+      amountField.requestFocus()
+      val imm = getSystemService(InputMethodManager::class.java)
+      imm?.showSoftInput(amountField, InputMethodManager.SHOW_IMPLICIT)
+    }, 220)
   }
 
   private fun refreshCategoryLabel() {
@@ -298,7 +302,7 @@ class LogSheetActivity : AppCompatActivity() {
     val category = categories.find { it.id == selectedId }
     if (category == null) {
       showError(getString(R.string.log_sheet_need_category))
-      categoryScroll.visibility = View.VISIBLE
+      setPicking(open = true, animate = true)
       return
     }
     val amount = moneyOrNull(amountField.text?.toString().orEmpty())
@@ -384,12 +388,43 @@ class LogSheetActivity : AppCompatActivity() {
     refreshFunding()
   }
 
-  private fun applySheetHeight() {
+  private fun setPicking(open: Boolean, animate: Boolean) {
+    categoriesOpen = open
+    applyChrome(animate)
+  }
+
+  private fun applyChrome(animate: Boolean) {
+    if (animate) {
+      val transition = AutoTransition()
+      transition.duration = 220
+      TransitionManager.beginDelayedTransition(stage as ViewGroup, transition)
+    }
     val screen = resources.displayMetrics.heightPixels
     val params = card.layoutParams as FrameLayout.LayoutParams
-    params.height = (screen * 0.72f).toInt()
     params.gravity = Gravity.BOTTOM
+    val picking = categoriesOpen && lastIme == 0
+    if (lastIme > 0) {
+      // Sit in the band above the keyboard, not in the keyboard's own rect.
+      params.height = (screen - lastIme).coerceAtLeast(dp(280))
+      params.bottomMargin = lastIme
+      card.setPadding(dp(16), lastStatusTop + dp(12), dp(16), dp(16))
+      categoryScroll.visibility = View.GONE
+      details.visibility = View.VISIBLE
+    } else if (picking) {
+      params.height = (screen * 0.9f).toInt()
+      params.bottomMargin = 0
+      card.setPadding(dp(16), dp(12), dp(16), lastNavBottom + dp(16))
+      categoryScroll.visibility = View.VISIBLE
+      details.visibility = View.GONE
+    } else {
+      params.height = FrameLayout.LayoutParams.WRAP_CONTENT
+      params.bottomMargin = 0
+      card.setPadding(dp(16), dp(12), dp(16), lastNavBottom + dp(16))
+      categoryScroll.visibility = View.GONE
+      details.visibility = View.VISIBLE
+    }
     card.layoutParams = params
+    categoryChevron.text = if (picking) "▴" else "▾"
   }
 
   private fun readCategories(): List<SheetCategory> {

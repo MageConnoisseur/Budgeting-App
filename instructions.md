@@ -289,7 +289,7 @@ Shipped as a **small Expo client** in `mobile/` so someone can check leftover an
 
 - Same FastAPI + JWT account as web (live Render origin baked into the APK). Access tokens last **30 days**.
 - Sign in once (username/email + password). A saved session opens the logger without waiting for the API. No registration, OAuth, or password reset in the app — those stay on the website
-- **Home-screen widget** with income (up arrow), expense (down arrow), and savings (rising zigzag) icons. A tap grows a partial window from that icon with just the log form and the category list open. Save shrinks it back to the widget. The leftover list stays in the app. Planning screens stay off the widget
+- **Home-screen widget** with income (up arrow), expense (down arrow), and savings (rising zigzag) icons. A tap grows a partial window from that icon with the category list filling it. Choosing a category shrinks the list and shows the amount, date, and note. Save shrinks it back to the widget. The leftover list stays in the app. Planning screens stay off the widget
 - **Leftover glance** for the form date’s month: leftover per category from `GET /api/mobile/glance` (savings also show bucket balance). Math stays on the server.
 - Log **income, expense, and savings** (amount, category, date, optional note; paid-from withdrawal only for expenses when the month’s plan has one). New logs are stored on the phone and uploaded in the background, including while Render is waking up. `client_request_id` makes a retry the same row. Edits and deletes of rows already on the server still wait for the API
 - Recent list for the selected kind, with search, edit, and delete. Queued logs show as uploading until the server accepts them
