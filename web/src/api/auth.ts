@@ -1,4 +1,4 @@
-import { apiBaseUrl, apiFetch, getToken } from './client'
+import { ApiError, apiBaseUrl, apiFetch, getToken } from './client'
 import type {
   MessageResponse,
   OAuthProviderInfo,
@@ -75,6 +75,24 @@ export function updateProfile(email: string) {
 
 export function listOAuthProviders() {
   return apiFetch<OAuthProviderInfo[]>('/auth/oauth/providers')
+}
+
+/** Providers the server can actually start. Retries while the API is waking up. */
+export async function listConfiguredOAuthProviders(): Promise<OAuthProviderInfo[]> {
+  let last: unknown
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const list = await listOAuthProviders()
+      return list.filter((provider) => provider.configured)
+    } catch (err) {
+      last = err
+      const retryable =
+        !(err instanceof ApiError) || err.status === 0 || err.status >= 500
+      if (!retryable || attempt === 2) break
+      await new Promise((resolve) => setTimeout(resolve, 2000 * (attempt + 1)))
+    }
+  }
+  throw last
 }
 
 export function unlinkOAuthProvider(provider: string) {

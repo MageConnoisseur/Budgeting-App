@@ -149,6 +149,49 @@ def test_login_with_email() -> None:
     assert login.json()["access_token"]
 
 
+def test_login_ignores_username_case_and_phone_password_glitches() -> None:
+    username = f"CaseUser_{uuid.uuid4().hex[:8]}"
+    email = f"{username}@example.com"
+    password = "password123"
+    reg = client.post(
+        "/api/auth/register",
+        json={"username": username, "email": email, "password": password},
+    )
+    assert reg.status_code == 201, reg.text
+
+    folded = client.post(
+        "/api/auth/login",
+        json={"username": username.lower(), "password": password},
+    )
+    assert folded.status_code == 200, folded.text
+
+    # Android capitalizes the first letter of a secure field, and some
+    # keyboards append a newline or an invisible character.
+    phone = client.post(
+        "/api/auth/login",
+        json={"username": f"\u200b{username}\n", "password": f"Password123\n"},
+    )
+    assert phone.status_code == 200, phone.text
+
+    wrong = client.post(
+        "/api/auth/login",
+        json={"username": username, "password": "not-the-password"},
+    )
+    assert wrong.status_code == 401
+    assert wrong.json()["detail"] == "Invalid username/email or password"
+
+    taken = client.post(
+        "/api/auth/register",
+        json={
+            "username": username.lower(),
+            "email": f"other_{email}",
+            "password": password,
+        },
+    )
+    assert taken.status_code == 400
+    assert taken.json()["detail"] == "Username already taken"
+
+
 def test_category_crud_and_budget_copy_forward(auth_headers: dict[str, str]) -> None:
     h = auth_headers
     rent = client.post(
@@ -1073,6 +1116,16 @@ def test_oauth_dev_login_creates_account_without_password() -> None:
     assert body["email_verified"] is True
     assert body["has_password"] is False
     assert "dev" in body["oauth_providers"]
+
+    login = client.post(
+        "/api/auth/login",
+        json={"username": email, "password": "password123"},
+    )
+    assert login.status_code == 401
+    detail = login.json()["detail"]
+    assert "does not have a password" in detail
+    assert "Dev (local)" in detail
+    assert "Invalid username" not in detail
 
 
 def test_oauth_does_not_auto_merge_existing_email(auth_headers: dict[str, str]) -> None:

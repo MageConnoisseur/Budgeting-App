@@ -288,7 +288,7 @@ Coach depth that stays **rule-based** (clearer copy, more apply actions, dismiss
 Shipped as a **small Expo client** in `mobile/` so someone can check leftover and log away from the desk. It is not a second product.
 
 - Same FastAPI + JWT account as web (live Render origin baked into the APK). Access tokens last **30 days**.
-- Sign in once (username/email + password). A saved session opens the logger without waiting for the API. No registration, OAuth, or password reset in the app — those stay on the website
+- Sign in once (username/email + password). Username match ignores capitalization. A saved session opens the logger without waiting for the API. No registration, OAuth, or password reset in the app — those stay on the website. A Google-only account has no password until one is set under Account on the website; the phone says that instead of calling the password wrong
 - **Home-screen widget** with income (up arrow), expense (down arrow), and savings (rising zigzag) icons. A tap grows a partial window from that icon with the category list filling it. Choosing a category shrinks the list and shows the amount, date, and note. Save shrinks it back to the widget. The leftover list stays in the app. Planning screens stay off the widget
 - **Leftover glance** for the form date’s month: leftover per category from `GET /api/mobile/glance` (savings also show bucket balance). Math stays on the server.
 - Log **income, expense, and savings** (amount, category, date, optional note; paid-from withdrawal only for expenses when the month’s plan has one). New logs are stored on the phone and uploaded in the background, including while Render is waking up. `client_request_id` makes a retry the same row. Edits and deletes of rows already on the server still wait for the API
@@ -393,7 +393,7 @@ All user-owned rows must be scoped by authenticated user.
 | Dashboard spending pace | Cumulative expenses vs an even split of the expense budget for the viewed month (on Annual, each month's expense plan across the year). Savings stay off the spend line. Soft signal when spending is ahead of that pace |
 | Budget / Dashboard views | Monthly and Annual modes; easy swap; annual budget editing allowed; preferences stored on the user |
 | Tracker findability | Search, sort, and filters required |
-| Auth now | Username + email + password; Google/Facebook OAuth with explicit account linking; JWT Bearer + bcrypt; access token lasts 30 days |
+| Auth now | Username + email + password; Google/Facebook OAuth with explicit account linking; JWT Bearer + bcrypt; access token lasts 30 days. Username sign-in ignores capitalization. An account that only uses Google or Facebook has no password until one is set; password sign-in says so |
 | Auth later / desktop depth | Password reset/recovery **shipped** (Resend forgot-password email, change/set password). Email verification is not required to sign in |
 | Users | Individual accounts; households later |
 | Currency | USD now; multi-currency later |

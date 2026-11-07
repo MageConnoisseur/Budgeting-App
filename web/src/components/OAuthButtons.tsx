@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import type { OAuthProviderInfo } from '../types/api'
 
 interface Props {
@@ -37,5 +38,44 @@ export function OAuthButtons({
         </div>
       )}
     </div>
+  )
+}
+
+/** Shown while Google is still loading, or when that request failed. */
+export function OAuthStatus({
+  loading,
+  error,
+  onRetry,
+}: {
+  loading: boolean
+  error: string | null
+  onRetry: () => void
+}) {
+  const [showLoading, setShowLoading] = useState(false)
+
+  useEffect(() => {
+    if (!loading) {
+      setShowLoading(false)
+      return
+    }
+    const timer = window.setTimeout(() => setShowLoading(true), 700)
+    return () => window.clearTimeout(timer)
+  }, [loading])
+
+  if (error) {
+    return (
+      <p className="form-error" role="status">
+        {error}{' '}
+        <button type="button" className="btn linkish" onClick={onRetry}>
+          Retry
+        </button>
+      </p>
+    )
+  }
+  if (!showLoading) return null
+  return (
+    <p className="muted tiny" role="status">
+      Loading Google sign-in…
+    </p>
   )
 }

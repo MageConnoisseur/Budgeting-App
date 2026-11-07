@@ -10,6 +10,7 @@ Auth strategy:
 """
 
 import hashlib
+import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -20,13 +21,42 @@ from app.config import get_settings
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+# Android keyboards sometimes insert these, or a trailing newline, into a
+# password field. They are not part of a password typed on the website.
+_INVISIBLE_RE = re.compile(r"[\u200b\u200c\u200d\ufeff\u2060]")
+
 
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    try:
+        return pwd_context.verify(plain, hashed)
+    except ValueError:
+        # Bad hash or a password bcrypt refuses. Treat as a mismatch, not a 500.
+        return False
+
+
+def password_matches(plain: str, hashed: str) -> bool:
+    """True when `plain` matches `hashed`.
+
+    A correct password typed on the phone can still fail a strict compare:
+    the Android password field capitalizes the first letter unless told not
+    to, and some keyboards add a trailing newline or an invisible character.
+    Try the typed value first, then those phone-only variants.
+    """
+    if verify_password(plain, hashed):
+        return True
+    cleaned = _INVISIBLE_RE.sub("", plain).rstrip("\r\n")
+    if cleaned != plain and verify_password(cleaned, hashed):
+        return True
+    candidate = cleaned or plain
+    if candidate[:1].isupper():
+        flipped = candidate[0].lower() + candidate[1:]
+        if flipped != candidate and verify_password(flipped, hashed):
+            return True
+    return False
 
 
 def hash_recovery_token(raw: str) -> str:
