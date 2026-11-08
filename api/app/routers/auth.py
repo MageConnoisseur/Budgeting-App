@@ -28,7 +28,7 @@ from app.schemas import (
     UserPreferencesUpdate,
     UserProfileUpdate,
 )
-from app.security import create_access_token, hash_password, verify_password
+from app.security import create_access_token, hash_password, password_matches
 from app.services import oauth as oauth_svc
 from app.services import recovery as recovery_svc
 from app.services.mailer import MailError
@@ -60,7 +60,9 @@ def _issue_token(user: User) -> TokenResponse:
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 def register(body: RegisterRequest, db: Session = Depends(get_db)) -> TokenResponse:
-    existing = db.scalar(select(User).where(User.username == body.username))
+    existing = db.scalar(
+        select(User).where(func.lower(User.username) == body.username.lower())
+    )
     if existing:
         raise HTTPException(status_code=400, detail="Username already taken")
     email = str(body.email).strip().lower()
@@ -82,12 +84,17 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)) -> TokenRespo
 def login(body: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
     user = oauth_svc.find_user_by_login(db, body.username)
     if (
-        user is None
-        or not user.password_hash
-        or not verify_password(body.password, user.password_hash)
+        user is not None
+        and user.password_hash
+        and password_matches(body.password, user.password_hash)
     ):
-        raise HTTPException(status_code=401, detail="Invalid username/email or password")
-    return _issue_token(user)
+        return _issue_token(user)
+    if user is not None and not user.password_hash:
+        raise HTTPException(
+            status_code=401,
+            detail=oauth_svc.passwordless_login_detail(user),
+        )
+    raise HTTPException(status_code=401, detail="Invalid username/email or password")
 
 
 @router.get("/me", response_model=UserOut)

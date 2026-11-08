@@ -302,14 +302,64 @@ def allocate_username(db: Session, preferred: str) -> str:
     return candidate
 
 
+_INVISIBLE_RE = re.compile(r"[\u200b\u200c\u200d\ufeff\u2060]")
+
+
+def normalize_login(login: str) -> str:
+    """Strip surrounding space and invisible characters phones paste in."""
+    return _INVISIBLE_RE.sub("", login).strip()
+
+
 def find_user_by_login(db: Session, login: str) -> User | None:
-    value = login.strip()
+    """Find a user by username or email.
+
+    Username match ignores capitalization when that maps to exactly one
+    account. Email is checked first so an email is never swallowed by a
+    username that only matches after folding case.
+    """
+    value = normalize_login(login)
     if not value:
         return None
-    user = db.scalar(select(User).where(User.username == value))
-    if user:
-        return user
-    return db.scalar(select(User).where(func.lower(User.email) == value.lower()))
+    exact = db.scalar(select(User).where(User.username == value))
+    if exact:
+        return exact
+    email_user = db.scalar(select(User).where(func.lower(User.email) == value.lower()))
+    if email_user:
+        return email_user
+    matches = list(
+        db.scalars(select(User).where(func.lower(User.username) == value.lower())).all()
+    )
+    if len(matches) == 1:
+        return matches[0]
+    return None
+
+
+def passwordless_login_detail(user: User) -> str:
+    """Explain a 401 that is not a wrong password.
+
+    OAuth-only accounts have no password hash. The old message said the
+    password was wrong, which sent people retrying a password that was never set.
+    """
+    _, providers = user_auth_methods(user)
+    labels = [PROVIDER_LABELS.get(provider, provider) for provider in providers]
+    if len(labels) == 1:
+        via = labels[0]
+    elif len(labels) == 2:
+        via = f"{labels[0]} or {labels[1]}"
+    elif labels:
+        via = ", ".join(labels[:-1]) + f", or {labels[-1]}"
+    else:
+        via = ""
+    if via:
+        return (
+            f"This account uses {via} and does not have a password yet. "
+            "On the website, use that button, then open Account and set a password. "
+            "The phone app signs in with the password you set there."
+        )
+    return (
+        "This account does not have a password yet. "
+        "On the website, add one from Account, or use Forgot password if a recovery email is on file."
+    )
 
 
 def find_user_by_email(db: Session, email: str) -> User | None:

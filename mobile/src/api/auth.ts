@@ -4,6 +4,7 @@ import type { TokenResponse, User } from '../types'
 export function login(username: string, password: string) {
   return apiFetch<TokenResponse>('/auth/login', {
     method: 'POST',
+    auth: false,
     body: JSON.stringify({ username, password }),
   })
 }

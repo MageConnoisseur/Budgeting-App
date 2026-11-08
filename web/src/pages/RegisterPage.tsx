@@ -1,10 +1,10 @@
-import { type FormEvent, useEffect, useState } from 'react'
+import { type FormEvent, useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
-import { listOAuthProviders, startOAuth } from '../api/auth'
+import { startOAuth } from '../api/auth'
 import { ApiError } from '../api/client'
-import { OAuthButtons } from '../components/OAuthButtons'
+import { OAuthButtons, OAuthStatus } from '../components/OAuthButtons'
+import { useOAuthProviders } from '../components/useOAuthProviders'
 import { useAuth } from '../context/AuthContext'
-import type { OAuthProviderInfo } from '../types/api'
 
 export function RegisterPage() {
   const { user, loading, register } = useAuth()
@@ -15,13 +15,12 @@ export function RegisterPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const [providers, setProviders] = useState<OAuthProviderInfo[]>([])
-
-  useEffect(() => {
-    void listOAuthProviders()
-      .then((list) => setProviders(list.filter((p) => p.configured)))
-      .catch(() => setProviders([]))
-  }, [])
+  const {
+    providers,
+    error: providersError,
+    loading: providersLoading,
+    retry: retryProviders,
+  } = useOAuthProviders()
 
   if (!loading && user) return <Navigate to="/" replace />
 
@@ -59,6 +58,11 @@ export function RegisterPage() {
           password. Type the email carefully — it is how we send a password
           reset if you get locked out. We do not send a confirmation email.
         </p>
+        <OAuthStatus
+          loading={providersLoading}
+          error={providersError}
+          onRetry={retryProviders}
+        />
         <OAuthButtons
           providers={providers}
           intent="login"

@@ -1,10 +1,10 @@
 import { type FormEvent, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { listOAuthProviders, startOAuth } from '../api/auth'
+import { startOAuth } from '../api/auth'
 import { ApiError } from '../api/client'
-import { OAuthButtons } from '../components/OAuthButtons'
+import { OAuthButtons, OAuthStatus } from '../components/OAuthButtons'
+import { useOAuthProviders } from '../components/useOAuthProviders'
 import { useAuth } from '../context/AuthContext'
-import type { OAuthProviderInfo } from '../types/api'
 
 const PROVIDER_LABELS: Record<string, string> = {
   google: 'Google',
@@ -21,10 +21,15 @@ export function AccountPage() {
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [savingPassword, setSavingPassword] = useState(false)
-  const [providers, setProviders] = useState<OAuthProviderInfo[]>([])
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const {
+    providers,
+    error: providersError,
+    loading: providersLoading,
+    retry: retryProviders,
+  } = useOAuthProviders()
 
   useEffect(() => {
     setEmail(user?.email ?? '')
@@ -43,12 +48,6 @@ export function AccountPage() {
       void refreshUser()
     }
   }, [refreshUser, searchParams])
-
-  useEffect(() => {
-    void listOAuthProviders()
-      .then((list) => setProviders(list.filter((p) => p.configured)))
-      .catch(() => setProviders([]))
-  }, [])
 
   async function onSaveEmail(e: FormEvent) {
     e.preventDefault()
@@ -271,6 +270,11 @@ export function AccountPage() {
             <li className="muted">No social accounts linked yet.</li>
           )}
         </ul>
+        <OAuthStatus
+          loading={providersLoading}
+          error={providersError}
+          onRetry={retryProviders}
+        />
         {linkable.length > 0 && (
           <>
             <h3>Link another account</h3>

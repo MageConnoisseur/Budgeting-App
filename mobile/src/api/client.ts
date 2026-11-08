@@ -12,9 +12,9 @@ export function setUnauthorizedHandler(handler: (() => void) | null) {
 
 export async function apiFetch<T>(
   path: string,
-  options: { method?: string; body?: string } = {},
+  options: { method?: string; body?: string; auth?: boolean } = {},
 ): Promise<T> {
-  const token = await getToken()
+  const token = options.auth === false ? null : await getToken()
   try {
     return await apiRequest<T>(path, {
       baseUrl: apiBaseUrl(),

@@ -1,10 +1,10 @@
 import { type FormEvent, useEffect, useState } from 'react'
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
-import { listOAuthProviders, startOAuth } from '../api/auth'
+import { startOAuth } from '../api/auth'
 import { ApiError } from '../api/client'
+import { OAuthButtons, OAuthStatus } from '../components/OAuthButtons'
+import { useOAuthProviders } from '../components/useOAuthProviders'
 import { useAuth } from '../context/AuthContext'
-import type { OAuthProviderInfo } from '../types/api'
-import { OAuthButtons } from '../components/OAuthButtons'
 
 export function LoginPage() {
   const { user, loading, login } = useAuth()
@@ -14,7 +14,12 @@ export function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const [providers, setProviders] = useState<OAuthProviderInfo[]>([])
+  const {
+    providers,
+    error: providersError,
+    loading: providersLoading,
+    retry: retryProviders,
+  } = useOAuthProviders()
 
   useEffect(() => {
     const oauthError = searchParams.get('oauth_error')
@@ -23,12 +28,6 @@ export function LoginPage() {
       setError(detail || `Social sign-in failed (${oauthError})`)
     }
   }, [searchParams])
-
-  useEffect(() => {
-    void listOAuthProviders()
-      .then((list) => setProviders(list.filter((p) => p.configured)))
-      .catch(() => setProviders([]))
-  }, [])
 
   if (!loading && user) return <Navigate to="/" replace />
 
@@ -58,6 +57,11 @@ export function LoginPage() {
         <p className="brand-name auth-brand">Setaside</p>
         <h1>Sign in</h1>
         <p className="muted">Plan months, log spending, and spot trends.</p>
+        <OAuthStatus
+          loading={providersLoading}
+          error={providersError}
+          onRetry={retryProviders}
+        />
         <OAuthButtons
           providers={providers}
           intent="login"

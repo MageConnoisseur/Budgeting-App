@@ -81,8 +81,12 @@ export function LoginScreen() {
             value={password}
             onChangeText={setPassword}
             secureTextEntry
-            autoComplete="password"
+            autoCapitalize="none"
+            autoCorrect={false}
+            spellCheck={false}
+            autoComplete="current-password"
             textContentType="password"
+            importantForAutofill="yes"
             accessibilityLabel="Password"
             style={styles.input}
             placeholder="••••••••"
@@ -110,8 +114,9 @@ export function LoginScreen() {
           </Pressable>
 
           <Text style={styles.hint}>
-            Same account as the website. Create an account or reset a password
-            there — this app only logs expenses.
+            Same account as the website. A Google-only account has no password
+            until you set one under Account on the website. This app only logs
+            expenses.
           </Text>
           <Text style={styles.api}>API: {apiBaseUrl()}</Text>
         </View>
