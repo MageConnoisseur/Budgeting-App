@@ -288,7 +288,7 @@ Coach depth that stays **rule-based** (clearer copy, more apply actions, dismiss
 Shipped as a **small Expo client** in `mobile/` so someone can check leftover and log away from the desk. It is not a second product.
 
 - Same FastAPI + JWT account as web (live Render origin baked into the APK). Access tokens last **30 days**.
-- Sign in once (username/email + password). Username match ignores capitalization. A saved session opens the logger without waiting for the API. No registration, OAuth, or password reset in the app — those stay on the website. A Google-only account has no password until one is set under Account on the website; the phone says that instead of calling the password wrong
+- Sign in once. **Continue with Google** opens the browser and returns to the app with that account. Username/email + password still works (username match ignores capitalization). A saved session opens the logger without waiting for the API. Registration and password reset stay on the website. A Google-only account has no password until one is set under Account on the website; a password attempt says that instead of calling the password wrong
 - **Home-screen widget** with income (up arrow), expense (down arrow), and savings (rising zigzag) icons. A tap grows a partial window from that icon with the category list filling it. Choosing a category shrinks the list and shows the amount, date, and note. Save shrinks it back to the widget. The leftover list stays in the app. Planning screens stay off the widget
 - **Leftover glance** for the form date’s month: leftover per category from `GET /api/mobile/glance` (savings also show bucket balance). Math stays on the server.
 - Log **income, expense, and savings** (amount, category, date, optional note; paid-from withdrawal only for expenses when the month’s plan has one). New logs are stored on the phone and uploaded in the background, including while Render is waking up. `client_request_id` makes a retry the same row. Edits and deletes of rows already on the server still wait for the API
@@ -397,7 +397,7 @@ All user-owned rows must be scoped by authenticated user.
 | Auth later / desktop depth | Password reset/recovery **shipped** (Resend forgot-password email, change/set password). Email verification is not required to sign in |
 | Users | Individual accounts; households later |
 | Currency | USD now; multi-currency later |
-| Mobile | Thin Android leftover glance + income/expense/savings logger (`mobile/`, sideload APK). Home-screen widget opens a partial log window (category list open) and shrinks back to the widget on save; new logs queue on the phone and upload in the background. Planning stays on web; leftover via `GET /api/mobile/glance`; shared API/DB |
+| Mobile | Thin Android leftover glance + income/expense/savings logger (`mobile/`, sideload APK). Sign-in includes Continue with Google (browser, then back into the app) plus username/email and password. Home-screen widget opens a partial log window (category list open) and shrinks back to the widget on save; new logs queue on the phone and upload in the background. Planning stays on web; leftover via `GET /api/mobile/glance`; shared API/DB |
 | Schema | Alembic under `api/` is source of truth (not a separate `database/` SQL apply tree) |
 | Hosting | Neon (DB) + Render (API) + Vercel (web) |
 | Stack | React (Vite) web, FastAPI, PostgreSQL |
