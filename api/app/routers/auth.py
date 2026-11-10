@@ -210,6 +210,10 @@ def oauth_providers() -> list[OAuthProviderInfo]:
 def oauth_start(
     provider: str,
     intent: Literal["login", "link"] = Query(default="login"),
+    client: Literal["web", "mobile"] = Query(
+        default="web",
+        description="mobile returns the session to the Android app instead of the website",
+    ),
     access_token: str | None = Query(
         default=None,
         description="JWT for link intent when the browser cannot send Authorization",
@@ -249,7 +253,7 @@ def oauth_start(
             raise HTTPException(status_code=401, detail="User not found")
 
     try:
-        state = oauth_svc.create_oauth_state(intent, link_user_id)
+        state = oauth_svc.create_oauth_state(intent, link_user_id, client=client)
         url = oauth_svc.build_authorize_url(provider, state)
     except oauth_svc.OAuthError as exc:
         raise HTTPException(status_code=400, detail=exc.message) from exc
@@ -257,7 +261,20 @@ def oauth_start(
     return RedirectResponse(url=url, status_code=302)
 
 
-@router.get("/oauth/{provider}/callback")
+def _oauth_finish(
+    oauth_state: oauth_svc.OAuthState | None,
+    path: str,
+    params: dict[str, str],
+) -> HTMLResponse | RedirectResponse:
+    if oauth_state is not None and oauth_state.client == "mobile":
+        return HTMLResponse(oauth_svc.mobile_return_page(params))
+    return RedirectResponse(
+        oauth_svc.frontend_redirect(path, params=params),
+        status_code=302,
+    )
+
+
+@router.get("/oauth/{provider}/callback", response_model=None)
 def oauth_callback(
     provider: str,
     code: str | None = None,
@@ -265,37 +282,34 @@ def oauth_callback(
     error: str | None = None,
     error_description: str | None = None,
     db: Session = Depends(get_db),
-) -> RedirectResponse:
+) -> HTMLResponse | RedirectResponse:
     provider = provider.lower().strip()
+    oauth_state: oauth_svc.OAuthState | None = None
+    if state:
+        try:
+            oauth_state = oauth_svc.parse_oauth_state(state)
+        except oauth_svc.OAuthError as exc:
+            return RedirectResponse(
+                oauth_svc.frontend_redirect(
+                    "/login",
+                    params={"oauth_error": exc.code, "detail": exc.message},
+                ),
+                status_code=302,
+            )
 
     if error:
         detail = error_description or error
-        return RedirectResponse(
-            oauth_svc.frontend_redirect(
-                "/login",
-                params={"oauth_error": "denied", "detail": detail[:200]},
-            ),
-            status_code=302,
+        return _oauth_finish(
+            oauth_state,
+            "/login",
+            {"oauth_error": "denied", "detail": detail[:200]},
         )
 
-    if not code or not state:
-        return RedirectResponse(
-            oauth_svc.frontend_redirect(
-                "/login",
-                params={"oauth_error": "invalid_request", "detail": "Missing OAuth code"},
-            ),
-            status_code=302,
-        )
-
-    try:
-        oauth_state = oauth_svc.parse_oauth_state(state)
-    except oauth_svc.OAuthError as exc:
-        return RedirectResponse(
-            oauth_svc.frontend_redirect(
-                "/login",
-                params={"oauth_error": exc.code, "detail": exc.message},
-            ),
-            status_code=302,
+    if not code or oauth_state is None:
+        return _oauth_finish(
+            oauth_state,
+            "/login",
+            {"oauth_error": "invalid_request", "detail": "Missing OAuth code"},
         )
 
     try:
@@ -308,31 +322,21 @@ def oauth_callback(
                 raise oauth_svc.OAuthError("invalid_state", "User not found for link")
             user = oauth_svc.link_oauth_account(db, user, profile)
             token = create_access_token(str(user.id), extra={"username": user.username})
-            return RedirectResponse(
-                oauth_svc.frontend_redirect(
-                    "/auth/callback",
-                    params={"token": token, "linked": provider},
-                ),
-                status_code=302,
+            return _oauth_finish(
+                oauth_state,
+                "/auth/callback",
+                {"token": token, "linked": provider},
             )
 
         user = oauth_svc.resolve_oauth_login(db, profile)
         token = create_access_token(str(user.id), extra={"username": user.username})
-        return RedirectResponse(
-            oauth_svc.frontend_redirect(
-                "/auth/callback",
-                params={"token": token},
-            ),
-            status_code=302,
-        )
+        return _oauth_finish(oauth_state, "/auth/callback", {"token": token})
     except oauth_svc.OAuthError as exc:
         target = "/account" if oauth_state.intent == "link" else "/login"
-        return RedirectResponse(
-            oauth_svc.frontend_redirect(
-                target,
-                params={"oauth_error": exc.code, "detail": exc.message},
-            ),
-            status_code=302,
+        return _oauth_finish(
+            oauth_state,
+            target,
+            {"oauth_error": exc.code, "detail": exc.message},
         )
 
 

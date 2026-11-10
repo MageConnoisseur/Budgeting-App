@@ -1064,11 +1064,20 @@ def test_preferences(auth_headers: dict[str, str]) -> None:
     assert r.json()["preferred_dashboard_view"] == "annual"
 
 
-def _dev_oauth_callback(email: str, subject: str, *, intent: str = "login", token: str | None = None):
+def _dev_oauth_callback(
+    email: str,
+    subject: str,
+    *,
+    intent: str = "login",
+    token: str | None = None,
+    client_kind: str | None = None,
+):
     """Drive the local dev OAuth provider through start → simulate → callback."""
     from urllib.parse import parse_qs, urlparse
 
     start_params: dict[str, str] = {"intent": intent}
+    if client_kind:
+        start_params["client"] = client_kind
     if intent == "link":
         assert token
         start_params["access_token"] = token
@@ -1097,8 +1106,28 @@ def _dev_oauth_callback(email: str, subject: str, *, intent: str = "login", toke
         params={"code": code, "state": state},
         follow_redirects=False,
     )
+    if client_kind == "mobile":
+        assert callback.status_code == 200, callback.text
+        return callback.text
     assert callback.status_code in (302, 307), callback.text
     return callback.headers["location"]
+
+
+def test_oauth_mobile_client_returns_to_the_app() -> None:
+    import html as html_lib
+    from urllib.parse import parse_qs, urlparse
+
+    email = f"phone_{uuid.uuid4().hex[:10]}@example.com"
+    subject = f"phone_{uuid.uuid4().hex[:8]}"
+    body = _dev_oauth_callback(email, subject, client_kind="mobile")
+    assert "setaside://auth?" in body
+    href = html_lib.unescape(body.split('href="', 1)[1].split('"', 1)[0])
+    assert href.startswith("setaside://auth?")
+    token = parse_qs(urlparse(href).query)["token"][0]
+    me = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert me.status_code == 200, me.text
+    assert me.json()["email"] == email
+    assert me.json()["has_password"] is False
 
 
 def test_oauth_dev_login_creates_account_without_password() -> None:

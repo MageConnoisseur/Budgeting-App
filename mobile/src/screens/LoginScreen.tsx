@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import {
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   StyleSheet,
@@ -15,11 +16,27 @@ import { useAuth } from '../context/AuthContext'
 import { colors, radius } from '../theme'
 
 export function LoginScreen() {
-  const { login } = useAuth()
+  const { login, oauthError, clearOauthError } = useAuth()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [openingGoogle, setOpeningGoogle] = useState(false)
+
+  async function onGoogle() {
+    setError(null)
+    clearOauthError()
+    setOpeningGoogle(true)
+    try {
+      await Linking.openURL(
+        `${apiBaseUrl()}/api/auth/oauth/google/start?intent=login&client=mobile`,
+      )
+    } catch {
+      setError('Could not open Google sign-in.')
+    } finally {
+      setOpeningGoogle(false)
+    }
+  }
 
   async function onSubmit() {
     if (!username.trim()) {
@@ -32,6 +49,7 @@ export function LoginScreen() {
     }
     setSubmitting(true)
     setError(null)
+    clearOauthError()
     try {
       await login(username.trim(), password)
     } catch (err) {
@@ -60,6 +78,27 @@ export function LoginScreen() {
             Log expenses on the go. Planning, budgets, and the dashboard stay on
             the website.
           </Text>
+
+          <Pressable
+            onPress={() => void onGoogle()}
+            disabled={openingGoogle || submitting}
+            style={({ pressed }) => [
+              styles.googleButton,
+              pressed && styles.pressed,
+              (openingGoogle || submitting) && styles.disabled,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Continue with Google"
+          >
+            <Text style={styles.googleText}>
+              {openingGoogle ? 'Opening Google…' : 'Continue with Google'}
+            </Text>
+          </Pressable>
+          <View style={styles.dividerRow}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>or</Text>
+            <View style={styles.dividerLine} />
+          </View>
 
           <Text style={styles.label}>Username or email</Text>
           <TextInput
@@ -95,7 +134,9 @@ export function LoginScreen() {
             onSubmitEditing={() => void onSubmit()}
           />
 
-          {error ? <Text style={styles.error}>{error}</Text> : null}
+          {error || oauthError ? (
+            <Text style={styles.error}>{error || oauthError}</Text>
+          ) : null}
 
           <Pressable
             onPress={() => void onSubmit()}
@@ -114,9 +155,8 @@ export function LoginScreen() {
           </Pressable>
 
           <Text style={styles.hint}>
-            Same account as the website. A Google-only account has no password
-            until you set one under Account on the website. This app only logs
-            expenses.
+            Same account as the website. Google opens in the browser, then
+            brings you back here. This app only logs expenses.
           </Text>
           <Text style={styles.api}>API: {apiBaseUrl()}</Text>
         </View>
@@ -156,7 +196,37 @@ const styles = StyleSheet.create({
     color: colors.inkSoft,
     fontSize: 16,
     lineHeight: 22,
-    marginBottom: 28,
+    marginBottom: 22,
+  },
+  googleButton: {
+    backgroundColor: colors.white,
+    borderColor: colors.line,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    minHeight: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  googleText: {
+    color: colors.ink,
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 16,
+    marginBottom: 16,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.line,
+  },
+  dividerText: {
+    color: colors.muted,
+    fontSize: 13,
   },
   label: {
     color: colors.muted,

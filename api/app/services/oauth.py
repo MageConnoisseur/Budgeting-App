@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import json
 import re
 import secrets
@@ -37,11 +38,15 @@ class ProviderProfile:
     display_name: str | None = None
 
 
+ClientKind = Literal["web", "mobile"]
+
+
 @dataclass(frozen=True)
 class OAuthState:
     intent: Intent
     user_id: UUID | None
     nonce: str
+    client: ClientKind = "web"
 
 
 class OAuthError(Exception):
@@ -93,6 +98,7 @@ def create_oauth_state(
     intent: Intent,
     user_id: UUID | None = None,
     *,
+    client: ClientKind = "web",
     settings: Settings | None = None,
 ) -> str:
     settings = settings or get_settings()
@@ -100,6 +106,7 @@ def create_oauth_state(
     payload: dict[str, Any] = {
         "purpose": "oauth_state",
         "intent": intent,
+        "client": client,
         "user_id": str(user_id) if user_id else None,
         "nonce": secrets.token_urlsafe(16),
         "exp": expire,
@@ -121,7 +128,8 @@ def parse_oauth_state(token: str, *, settings: Settings | None = None) -> OAuthS
     user_id_raw = payload.get("user_id")
     user_id = UUID(user_id_raw) if user_id_raw else None
     nonce = str(payload.get("nonce") or "")
-    return OAuthState(intent=intent, user_id=user_id, nonce=nonce)
+    client: ClientKind = "mobile" if payload.get("client") == "mobile" else "web"
+    return OAuthState(intent=intent, user_id=user_id, nonce=nonce, client=client)
 
 
 def build_authorize_url(provider: str, state: str, *, settings: Settings | None = None) -> str:
@@ -532,6 +540,42 @@ def unlink_oauth_account(db: Session, user: User, provider: str) -> User:
     db.commit()
     db.refresh(user)
     return user
+
+
+def mobile_auth_redirect(params: dict[str, str] | None = None) -> str:
+    """Deep link that resumes the Android app after Google sign-in."""
+    if not params:
+        return "setaside://auth"
+    return f"setaside://auth?{urlencode(params)}"
+
+
+def mobile_return_page(params: dict[str, str]) -> str:
+    """Page the phone browser loads, then hands the session back to the app.
+
+    A bare redirect to a custom scheme is easy for the browser to swallow.
+    This page jumps to the app and still shows a button if that jump is blocked.
+    """
+    target = mobile_auth_redirect(params)
+    href = html.escape(target, quote=True)
+    script_target = json.dumps(target)
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Returning to Setaside</title>
+  <style>
+    body {{ font-family: system-ui, sans-serif; margin: 2.5rem 1.25rem; color: #14231c; }}
+    a {{ display: inline-block; margin-top: 1rem; background: #1f4b3a; color: #fff;
+         text-decoration: none; padding: 0.85rem 1.15rem; border-radius: 12px; font-weight: 700; }}
+  </style>
+  <script>location.replace({script_target});</script>
+</head>
+<body>
+  <p>Returning to Setaside…</p>
+  <p><a href="{href}">Open Setaside</a></p>
+</body>
+</html>"""
 
 
 def frontend_redirect(
